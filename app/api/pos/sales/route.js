@@ -1,7 +1,7 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { NextResponse } from "next/server";
 import { adminDb, requireRole } from "@/lib/admin";
-import { isSellable } from "@/lib/productData";
+import { availableForSale, catalogueContext, resolveDiscount } from "@/lib/commerce";
 
 export async function POST(request) {
   const access = await requireRole(request, ["owner", "admin", "supervisor", "cashier"]);
@@ -29,6 +29,7 @@ export async function POST(request) {
   if (!transactionId) return NextResponse.json({ error: "A transaction ID is required." }, { status: 400 });
 
   const store = adminDb();
+  const context = await catalogueContext(store);
   const saleRef = store.collection("sales").doc(transactionId);
 
   try {
@@ -41,6 +42,7 @@ export async function POST(request) {
       const productSnaps = await tx.getAll(...productRefs);
       const lines = [];
       let subtotal = 0;
+      let discount = 0;
       let cost = 0;
 
       for (let index = 0; index < normalizedItems.length; index += 1) {
@@ -50,31 +52,34 @@ export async function POST(request) {
         if (!snap.exists) throw new Error("A selected product no longer exists.");
         const product = snap.data();
         const quantity = item.quantity;
-        if (!isSellable(product)) throw new Error(`${product.name} is not available for sale.`);
+        if (!availableForSale(product, context.activeCategoryIds)) throw new Error(`${product.name} is not available for sale.`);
         if (Number(product.stock) < quantity) throw new Error(`Only ${product.stock} × ${product.name} remain.`);
 
         const lineTotal = Number(product.price) * quantity;
+        const applied = resolveDiscount(product, quantity, context.rules);
         subtotal += lineTotal;
+        discount += applied.amount;
         cost += Number(product.costPrice || 0) * quantity;
         lines.push({
           productId: product.id,
           name: product.name,
           quantity,
           unitPrice: Number(product.price),
-          lineTotal,
-          categorySnapshot: product.category,
+          lineTotal: Math.round((lineTotal - applied.amount) * 100) / 100,
+          categorySnapshot: { id: product.categoryId, name: product.category },
+          discountRuleSnapshot: applied.rule ? { ruleId: applied.rule.ruleId, name: applied.rule.name, amount: applied.amount } : null,
         });
         tx.update(productRef, { stock: Number(product.stock) - quantity, updatedAt: FieldValue.serverTimestamp() });
       }
 
       const receiptId = `PAM-${Date.now().toString(36).toUpperCase()}`;
-      const total = Math.round(subtotal * 100) / 100;
+      const total = Math.round((subtotal - discount) * 100) / 100;
       tx.create(saleRef, {
         receiptId,
         clientTransactionId: transactionId,
         items: lines,
-        subtotal: total,
-        discount: 0,
+        subtotal: Math.round(subtotal * 100) / 100,
+        discount: Math.round(discount * 100) / 100,
         total,
         cost,
         profit: total - cost,

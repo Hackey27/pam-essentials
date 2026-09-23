@@ -34,7 +34,7 @@ service cloud.firestore {
 
     match /users/{uid} {
       allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
-      allow write: if isOwner();
+      allow write: if false;
     }
 
     match /products/{id} {
@@ -43,12 +43,12 @@ service cloud.firestore {
          resource.data.archived == false &&
          resource.data.sellable == true &&
          resource.data.price > 0);
-      allow write: if isAdmin();
+      allow write: if false;
     }
 
     match /categories/{id} {
       allow read: if isStaff() || resource.data.active == true;
-      allow write: if isAdmin();
+      allow write: if false;
     }
 
     // Sales, order writes, stock changes and audit entries are server-authoritative.
@@ -66,11 +66,11 @@ service cloud.firestore {
     }
     match /discount_rules/{id} {
       allow read: if isStaff();
-      allow write: if isAdmin();
+      allow write: if false;
     }
     match /settings/{id} {
       allow read: if isStaff();
-      allow write: if isAdmin();
+      allow write: if false;
     }
     match /shifts/{id} {
       allow read: if isStaff();

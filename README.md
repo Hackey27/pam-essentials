@@ -27,10 +27,20 @@ npm run seed:firestore
 ## Server-authoritative operations
 
 - Public orders are repriced from Firestore before being created.
-- POS checkout reprices products, validates available stock and decrements stock in one Firestore transaction.
+- POS checkout resolves product → category → global discounts, reprices products, validates available stock and decrements stock in one Firestore transaction.
 - Client transaction IDs make POS writes idempotent.
 - Cost and profit data are returned only by protected Admin APIs.
+- Products, categories, stock movements, discounts, staff, settings and order status changes are written through protected, audited server routes.
+- Supervisors receive stock and process orders without receiving cost or profit fields; cashier payloads contain neither.
 - Seeded settings and discount rules are created only when absent.
+
+The Admin Portal provides working sections for the catalogue, categories, inventory receiving and adjustment, order fulfilment, discount rules, staff roles, analytics, settings and the append-only audit trail. The POS includes both till and cross-channel order views.
+
+Firestore rules are versioned in `firestore.rules` and configured by `firebase.json`. Deploy rule changes independently of the Cloud Run container:
+
+```bash
+firebase deploy --only firestore:rules --project pam-essentials-2d7fb
+```
 
 ## Deployment
 Every push to `main` triggers Cloud Build, which builds the Docker image and deploys a new Cloud Run revision.
