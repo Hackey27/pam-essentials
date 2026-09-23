@@ -22,3 +22,17 @@ p { color: var(--muted); margin: 0 0 1rem; }
 a { color: var(--accent); }
 a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .status { border-top: 1px solid var(--line); margin-top: 2.5rem; padding-top: 1rem; font-size: 0.9rem; }
+.form { display: flex; flex-direction: column; gap: 0.35rem; max-width: 22rem; }
+.form label { font-size: 0.85rem; color: var(--muted); margin-top: 0.6rem; }
+input {
+  font: inherit; padding: 0.6rem 0.7rem; border: 1px solid var(--line);
+  border-radius: 6px; background: transparent; color: var(--ink);
+}
+input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+button {
+  font: inherit; margin-top: 1rem; padding: 0.65rem 1.1rem; border: 0;
+  border-radius: 6px; background: var(--accent); color: var(--paper); cursor: pointer;
+}
+button:disabled { opacity: 0.5; cursor: default; }
+.error { color: #c0392b; margin: 0.6rem 0 0; }
+@media (prefers-color-scheme: dark) { .error { color: #ff8a7a; } }
