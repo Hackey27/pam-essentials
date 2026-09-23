@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start -p ${PORT:-8080}"
+    "start": "next start -p ${PORT:-8080}",
+    "seed:firestore": "node scripts/seed_firestore.mjs"
   },
   "dependencies": {
     "@fontsource-variable/comfortaa": "5.3.0",

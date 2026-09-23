@@ -18,6 +18,12 @@ python scripts/generate_seed_data.py
 
 The Admin Portal imports the generated catalogue through the owner-only `/api/admin/seed` endpoint. The import is additive and does not overwrite existing products or settings. Every spreadsheet product is retained in Admin. Products without a positive selling price are marked non-sellable and are excluded from both the storefront and POS.
 
+For an authenticated deployment/operator environment, the same additive import can be run with Application Default Credentials:
+
+```bash
+npm run seed:firestore
+```
+
 ## Server-authoritative operations
 
 - Public orders are repriced from Firestore before being created.
