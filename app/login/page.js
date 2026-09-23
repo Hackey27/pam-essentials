@@ -17,7 +17,8 @@ export default function Login() {
     if (!loading && user) router.replace(role === "cashier" ? "/pos" : "/admin");
   }, [loading, user, role, router]);
 
-  async function handleSignIn() {
+  async function handleSignIn(event) {
+    event?.preventDefault();
     setBusy(true);
     setError("");
     try {
@@ -36,33 +37,38 @@ export default function Login() {
   }
 
   return (
-    <main>
-      <h1>Sign in</h1>
-      <p>For staff. Customers don&apos;t need an account to browse the store.</p>
-      <div className="form">
-        <label htmlFor="email">Email</label>
-        <input
+    <main className="login-shell">
+      <section className="login-brand-panel">
+        <a href="/" className="login-brand">PAM <span>Essentials & More</span></a>
+        <div><p className="eyebrow">One connected retail system</p><h1>Storefront, till and inventory in step.</h1><p>Secure access for every member of the shop team, with permissions matched to their role.</p></div>
+        <p className="login-footnote">PAM Essentials & More · Ghana</p>
+      </section>
+      <section className="login-form-panel">
+      <form className="login-card" onSubmit={handleSignIn}>
+        <p className="eyebrow">Staff access</p>
+        <h2>Welcome back</h2>
+        <p>Sign in to open the till or Admin Portal. Customers can browse without an account.</p>
+        <label htmlFor="email">Email<input
           id="email"
           type="email"
           autoComplete="username"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-        />
-        <label htmlFor="password">Password</label>
-        <input
+        /></label>
+        <label htmlFor="password">Password<input
           id="password"
           type="password"
           autoComplete="current-password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handleSignIn()}
-        />
-        {error && <p className="error">{error}</p>}
-        <button onClick={handleSignIn} disabled={busy || !email || !password}>
-          {busy ? "Signing in…" : "Sign in"}
+        /></label>
+        {error && <p className="notice error-notice">{error}</p>}
+        <button className="button primary" disabled={busy || !email || !password}>
+          {busy ? "Signing in…" : "Sign in securely"}
         </button>
-      </div>
-      <p><a href="/">Back to the store</a></p>
+        <a className="back-link" href="/">← Back to the storefront</a>
+      </form>
+      </section>
     </main>
   );
 }

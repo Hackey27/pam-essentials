@@ -34,7 +34,7 @@ npm run seed:firestore
 - Supervisors receive stock and process orders without receiving cost or profit fields; cashier payloads contain neither.
 - Seeded settings and discount rules are created only when absent.
 
-The Admin Portal provides working sections for the catalogue, categories, inventory receiving and adjustment, order fulfilment, discount rules, staff roles, period-based sales/profit reporting, expense recording, settings and the append-only audit trail. The POS includes both till and cross-channel order views, open/close shifts, offline sale replay and server-side stock/discount validation. The storefront includes filtering, pagination, tracked orders, pickup/delivery ordering and a WhatsApp ordering hand-off.
+The Admin Portal provides working sections for the catalogue, categories, inventory receiving and adjustment, searchable order fulfilment, discount rules, staff roles, custom-period sales/profit reporting, product/category/channel analytics, expense recording, settings and the append-only audit trail. The POS includes both till and cross-channel order views, open/close shifts, offline sale replay and server-side stock/discount validation. The storefront includes filtering, pagination, tracked orders, pickup/delivery ordering and a WhatsApp ordering hand-off.
 
 Firestore rules are versioned in `firestore.rules` and configured by `firebase.json`. Deploy rule changes independently of the Cloud Run container:
 
