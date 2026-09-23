@@ -23,6 +23,8 @@ function Till() {
   const [busy, setBusy] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [receipt, setReceipt] = useState(null);
+  const [shift, setShift] = useState(null);
+  const [deviceId, setDeviceId] = useState("");
 
   async function request(url, options = {}) {
     const token = await user.getIdToken();
@@ -54,6 +56,15 @@ function Till() {
     } catch (err) { setError(err.message || "Orders could not be loaded."); }
   }
 
+  async function loadShift() {
+    try {
+      const response = await request("/api/pos/shifts");
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error);
+      setShift(data.shift || null);
+    } catch (err) { setError(err.message || "Shift status could not be loaded."); }
+  }
+
   async function flushQueue() {
     const queued = JSON.parse(localStorage.getItem("pam-pos-queue") || "[]");
     if (!queued.length) return;
@@ -82,7 +93,10 @@ function Till() {
 
   useEffect(() => {
     if (!user) return;
-    loadProducts(); loadOrders();
+    let storedDevice = localStorage.getItem("pam-pos-device");
+    if (!storedDevice) { storedDevice = `PAM-${crypto.randomUUID().slice(0, 8).toUpperCase()}`; localStorage.setItem("pam-pos-device", storedDevice); }
+    setDeviceId(storedDevice);
+    loadProducts(); loadOrders(); loadShift();
     const update = () => {
       const connected = navigator.onLine;
       setOnline(connected);
@@ -118,8 +132,9 @@ function Till() {
 
   async function checkout() {
     if (!cart.length) return;
+    if (!shift) { setError("Open a till shift before checkout."); return; }
     setBusy(true); setError("");
-    const payload = { transactionId: crypto.randomUUID(), paymentMethod: "cash", salesChannel: "walk-in", amountPaid: total, items: cart.map(({ id, quantity }) => ({ id, quantity })) };
+    const payload = { transactionId: crypto.randomUUID(), paymentMethod: "cash", salesChannel: "walk-in", amountPaid: total, shiftId: shift.shiftId, deviceId, items: cart.map(({ id, quantity }) => ({ id, quantity })) };
     if (!online) {
       const queue = JSON.parse(localStorage.getItem("pam-pos-queue") || "[]");
       localStorage.setItem("pam-pos-queue", JSON.stringify([...queue, payload]));
@@ -146,14 +161,29 @@ function Till() {
     finally { setBusy(false); }
   }
 
+  async function toggleShift() {
+    if (shift && JSON.parse(localStorage.getItem("pam-pos-queue") || "[]").length) {
+      setError("Sync queued offline sales before closing this shift."); return;
+    }
+    setBusy(true); setError("");
+    try {
+      const response = await request("/api/pos/shifts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(shift ? { action: "close", shiftId: shift.shiftId } : { action: "open", deviceId }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error);
+      setShift(shift ? null : data.shift);
+      if (shift) setReceipt({ receiptId: "Shift closed", total: data.shift.summary?.salesTotal || 0, shiftSummary: data.shift.summary });
+    } catch (err) { setError(err.message || "Shift could not be updated."); }
+    finally { setBusy(false); }
+  }
+
   return <div className="pos-shell">
-    <header className="pos-header"><div><a href="/" className="admin-brand">PAM <span>Essentials & More</span></a><p>{user?.email} · {role}</p></div><div className="pos-view-tabs"><button className={view === "sale" ? "active" : ""} onClick={() => setView("sale")}>New sale</button><button className={view === "orders" ? "active" : ""} onClick={() => setView("orders")}>Orders {orders.filter((order) => !["completed", "cancelled"].includes(order.status)).length > 0 && <b>{orders.filter((order) => !["completed", "cancelled"].includes(order.status)).length}</b>}</button></div><div className="pos-actions"><span className={online ? "connection online" : "connection offline"}>{syncing ? "Syncing sales…" : online ? "Online" : "Offline"}</span><button className="icon-button" onClick={() => { loadProducts(); loadOrders(); }}>↻</button><button className="icon-button" onClick={signOut}>↪</button></div></header>
+    <header className="pos-header"><div><a href="/" className="admin-brand">PAM <span>Essentials & More</span></a><p>{user?.email} · {role}</p></div><div className="pos-view-tabs"><button className={view === "sale" ? "active" : ""} onClick={() => setView("sale")}>New sale</button><button className={view === "orders" ? "active" : ""} onClick={() => setView("orders")}>Orders {orders.filter((order) => !["completed", "cancelled"].includes(order.status)).length > 0 && <b>{orders.filter((order) => !["completed", "cancelled"].includes(order.status)).length}</b>}</button></div><div className="pos-actions"><button className={shift ? "shift-button open" : "shift-button"} onClick={toggleShift} disabled={busy}>{shift ? "Close shift" : "Open shift"}</button><span className={online ? "connection online" : "connection offline"}>{syncing ? "Syncing sales…" : online ? "Online" : "Offline"}</span><button className="icon-button" onClick={() => { loadProducts(); loadOrders(); loadShift(); }}>↻</button><button className="icon-button" onClick={signOut}>↪</button></div></header>
     {!online && <div className="offline-banner">Working offline. Cash sales will be queued on this device and synced when the connection returns.</div>}
     {view === "sale" ? <main className="pos-main">
-      <section className="pos-catalogue"><div className="pos-title"><div><p className="eyebrow">Point of sale</p><h1>New sale</h1></div>{["owner", "admin"].includes(role) && <a className="button secondary" href="/admin">Admin Portal</a>}</div><input className="pos-search" autoFocus placeholder="Search product name, SKU or scan barcode" value={query} onChange={(event) => setQuery(event.target.value)} /><div className="category-pills">{categories.map((item) => <button key={item} className={category === item ? "active" : ""} onClick={() => setCategory(item)}>{item}</button>)}</div>{error && <p className="notice error-notice">{error}</p>}<div className="pos-grid">{visible.map((product) => <button key={product.id} className="pos-product" onClick={() => add(product)} disabled={product.stock <= 0}><span className="product-monogram">{product.name.slice(0, 2).toUpperCase()}</span><b>{product.name}</b><small>{product.id}</small><div><strong>{money.format(product.price)}</strong><span className={product.stock <= product.lowStockLevel ? "low" : ""}>{product.stock} left</span></div></button>)}</div></section>
+      <section className="pos-catalogue"><div className="pos-title"><div><p className="eyebrow">Point of sale · {shift ? shift.shiftId : "No open shift"}</p><h1>New sale</h1></div>{["owner", "admin"].includes(role) && <a className="button secondary" href="/admin">Admin Portal</a>}</div><input className="pos-search" autoFocus placeholder="Search product name, SKU or scan barcode" value={query} onChange={(event) => setQuery(event.target.value)} /><div className="category-pills">{categories.map((item) => <button key={item} className={category === item ? "active" : ""} onClick={() => setCategory(item)}>{item}</button>)}</div>{error && <p className="notice error-notice">{error}</p>}<div className="pos-grid">{visible.map((product) => <button key={product.id} className="pos-product" onClick={() => add(product)} disabled={product.stock <= 0}><span className="product-monogram">{product.name.slice(0, 2).toUpperCase()}</span><b>{product.name}</b><small>{product.id}</small><div><strong>{money.format(product.price)}</strong><span className={product.stock <= product.lowStockLevel ? "low" : ""}>{product.stock} left</span></div></button>)}</div></section>
       <aside className="till-cart"><div className="drawer-title"><div><p className="eyebrow">Current basket</p><h2>{cart.reduce((sum, item) => sum + item.quantity, 0)} items</h2></div><button className="text-button" onClick={() => setCart([])}>Clear</button></div><div className="till-lines">{cart.length ? cart.map((item) => <div className="till-line" key={item.id}><div><b>{item.name}</b><small>{money.format(item.price)} each</small></div><div className="stepper"><button onClick={() => change(item.id, -1)}>−</button><span>{item.quantity}</span><button onClick={() => change(item.id, 1)}>+</button></div><strong>{money.format(item.price * item.quantity - resolveDiscount(item, item.quantity, discountRules).amount)}</strong></div>) : <div className="empty-state"><span className="status-icon">+</span><h3>No items yet</h3><p>Select products to begin a sale.</p></div>}</div><div className="till-summary"><div><span>Subtotal</span><strong>{money.format(subtotal)}</strong></div><div><span>Discount</span><strong>−{money.format(discount)}</strong></div><div className="grand-total"><span>Total</span><strong>{money.format(total)}</strong></div><button className="button accent full" onClick={checkout} disabled={!cart.length || busy}>{busy ? "Completing sale…" : online ? "Cash checkout" : "Queue cash sale"}</button></div></aside>
     </main> : <main className="pos-orders"><div className="pos-title"><div><p className="eyebrow">All channels</p><h1>Orders</h1></div>{["owner", "admin", "supervisor"].includes(role) && <a className="button secondary" href="/admin">Admin Portal</a>}</div><div className="table-tools"><input placeholder="Search client, phone, reference or time" value={orderQuery} onChange={(event) => setOrderQuery(event.target.value)} /><select value={orderStatus} onChange={(event) => setOrderStatus(event.target.value)}><option value="all">All orders</option><option value="pending-payment">Pending payment</option><option value="pending">Pending</option><option value="processing">Processing</option><option value="ready">Ready</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option></select><span>{visibleOrders.length} orders</span></div>{error && <p className="notice error-notice">{error}</p>}<div className="order-card-grid">{visibleOrders.map((order) => <article className="panel pos-order" key={order.orderId}><div className="panel-title"><div><b>{order.orderId}</b><p>{new Date(order.createdAt).toLocaleString("en-GH")}</p></div><span className={order.status === "completed" ? "badge success" : order.status === "cancelled" ? "badge danger" : "badge warning"}>{order.status}</span></div><h3>{order.customer}</h3><p>{order.phone} · {order.deliveryMethod}</p>{order.landmark && <p>{order.landmark}</p>}<div className="order-items">{(order.items || []).map((item) => <span key={item.productId}>{item.quantity} × {item.name}</span>)}</div><div className="order-total"><span>{order.paymentStatus === "paid" ? "Paid" : "Pending payment"}</span><strong>{money.format(order.total || 0)}</strong></div><select disabled={busy} value={order.status} onChange={(event) => updateOrder(order.orderId, event.target.value)}>{["pending", "confirmed", "paid", "processing", "ready", "completed", "cancelled"].map((status) => <option key={status}>{status}</option>)}</select>{order.pickupCode && <strong className="pickup-code">Code {order.pickupCode}</strong>}</article>)}</div></main>}
-    {receipt && <div className="modal-backdrop"><div className="modal"><span className="success-mark">✓</span><h2>{receipt.queued ? "Sale queued" : "Payment complete"}</h2><p>{receipt.queued ? "This sale will sync when the device reconnects." : "The sale was recorded and stock was updated."}</p><strong className="order-reference">{receipt.receiptId}</strong><p className="receipt-total">{money.format(receipt.total || total)}</p><button className="button primary full" onClick={() => setReceipt(null)}>New sale</button></div></div>}
+    {receipt && <div className="modal-backdrop"><div className="modal"><span className="success-mark">✓</span><h2>{receipt.shiftSummary ? "Shift closed" : receipt.queued ? "Sale queued" : "Payment complete"}</h2><p>{receipt.shiftSummary ? `${receipt.shiftSummary.transactions} transactions recorded.` : receipt.queued ? "This sale will sync when the device reconnects." : "The sale was recorded and stock was updated."}</p><strong className="order-reference">{receipt.receiptId}</strong><p className="receipt-total">{money.format(receipt.total || total)}</p><button className="button primary full" onClick={() => setReceipt(null)}>{receipt.shiftSummary ? "Done" : "New sale"}</button></div></div>}
   </div>;
 }
 

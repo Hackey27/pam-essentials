@@ -27,6 +27,9 @@ export async function POST(request) {
 
   const transactionId = String(body.transactionId || "").trim();
   if (!transactionId) return NextResponse.json({ error: "A transaction ID is required." }, { status: 400 });
+  const shiftId = String(body.shiftId || "").trim();
+  const deviceId = String(body.deviceId || "").trim().slice(0, 120);
+  if (!shiftId || !deviceId) return NextResponse.json({ error: "Open a till shift before checkout." }, { status: 409 });
 
   const store = adminDb();
   const context = await catalogueContext(store);
@@ -36,6 +39,9 @@ export async function POST(request) {
     const result = await store.runTransaction(async (tx) => {
       const existing = await tx.get(saleRef);
       if (existing.exists) return { receiptId: existing.data().receiptId, duplicate: true };
+      const shiftRef = store.collection("shifts").doc(shiftId);
+      const shiftSnap = await tx.get(shiftRef);
+      if (!shiftSnap.exists || shiftSnap.data().status !== "open" || shiftSnap.data().staffId !== access.user.uid) throw new Error("This till shift is no longer open.");
 
       const normalizedItems = [...quantities].map(([id, quantity]) => ({ id, quantity }));
       const productRefs = normalizedItems.map(({ id }) => store.collection("products").doc(encodeURIComponent(id)));
@@ -89,6 +95,8 @@ export async function POST(request) {
         salesChannel: body.salesChannel || "walk-in",
         staffId: access.user.uid,
         staffEmail: access.user.email,
+        shiftId,
+        deviceId,
         createdAt: FieldValue.serverTimestamp(),
       });
       return { receiptId, total, duplicate: false };

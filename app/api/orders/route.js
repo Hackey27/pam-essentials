@@ -3,6 +3,29 @@ import { NextResponse } from "next/server";
 import { adminDb } from "@/lib/admin";
 import { availableForSale, catalogueContext, resolveDiscount } from "@/lib/commerce";
 
+export async function GET(request) {
+  const url = new URL(request.url);
+  const orderId = String(url.searchParams.get("reference") || "").trim().toUpperCase();
+  const phone = String(url.searchParams.get("phone") || "").replace(/\s+/g, "").trim();
+  if (!orderId || !phone) return NextResponse.json({ error: "Order reference and phone number are required." }, { status: 400 });
+  const snap = await adminDb().collection("orders").doc(orderId).get();
+  if (!snap.exists || String(snap.data().phone || "").replace(/\s+/g, "") !== phone) {
+    return NextResponse.json({ error: "No order matched those details." }, { status: 404 });
+  }
+  const order = snap.data();
+  return NextResponse.json({
+    order: {
+      orderId,
+      status: order.status,
+      paymentStatus: order.paymentStatus,
+      deliveryMethod: order.deliveryMethod,
+      total: Number(order.total || 0),
+      pickupCode: order.pickupCode || null,
+      updatedAt: order.updatedAt?.toDate?.()?.toISOString?.() || null,
+    },
+  });
+}
+
 export async function POST(request) {
   const body = await request.json().catch(() => ({}));
   const requested = Array.isArray(body.items) ? body.items : [];
@@ -66,7 +89,7 @@ export async function POST(request) {
     subtotal: Math.round(subtotal * 100) / 100,
     discount: Math.round(discount * 100) / 100,
     total,
-    channel: "website",
+    channel: body.channel === "whatsapp" ? "whatsapp" : "website",
     deliveryMethod: body.deliveryMethod || "pickup",
     landmark: String(body.landmark || "").trim(),
     paymentStatus: "pending",
