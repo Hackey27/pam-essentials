@@ -1,10 +1,24 @@
-export default function AdminHome() {
+"use client";
+import RequireRole from "@/components/RequireRole";
+import { useAuth, signOut } from "@/components/AuthProvider";
+
+function AdminHome() {
+  const { user } = useAuth();
   return (
     <main>
       <h1>Admin dashboard</h1>
-      <p>Inventory and orders will be managed here.</p>
-      <p>Sign-in will be added once Firebase Authentication is enabled.</p>
-      <p><a href="/">Back to the store</a></p>
+      <p>Signed in as {user?.email}.</p>
+      <p>Products, stock and reports will be managed here.</p>
+      <p><a href="/pos">Open the till</a></p>
+      <p><button onClick={signOut}>Sign out</button></p>
     </main>
+  );
+}
+
+export default function AdminPage() {
+  return (
+    <RequireRole allow={["owner"]}>
+      <AdminHome />
+    </RequireRole>
   );
 }
