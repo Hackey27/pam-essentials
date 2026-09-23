@@ -7,7 +7,7 @@
   /* Comfortaa carries the brand; body text stays on a plain sans for
      legibility, especially for prices and totals at the till. */
   --font-brand: "Comfortaa Variable", "Comfortaa", system-ui, sans-serif;
-  --font-body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-body: "Nunito Sans Variable", "Nunito Sans", system-ui, sans-serif;
 }
 @media (prefers-color-scheme: dark) {
   :root { --ink: #eef1ee; --paper: #161b1c; --muted: #a3b0b3; --line: #2c3537; --accent: #7cc3ad; }
@@ -26,6 +26,8 @@ h1 { font-size: clamp(2rem, 5vw, 3rem); line-height: 1.15; margin: 0 0 1rem; }
 p { color: var(--muted); margin: 0 0 1rem; }
 a { color: var(--accent); }
 a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+/* Prices, totals and stock counts line up in columns. */
+.num, td, .price { font-variant-numeric: tabular-nums; }
 .status { border-top: 1px solid var(--line); margin-top: 2.5rem; padding-top: 1rem; font-size: 0.9rem; }
 .form { display: flex; flex-direction: column; gap: 0.35rem; max-width: 22rem; }
 .form label { font-size: 0.85rem; color: var(--muted); margin-top: 0.6rem; }

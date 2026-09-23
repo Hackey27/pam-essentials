@@ -1,4 +1,5 @@
 import "@fontsource-variable/comfortaa";
+import "@fontsource-variable/nunito-sans";
 import "./globals.css";
 import { AuthProvider } from "@/components/AuthProvider";
 
