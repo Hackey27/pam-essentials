@@ -1,49 +1,86 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
     function signedIn() {
       return request.auth != null;
     }
+    function hasProfile() {
+      return signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+    function profile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
     function role() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+      return hasProfile() ? profile().role : null;
+    }
+    function activeStaff() {
+      return hasProfile() && profile().active != false;
+    }
+    function isCashier() {
+      return activeStaff() && role() == 'cashier';
+    }
+    function isSupervisor() {
+      return activeStaff() && role() == 'supervisor';
+    }
+    function isAdmin() {
+      return activeStaff() && (role() == 'owner' || role() == 'admin');
     }
     function isOwner() {
-      return signedIn() && role() == 'owner';
+      return activeStaff() && role() == 'owner';
     }
     function isStaff() {
-      return signedIn() && (role() == 'owner' || role() == 'cashier');
+      return isCashier() || isSupervisor() || isAdmin();
     }
 
-    // Staff accounts and their roles. Only the owner can hand out roles;
-    // staff can read their own record so the app knows which pages to show.
     match /users/{uid} {
-      allow read: if signedIn() && (request.auth.uid == uid || isOwner());
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
       allow write: if isOwner();
     }
 
-    // Catalogue: readable by anyone so the storefront can list products.
-    // Only the owner can change products, prices or stock levels directly.
     match /products/{id} {
-      allow read: if true;
-      allow write: if isOwner();
+      allow read: if isStaff() ||
+        (resource.data.active == true &&
+         resource.data.archived == false &&
+         resource.data.sellable == true &&
+         resource.data.price > 0);
+      allow write: if isAdmin();
     }
 
-    // Sales: any staff member can record one; only the owner can amend history.
+    match /categories/{id} {
+      allow read: if isStaff() || resource.data.active == true;
+      allow write: if isAdmin();
+    }
+
+    // Sales, order writes, stock changes and audit entries are server-authoritative.
     match /sales/{id} {
       allow read: if isStaff();
-      allow create: if isStaff();
-      allow update, delete: if isOwner();
+      allow write: if false;
     }
-
-    // Stock movements are an append-only audit trail: never edited or deleted.
-    match /stock_movements/{id} {
+    match /orders/{id} {
       allow read: if isStaff();
-      allow create: if isStaff();
-      allow update, delete: if false;
+      allow write: if false;
+    }
+    match /stock_movements/{id} {
+      allow read: if isSupervisor() || isAdmin();
+      allow write: if false;
+    }
+    match /discount_rules/{id} {
+      allow read: if isStaff();
+      allow write: if isAdmin();
+    }
+    match /settings/{id} {
+      allow read: if isStaff();
+      allow write: if isAdmin();
+    }
+    match /shifts/{id} {
+      allow read: if isStaff();
+      allow write: if false;
+    }
+    match /admin_audit/{id} {
+      allow read: if isAdmin();
+      allow write: if false;
     }
 
-    // Anything not listed above stays closed.
     match /{document=**} {
       allow read, write: if false;
     }
