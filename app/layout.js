@@ -1,3 +1,4 @@
+import "@fontsource-variable/comfortaa";
 import "./globals.css";
 import { AuthProvider } from "@/components/AuthProvider";
 
