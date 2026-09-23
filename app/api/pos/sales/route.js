@@ -38,7 +38,10 @@ export async function POST(request) {
   try {
     const result = await store.runTransaction(async (tx) => {
       const existing = await tx.get(saleRef);
-      if (existing.exists) return { receiptId: existing.data().receiptId, duplicate: true };
+      if (existing.exists) {
+        const sale = existing.data();
+        return { receiptId: sale.receiptId, total: sale.total, paymentMethod: sale.paymentMethod, amountPaid: sale.amountPaid, change: sale.change, duplicate: true };
+      }
       const shiftRef = store.collection("shifts").doc(shiftId);
       const shiftSnap = await tx.get(shiftRef);
       if (!shiftSnap.exists || shiftSnap.data().status !== "open" || shiftSnap.data().staffId !== access.user.uid) throw new Error("This till shift is no longer open.");
@@ -63,15 +66,20 @@ export async function POST(request) {
 
         const lineTotal = Number(product.price) * quantity;
         const applied = resolveDiscount(product, quantity, context.rules);
+        const netLineTotal = Math.round((lineTotal - applied.amount) * 100) / 100;
+        const lineCost = Math.round(Number(product.costPrice || 0) * quantity * 100) / 100;
         subtotal += lineTotal;
         discount += applied.amount;
-        cost += Number(product.costPrice || 0) * quantity;
+        cost += lineCost;
         lines.push({
           productId: product.id,
           name: product.name,
           quantity,
           unitPrice: Number(product.price),
-          lineTotal: Math.round((lineTotal - applied.amount) * 100) / 100,
+          lineTotal: netLineTotal,
+          unitCost: Number(product.costPrice || 0),
+          lineCost,
+          lineProfit: Math.round((netLineTotal - lineCost) * 100) / 100,
           categorySnapshot: { id: product.categoryId, name: product.category },
           discountRuleSnapshot: applied.rule ? { ruleId: applied.rule.ruleId, name: applied.rule.name, amount: applied.amount } : null,
         });
@@ -94,6 +102,12 @@ export async function POST(request) {
 
       const receiptId = `PAM-${Date.now().toString(36).toUpperCase()}`;
       const total = Math.round((subtotal - discount) * 100) / 100;
+      const paymentMethod = ["cash", "mobile-money", "card"].includes(body.paymentMethod) ? body.paymentMethod : "cash";
+      const salesChannel = ["walk-in", "website", "whatsapp"].includes(body.salesChannel) ? body.salesChannel : "walk-in";
+      const orderReference = String(body.orderReference || "").trim().slice(0, 100) || null;
+      const tendered = paymentMethod === "cash" ? Number(body.amountPaid) : total;
+      if (!Number.isFinite(tendered) || tendered < total) throw new Error("Amount paid cannot be less than the sale total.");
+      const change = paymentMethod === "cash" ? Math.round((tendered - total) * 100) / 100 : 0;
       tx.create(saleRef, {
         receiptId,
         clientTransactionId: transactionId,
@@ -103,11 +117,11 @@ export async function POST(request) {
         total,
         cost,
         profit: total - cost,
-        paymentMethod: body.paymentMethod || "cash",
-        amountPaid: Number(body.amountPaid || total),
-        change: Math.max(0, Number(body.amountPaid || total) - total),
-        salesChannel: body.salesChannel || "walk-in",
-        orderReference: body.orderReference || null,
+        paymentMethod,
+        amountPaid: tendered,
+        change,
+        salesChannel,
+        orderReference,
         taxSnapshot: { enabled: false },
         staffId: access.user.uid,
         staffEmail: access.user.email,
@@ -115,7 +129,7 @@ export async function POST(request) {
         deviceId,
         createdAt: FieldValue.serverTimestamp(),
       });
-      return { receiptId, total, duplicate: false };
+      return { receiptId, total, paymentMethod, amountPaid: tendered, change, duplicate: false };
     });
     return NextResponse.json(result);
   } catch (error) {

@@ -188,7 +188,7 @@ function AdminPortal() {
       channelMap.set(channel, (channelMap.get(channel) || 0) + Number(sale.total || 0));
       for (const line of sale.items || []) {
       const lineRevenue = Number(line.lineTotal || 0);
-      const lineProfit = Number(sale.total || 0) ? Number(sale.profit || 0) * (lineRevenue / Number(sale.total)) : 0;
+      const lineProfit = line.lineProfit != null ? Number(line.lineProfit) : Number(sale.total || 0) ? Number(sale.profit || 0) * (lineRevenue / Number(sale.total)) : 0;
       const product = productMap.get(line.productId) || { name: line.name, quantity: 0, revenue: 0, profit: 0 };
       product.quantity += Number(line.quantity || 0); product.revenue += lineRevenue; product.profit += lineProfit; productMap.set(line.productId, product);
       const category = line.categorySnapshot?.name || line.categorySnapshot || "Uncategorised";
