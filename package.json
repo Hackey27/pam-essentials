@@ -8,11 +8,12 @@
     "start": "next start -p ${PORT:-8080}"
   },
   "dependencies": {
+    "@fontsource-variable/comfortaa": "5.3.0",
+    "firebase": "12.4.0",
     "firebase-admin": "14.4.0",
     "next": "16.3.6",
     "react": "19.3.0",
-    "react-dom": "19.3.0",
-    "firebase": "12.4.0"
+    "react-dom": "19.3.0"
   },
   "engines": {
     "node": ">=22"
