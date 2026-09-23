@@ -76,6 +76,20 @@ export async function POST(request) {
           discountRuleSnapshot: applied.rule ? { ruleId: applied.rule.ruleId, name: applied.rule.name, amount: applied.amount } : null,
         });
         tx.update(productRef, { stock: Number(product.stock) - quantity, updatedAt: FieldValue.serverTimestamp() });
+        tx.create(store.collection("stock_movements").doc(), {
+          type: "sale",
+          productId: product.id,
+          productName: product.name,
+          quantity: -quantity,
+          qtyChange: -quantity,
+          oldStock: Number(product.stock),
+          newStock: Number(product.stock) - quantity,
+          saleId: transactionId,
+          reason: "POS sale",
+          staff: access.user.uid,
+          staffEmail: access.user.email,
+          createdAt: FieldValue.serverTimestamp(),
+        });
       }
 
       const receiptId = `PAM-${Date.now().toString(36).toUpperCase()}`;
@@ -93,6 +107,8 @@ export async function POST(request) {
         amountPaid: Number(body.amountPaid || total),
         change: Math.max(0, Number(body.amountPaid || total) - total),
         salesChannel: body.salesChannel || "walk-in",
+        orderReference: body.orderReference || null,
+        taxSnapshot: { enabled: false },
         staffId: access.user.uid,
         staffEmail: access.user.email,
         shiftId,

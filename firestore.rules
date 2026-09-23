@@ -76,6 +76,10 @@ service cloud.firestore {
       allow read: if isStaff();
       allow write: if false;
     }
+    match /expenses/{id} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
     match /admin_audit/{id} {
       allow read: if isAdmin();
       allow write: if false;

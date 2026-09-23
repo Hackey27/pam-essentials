@@ -9,12 +9,24 @@ const whole = new Intl.NumberFormat("en-GH");
 const allNav = ["Overview", "Orders", "Products", "Categories", "Inventory", "Discounts", "Staff", "Analytics", "Settings", "Audit"];
 const supervisorNav = ["Overview", "Orders", "Inventory"];
 const settingKeys = ["STORE_NAME", "STORE_LOCATION", "OPENING_HOURS", "WHATSAPP_NUMBER", "RECEIPT_FOOTER", "DELIVERY_OPTIONS", "DELIVERY_FEE"];
-const emptyData = { products: [], orders: [], movements: [], categories: [], discounts: [], settings: {}, users: [], audit: [], sales: [], metrics: {}, permissions: {} };
+const emptyData = { products: [], orders: [], movements: [], categories: [], discounts: [], settings: {}, users: [], audit: [], sales: [], expenses: [], metrics: {}, permissions: {} };
 
 function dateTime(value) {
   if (!value) return "—";
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString("en-GH", { dateStyle: "medium", timeStyle: "short" });
+}
+
+function periodBounds(period) {
+  const now = new Date();
+  const end = now;
+  let start;
+  if (period === "today") start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  else if (period === "week") { start = new Date(now.getFullYear(), now.getMonth(), now.getDate()); start.setDate(start.getDate() - ((start.getDay() + 6) % 7)); }
+  else if (period === "month") start = new Date(now.getFullYear(), now.getMonth(), 1);
+  else return null;
+  const duration = end.getTime() - start.getTime();
+  return { start, end, previousStart: new Date(start.getTime() - duration), previousEnd: start };
 }
 
 function AdminPortal() {
@@ -30,6 +42,7 @@ function AdminPortal() {
   const [editor, setEditor] = useState(null);
   const [saving, setSaving] = useState(false);
   const [inventory, setInventory] = useState({ type: "receive", productId: "", quantity: "", supplier: "", reason: "", notes: "" });
+  const [period, setPeriod] = useState("today");
   const isAdmin = ["owner", "admin"].includes(role);
   const nav = isAdmin ? allNav : supervisorNav;
 
@@ -85,6 +98,7 @@ function AdminPortal() {
       discount: { create: true, ruleId: "", name: "", scopeType: "GLOBAL", scopeId: "", discountType: "PERCENT", value: 5, minQty: 1, priority: 1, active: true, startDate: "", endDate: "" },
       staff: { create: true, email: "", displayName: "", role: "cashier", active: true, temporaryPassword: "" },
       setting: { create: true, key: settingKeys.find((key) => !data.settings[key]) || "STORE_NAME", value: "", description: "" },
+      expense: { amount: "", category: "Operating expense", description: "", paymentMethod: "cash" },
     };
     setEditor({ type, data: item ? { ...item, create: false } : defaults[type] });
   }
@@ -95,8 +109,8 @@ function AdminPortal() {
 
   async function saveEditor(event) {
     event.preventDefault();
-    const paths = { product: "products", category: "categories", discount: "discounts", staff: "staff", setting: "settings" };
-    const labels = { product: "Product saved.", category: "Category saved.", discount: "Discount rule saved.", staff: "Staff account saved.", setting: "Setting saved." };
+    const paths = { product: "products", category: "categories", discount: "discounts", staff: "staff", setting: "settings", expense: "expenses" };
+    const labels = { product: "Product saved.", category: "Category saved.", discount: "Discount rule saved.", staff: "Staff account saved.", setting: "Setting saved.", expense: "Expense recorded." };
     await mutate(`/api/admin/${paths[editor.type]}`, editor.data, labels[editor.type]);
   }
 
@@ -117,9 +131,14 @@ function AdminPortal() {
   }), [data.products, query, status]);
 
   const performance = useMemo(() => {
+    const bounds = periodBounds(period);
     const productMap = new Map();
     const categoryMap = new Map();
-    for (const sale of data.sales) for (const line of sale.items || []) {
+    const sales = bounds ? data.sales.filter((sale) => {
+      const createdAt = new Date(sale.createdAt);
+      return !Number.isNaN(createdAt.getTime()) && createdAt >= bounds.start && createdAt <= bounds.end;
+    }) : data.sales;
+    for (const sale of sales) for (const line of sale.items || []) {
       const product = productMap.get(line.productId) || { name: line.name, quantity: 0, revenue: 0 };
       product.quantity += Number(line.quantity || 0); product.revenue += Number(line.lineTotal || 0); productMap.set(line.productId, product);
       const category = line.categorySnapshot?.name || line.categorySnapshot || "Uncategorised";
@@ -127,15 +146,43 @@ function AdminPortal() {
       summary.quantity += Number(line.quantity || 0); summary.revenue += Number(line.lineTotal || 0); categoryMap.set(category, summary);
     }
     return { products: [...productMap].sort((a, b) => b[1].revenue - a[1].revenue).slice(0, 10), categories: [...categoryMap].sort((a, b) => b[1].revenue - a[1].revenue) };
-  }, [data.sales]);
+  }, [data.sales, period]);
+
+  const periodReport = useMemo(() => {
+    const bounds = periodBounds(period);
+    const include = (item, start, end) => {
+      const value = new Date(item.createdAt);
+      return !Number.isNaN(value.getTime()) && value >= start && value <= end;
+    };
+    const summarize = (sales, expenses) => ({
+      sales: sales.reduce((sum, sale) => sum + Number(sale.total || 0), 0),
+      profit: sales.reduce((sum, sale) => sum + Number(sale.profit || 0), 0),
+      expenses: expenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0),
+      transactions: sales.length,
+      unitsSold: sales.reduce((sum, sale) => sum + (sale.items || []).reduce((qty, item) => qty + Number(item.quantity || 0), 0), 0),
+    });
+    const current = bounds ? summarize(data.sales.filter((item) => include(item, bounds.start, bounds.end)), data.expenses.filter((item) => include(item, bounds.start, bounds.end))) : summarize(data.sales, data.expenses);
+    const previous = bounds ? summarize(data.sales.filter((item) => include(item, bounds.previousStart, bounds.previousEnd)), data.expenses.filter((item) => include(item, bounds.previousStart, bounds.previousEnd))) : null;
+    current.netProfit = current.profit - current.expenses;
+    return { current, previous };
+  }, [data.sales, data.expenses, period]);
+
+  function comparison(key) {
+    if (!periodReport.previous) return "All recorded activity";
+    const previous = Number(periodReport.previous[key] || 0);
+    const current = Number(periodReport.current[key] || 0);
+    if (!previous) return current ? "No activity in previous period" : "No change";
+    const change = Math.round(((current - previous) / Math.abs(previous)) * 100);
+    return `${change >= 0 ? "+" : ""}${change}% vs previous period`;
+  }
 
   const metricCards = isAdmin ? [
-    ["Sales", money.format(data.metrics.sales || 0), "Recorded till sales"],
-    ["Gross profit", money.format(data.metrics.profit || 0), "Admin only"],
-    ["Transactions", whole.format(data.metrics.transactions || 0), "Completed sales"],
-    ["Units sold", whole.format(data.metrics.unitsSold || 0), "All line items"],
-    ["Stock valuation", money.format(data.metrics.stockValuation || 0), "At current cost"],
-    ["Open orders", data.metrics.openOrders || 0, "All channels"],
+    ["Sales", money.format(periodReport.current.sales), comparison("sales")],
+    ["Gross profit", money.format(periodReport.current.profit), comparison("profit")],
+    ["Expenses", money.format(periodReport.current.expenses), comparison("expenses")],
+    ["Net profit", money.format(periodReport.current.netProfit), "Profit less expenses"],
+    ["Transactions", whole.format(periodReport.current.transactions), comparison("transactions")],
+    ["Units sold", whole.format(periodReport.current.unitsSold), comparison("unitsSold")],
   ] : [
     ["Products", data.metrics.products || 0, "Catalogue records"],
     ["Low stock", data.metrics.lowStock || 0, "At or below threshold"],
@@ -149,6 +196,7 @@ function AdminPortal() {
     Discounts: <button className="button primary" onClick={() => openEditor("discount")}>New rule</button>,
     Staff: <button className="button primary" onClick={() => openEditor("staff")}>New staff account</button>,
     Settings: <button className="button primary" onClick={() => openEditor("setting")}>Add store setting</button>,
+    Analytics: <button className="button primary" onClick={() => openEditor("expense")}>Record expense</button>,
   }[section];
 
   return <div className="admin-shell">
@@ -156,7 +204,7 @@ function AdminPortal() {
     <main className="admin-main">
       <header className="admin-topbar"><div><p>PAM Essentials & More Admin</p><span>{user?.email}</span></div><div><button className="icon-button" onClick={load} aria-label="Refresh">↻</button><button className="icon-button" onClick={signOut} aria-label="Sign out">↪</button></div></header>
       <section className="admin-content">
-        <div className="page-title"><div><p className="eyebrow">Admin Portal</p><h1>{section}</h1><p>{section === "Overview" ? "Current sales, stock and order health." : `Manage ${section.toLowerCase()} across the store and till.`}</p></div>{primaryAction && <div className="page-actions">{primaryAction}</div>}</div>
+        <div className="page-title"><div><p className="eyebrow">Admin Portal</p><h1>{section}</h1><p>{section === "Overview" ? "Current sales, stock and order health." : `Manage ${section.toLowerCase()} across the store and till.`}</p></div><div className="page-actions">{isAdmin && ["Overview", "Analytics"].includes(section) && <select aria-label="Reporting period" value={period} onChange={(event) => setPeriod(event.target.value)}><option value="today">Today</option><option value="week">This week</option><option value="month">This month</option><option value="all">All time</option></select>}{primaryAction}</div></div>
         {notice && <p className="notice success-notice">{notice}</p>}{error && <p className="notice error-notice">{error}</p>}
         {loading ? <div className="empty-state"><div className="spinner" /><p>Loading admin data…</p></div> : <>
           {section === "Overview" && <><div className="metric-grid">{metricCards.map(([label, value, note]) => <article className="metric-card" key={label}><p>{label}</p><strong>{value}</strong><span>{note}</span></article>)}</div><div className="admin-panels"><article className="panel"><div className="panel-title"><h2>Attention needed</h2>{isAdmin && <button onClick={() => { setSection("Products"); setStatus("needs-pricing"); }}>View products</button>}</div>{isAdmin && <div className="attention-row"><span className="status-icon warning">!</span><div><b>{data.metrics.needsPricing || 0} products need pricing</b><p>Stored in Admin; hidden from storefront and POS.</p></div></div>}<div className="attention-row"><span className="status-icon danger">↓</span><div><b>{data.metrics.lowStock || 0} products are low in stock</b><p>Review quantities before the next trading period.</p></div></div></article><article className="panel"><div className="panel-title"><h2>Open orders</h2><button onClick={() => setSection("Orders")}>View queue</button></div>{!data.orders.length ? <p className="muted">No orders yet.</p> : data.orders.filter((order) => !["completed", "cancelled"].includes(order.status)).slice(0, 5).map((order) => <div className="order-row" key={order.orderId}><div><b>{order.customer}</b><span>{order.orderId}</span></div><strong>{money.format(order.total || 0)}</strong><span className="badge warning">{order.status}</span></div>)}</article></div></>}
@@ -173,7 +221,7 @@ function AdminPortal() {
 
           {section === "Staff" && <div className="data-table-wrap"><table className="data-table"><thead><tr><th>Staff member</th><th>Role</th><th>Status</th><th>Action</th></tr></thead><tbody>{data.users.map((staff) => <tr key={staff.id}><td><b>{staff.displayName || staff.email}</b><span>{staff.email}</span></td><td>{staff.role}</td><td><span className={staff.active ? "badge success" : "badge danger"}>{staff.active ? "Active" : "Inactive"}</span></td><td><button className="table-action" onClick={() => openEditor("staff", { ...staff, uid: staff.id })}>Edit</button></td></tr>)}</tbody></table></div>}
 
-          {section === "Analytics" && <><div className="metric-grid">{metricCards.slice(0, 4).map(([label, value, note]) => <article className="metric-card" key={label}><p>{label}</p><strong>{value}</strong><span>{note}</span></article>)}</div><div className="admin-panels"><article className="panel"><div className="panel-title"><h2>Top products</h2></div>{performance.products.length ? performance.products.map(([id, value]) => <div className="order-row" key={id}><div><b>{value.name}</b><span>{value.quantity} units</span></div><strong>{money.format(value.revenue)}</strong></div>) : <p className="muted">Sales will appear here after checkout.</p>}</article><article className="panel"><div className="panel-title"><h2>Category performance</h2></div>{performance.categories.length ? performance.categories.map(([name, value]) => <div className="order-row" key={name}><div><b>{name}</b><span>{value.quantity} units</span></div><strong>{money.format(value.revenue)}</strong></div>) : <p className="muted">No category sales yet.</p>}</article></div></>}
+          {section === "Analytics" && <><div className="metric-grid">{metricCards.map(([label, value, note]) => <article className="metric-card" key={label}><p>{label}</p><strong>{value}</strong><span>{note}</span></article>)}</div><div className="admin-panels"><article className="panel"><div className="panel-title"><h2>Top products</h2></div>{performance.products.length ? performance.products.map(([id, value]) => <div className="order-row" key={id}><div><b>{value.name}</b><span>{value.quantity} units</span></div><strong>{money.format(value.revenue)}</strong></div>) : <p className="muted">Sales will appear here after checkout.</p>}</article><article className="panel"><div className="panel-title"><h2>Category performance</h2></div>{performance.categories.length ? performance.categories.map(([name, value]) => <div className="order-row" key={name}><div><b>{name}</b><span>{value.quantity} units</span></div><strong>{money.format(value.revenue)}</strong></div>) : <p className="muted">No category sales yet.</p>}</article><article className="panel"><div className="panel-title"><h2>Recent expenses</h2></div>{data.expenses.length ? data.expenses.slice(0, 10).map((expense) => <div className="order-row" key={expense.id}><div><b>{expense.description}</b><span>{expense.category} · {dateTime(expense.createdAt)}</span></div><strong>{money.format(expense.amount)}</strong></div>) : <p className="muted">No expenses recorded.</p>}</article></div></>}
 
           {section === "Settings" && <div className="data-table-wrap"><table className="data-table"><thead><tr><th>Setting</th><th>Value</th><th>Description</th><th>Action</th></tr></thead><tbody>{Object.values(data.settings).map((setting) => <tr key={setting.key}><td><b>{setting.key}</b></td><td>{String(setting.value ?? "")}</td><td>{setting.description || "—"}</td><td><button className="table-action" onClick={() => openEditor("setting", setting)}>Edit</button></td></tr>)}</tbody></table></div>}
 
@@ -196,6 +244,7 @@ function EditorFields({ editor, update, data, currentRole }) {
   if (editor.type === "discount") return <><div className="form-grid"><label>Rule ID<input disabled={!value.create} value={value.ruleId || ""} onChange={(event) => update("ruleId", event.target.value)} /></label><label>Name<input required value={value.name || ""} onChange={(event) => update("name", event.target.value)} /></label></div><div className="form-grid"><label>Scope<select value={value.scopeType} onChange={(event) => update("scopeType", event.target.value)}><option>GLOBAL</option><option>CATEGORY</option><option>PRODUCT</option></select></label>{value.scopeType !== "GLOBAL" && <label>Scope item<select required value={value.scopeId || ""} onChange={(event) => update("scopeId", event.target.value)}><option value="">Choose item</option>{(value.scopeType === "CATEGORY" ? data.categories : data.products).map((item) => <option key={item.categoryId || item.id} value={item.categoryId || item.id}>{item.name}</option>)}</select></label>}</div><div className="form-grid"><label>Type<select value={value.discountType} onChange={(event) => update("discountType", event.target.value)}><option>PERCENT</option><option>FIXED_AMOUNT</option></select></label><label>Value<input required type="number" min="0" step="0.01" value={value.value ?? ""} onChange={(event) => update("value", event.target.value)} /></label></div><div className="form-grid"><label>Minimum quantity<input type="number" min="1" value={value.minQty || 1} onChange={(event) => update("minQty", event.target.value)} /></label><label>Priority<input type="number" value={value.priority || 0} onChange={(event) => update("priority", event.target.value)} /></label></div><div className="form-grid"><label>Start date<input type="date" value={value.startDate?.slice?.(0, 10) || ""} onChange={(event) => update("startDate", event.target.value)} /></label><label>End date<input type="date" value={value.endDate?.slice?.(0, 10) || ""} onChange={(event) => update("endDate", event.target.value)} /></label></div><div className="toggle-row"><label><input type="checkbox" checked={value.active !== false} onChange={(event) => update("active", event.target.checked)} /> Active</label></div></>;
   if (editor.type === "staff") return <><label>Email<input required disabled={!value.create} type="email" value={value.email || ""} onChange={(event) => update("email", event.target.value)} /></label><label>Display name<input required value={value.displayName || ""} onChange={(event) => update("displayName", event.target.value)} /></label>{value.create && <label>Temporary password<input required minLength="8" type="password" autoComplete="new-password" value={value.temporaryPassword || ""} onChange={(event) => update("temporaryPassword", event.target.value)} /></label>}<label>Role<select value={value.role || "cashier"} onChange={(event) => update("role", event.target.value)}><option value="cashier">Cashier</option><option value="supervisor">Supervisor</option><option value="admin">Admin</option>{currentRole === "owner" && <option value="owner">Owner</option>}</select></label><div className="toggle-row"><label><input type="checkbox" checked={value.active !== false} onChange={(event) => update("active", event.target.checked)} /> Active account</label></div></>;
   if (editor.type === "setting") return <><label>Key{value.create ? <select value={value.key || ""} onChange={(event) => update("key", event.target.value)}>{settingKeys.filter((key) => !data.settings[key]).map((key) => <option key={key}>{key}</option>)}</select> : <input disabled value={value.key || ""} />}</label><label>Value{typeof value.value === "boolean" ? <select value={String(value.value)} onChange={(event) => update("value", event.target.value === "true")}><option value="true">True</option><option value="false">False</option></select> : <input value={value.value ?? ""} onChange={(event) => update("value", event.target.value)} />}</label><label>Description<textarea value={value.description || ""} onChange={(event) => update("description", event.target.value)} /></label></>;
+  if (editor.type === "expense") return <><div className="form-grid"><label>Amount<input required type="number" min="0.01" step="0.01" value={value.amount || ""} onChange={(event) => update("amount", event.target.value)} /></label><label>Payment method<select value={value.paymentMethod || "cash"} onChange={(event) => update("paymentMethod", event.target.value)}><option value="cash">Cash</option><option value="mobile-money">Mobile money</option><option value="bank">Bank</option><option value="other">Other</option></select></label></div><label>Category<input required value={value.category || ""} onChange={(event) => update("category", event.target.value)} /></label><label>Description<textarea required value={value.description || ""} onChange={(event) => update("description", event.target.value)} /></label></>;
   return null;
 }
 

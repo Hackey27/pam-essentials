@@ -27,14 +27,14 @@ npm run seed:firestore
 ## Server-authoritative operations
 
 - Public orders are repriced from Firestore before being created.
-- POS checkout resolves product → category → global discounts, reprices products, validates available stock and decrements stock in one Firestore transaction.
+- POS checkout resolves product → category → global discounts, reprices products, validates available stock, decrements stock and records an inventory movement in one Firestore transaction.
 - Client transaction IDs make POS writes idempotent.
 - Cost and profit data are returned only by protected Admin APIs.
 - Products, categories, stock movements, discounts, staff, settings and order status changes are written through protected, audited server routes.
 - Supervisors receive stock and process orders without receiving cost or profit fields; cashier payloads contain neither.
 - Seeded settings and discount rules are created only when absent.
 
-The Admin Portal provides working sections for the catalogue, categories, inventory receiving and adjustment, order fulfilment, discount rules, staff roles, analytics, settings and the append-only audit trail. The POS includes both till and cross-channel order views, open/close shifts, offline sale replay and server-side stock/discount validation. The storefront includes filtering, pagination, tracked orders, pickup/delivery ordering and a WhatsApp ordering hand-off.
+The Admin Portal provides working sections for the catalogue, categories, inventory receiving and adjustment, order fulfilment, discount rules, staff roles, period-based sales/profit reporting, expense recording, settings and the append-only audit trail. The POS includes both till and cross-channel order views, open/close shifts, offline sale replay and server-side stock/discount validation. The storefront includes filtering, pagination, tracked orders, pickup/delivery ordering and a WhatsApp ordering hand-off.
 
 Firestore rules are versioned in `firestore.rules` and configured by `firebase.json`. Deploy rule changes independently of the Cloud Run container:
 

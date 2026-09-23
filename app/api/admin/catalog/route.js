@@ -10,7 +10,7 @@ export async function GET(request) {
 
   const store = adminDb();
   const isAdmin = ["owner", "admin"].includes(access.user.role);
-  const [productsSnap, ordersSnap, movementsSnap, categoriesSnap, discountsSnap, settingsSnap, usersSnap, auditSnap, salesSnap] = await Promise.all([
+  const [productsSnap, ordersSnap, movementsSnap, categoriesSnap, discountsSnap, settingsSnap, usersSnap, auditSnap, salesSnap, expensesSnap] = await Promise.all([
     store.collection("products").get(),
     store.collection("orders").get(),
     store.collection("stock_movements").orderBy("createdAt", "desc").limit(100).get(),
@@ -20,6 +20,7 @@ export async function GET(request) {
     isAdmin ? store.collection("users").get() : Promise.resolve({ docs: [] }),
     isAdmin ? store.collection("admin_audit").orderBy("timestamp", "desc").limit(100).get() : Promise.resolve({ docs: [] }),
     isAdmin ? store.collection("sales").orderBy("createdAt", "desc").limit(500).get() : Promise.resolve({ docs: [] }),
+    isAdmin ? store.collection("expenses").orderBy("createdAt", "desc").limit(500).get() : Promise.resolve({ docs: [] }),
   ]);
 
   const fullProducts = productsSnap.docs.map(serializeDoc).sort((a, b) => a.name.localeCompare(b.name));
@@ -32,6 +33,7 @@ export async function GET(request) {
   const users = usersSnap.docs.map(serializeDoc).map(({ email = "", displayName = "", role = "", active = true, id }) => ({ id, email, displayName, role, active }));
   const audit = auditSnap.docs.map(serializeDoc);
   const sales = salesSnap.docs.map(serializeDoc);
+  const expenses = expensesSnap.docs.map(serializeDoc);
 
   const metrics = {
     products: fullProducts.length,
@@ -47,7 +49,9 @@ export async function GET(request) {
     metrics.transactions = sales.length;
     metrics.unitsSold = sales.reduce((sum, sale) => sum + (sale.items || []).reduce((qty, item) => qty + Number(item.quantity || 0), 0), 0);
     metrics.stockValuation = fullProducts.reduce((sum, product) => sum + Number(product.stock || 0) * Number(product.costPrice || 0), 0);
+    metrics.expenses = expenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+    metrics.netProfit = metrics.profit - metrics.expenses;
   }
 
-  return NextResponse.json({ products, orders, movements, categories, discounts, settings, users, audit, sales, metrics, permissions: { isAdmin } });
+  return NextResponse.json({ products, orders, movements, categories, discounts, settings, users, audit, sales, expenses, metrics, permissions: { isAdmin } });
 }
