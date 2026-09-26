@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { resolveDiscount } from "@/lib/commerce";
 
 const money = new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS" });
+const popularSearches = ["Water bottles", "Lunch boxes", "Pens", "Pencils", "School supplies"];
 
 function ProductArt({ name, category }) {
   const initials = name.split(" ").slice(0, 2).map((word) => word[0]).join("");
@@ -16,6 +17,7 @@ export default function Storefront() {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("All categories");
   const [sort, setSort] = useState("featured");
+  const [browseMode, setBrowseMode] = useState("products");
   const [pageSize, setPageSize] = useState(20);
   const [page, setPage] = useState(1);
   const [priceMin, setPriceMin] = useState(0);
@@ -45,21 +47,48 @@ export default function Storefront() {
   const categories = useMemo(() => ["All categories", ...new Set(products.map((product) => product.category))], [products]);
   const visible = useMemo(() => {
     const term = query.trim().toLowerCase();
-    const filtered = products.filter((product) => (!term || `${product.name} ${product.id} ${product.category}`.toLowerCase().includes(term)) && (category === "All categories" || product.category === category) && product.price >= priceMin && product.price <= priceMax);
+    const hasPromotion = (product) => discountRules.some((rule) =>
+      rule.scopeType === "GLOBAL" ||
+      (rule.scopeType === "CATEGORY" && rule.scopeId === product.categoryId) ||
+      (rule.scopeType === "PRODUCT" && rule.scopeId === product.id)
+    );
+    const filtered = products.filter((product) =>
+      (!term || `${product.name} ${product.id} ${product.category}`.toLowerCase().includes(term)) &&
+      (category === "All categories" || product.category === category) &&
+      product.price >= priceMin && product.price <= priceMax &&
+      (browseMode === "products" || browseMode === "new" || hasPromotion(product))
+    );
+    if (browseMode === "new" || sort === "latest") {
+      return [...filtered].sort((a, b) => (Date.parse(b.createdAt || "") || 0) - (Date.parse(a.createdAt || "") || 0) || a.name.localeCompare(b.name));
+    }
     if (sort === "price-low") return [...filtered].sort((a, b) => a.price - b.price);
     if (sort === "price-high") return [...filtered].sort((a, b) => b.price - a.price);
-    if (sort === "latest") return [...filtered].reverse();
     return filtered;
-  }, [products, query, category, sort, priceMin, priceMax]);
+  }, [products, discountRules, query, category, sort, browseMode, priceMin, priceMax]);
   const pageCount = Math.max(1, Math.ceil(visible.length / pageSize));
   const pagedProducts = visible.slice((page - 1) * pageSize, page * pageSize);
 
-  useEffect(() => { setPage(1); }, [query, category, sort, priceMin, priceMax, pageSize]);
+  useEffect(() => { setPage(1); }, [query, category, sort, browseMode, priceMin, priceMax, pageSize]);
 
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
   const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const discount = cart.reduce((sum, item) => sum + resolveDiscount(item, item.quantity, discountRules).amount, 0);
   const total = subtotal - discount;
+
+  function browse(mode) {
+    setBrowseMode(mode);
+    setCategory("All categories");
+    setQuery("");
+    setSort(mode === "new" ? "latest" : mode === "deals" ? "price-low" : "featured");
+    document.getElementById("catalogue")?.scrollIntoView({ behavior: "smooth" });
+  }
+
+  function searchPopular(term) {
+    setBrowseMode("products");
+    setCategory("All categories");
+    setQuery(term);
+    document.getElementById("catalogue")?.scrollIntoView({ behavior: "smooth" });
+  }
 
   function add(product) {
     setCart((current) => {
@@ -115,11 +144,24 @@ export default function Storefront() {
 
   return (
     <div className="store-shell">
-      <div className="utility-bar"><span>PAM Essentials & More · Ghana</span><span>Open daily 6:30 am – 8:00 pm</span><div><a href="#services">Expert Advice</a><a href="/login">My Account</a><button onClick={() => setTrackOpen(true)}>Track Order</button></div></div>
+      <div className="utility-bar"><span>PAM Essentials & More · Ghana</span><div><button onClick={() => setTrackOpen(true)}>Track Order</button><a href="/login">Sign In</a></div></div>
       <header className="store-header">
-        <a className="brand" href="/">PAM Essentials</a>
-        <nav aria-label="Primary navigation"><a href="#catalogue">Products</a><a href="#services">Services</a><a href="#catalogue">Promotions</a><a href="#delivery">Payment & delivery</a></nav>
-        <button className="cart-button" onClick={() => setCartOpen(true)}>Cart <b>{cartCount}</b></button>
+        <div className="header-main">
+          <a className="brand" href="/" aria-label="PAM Essentials home"><span className="brand-mark" aria-hidden="true">P</span><span>PAM Essentials</span></a>
+          <div className="header-search">
+            <input type="search" aria-label="Search products, category or key words" placeholder="Search products, category or key words" value={query} onChange={(event) => { setBrowseMode("products"); setQuery(event.target.value); }} />
+            <div className="popular-searches"><span>Popular Searches:</span>{popularSearches.map((term) => <button key={term} type="button" onClick={() => searchPopular(term)}>{term}</button>)}</div>
+          </div>
+          <button className="cart-button" onClick={() => setCartOpen(true)} aria-label={`Cart, ${cartCount} items`}>Cart <b>{cartCount}</b></button>
+        </div>
+        <nav className="store-nav" aria-label="Primary navigation">
+          <button type="button" onClick={() => browse("products")}>Products</button>
+          <a href="#services">Services</a>
+          <button type="button" onClick={() => browse("new")}>New Arrivals</button>
+          <button type="button" onClick={() => browse("promotions")}>Promotions</button>
+          <button type="button" onClick={() => browse("deals")}>Deals</button>
+          <a href="#delivery">Payment &amp; Delivery</a>
+        </nav>
       </header>
 
       <section className="hero"><div><p className="eyebrow">Everyday essentials, thoughtfully selected</p><h1>Find what you need.<br />Pick up or get it delivered.</h1><p>School, home, gifts and daily essentials in one simple shop.</p><a className="button primary" href="#catalogue">Shop products</a></div><div className="hero-panel" aria-hidden="true"><span>P</span><span>A</span><span>M</span></div></section>
@@ -128,10 +170,10 @@ export default function Storefront() {
         <aside className="filters"><p className="eyebrow">Browse</p><h2>Categories</h2>{categories.map((name) => <button key={name} className={category === name ? "filter active" : "filter"} onClick={() => setCategory(name)}><span>{name}</span><small>{name === "All categories" ? products.length : products.filter((p) => p.category === name).length}</small></button>)}<div className="price-filter"><b>Price range</b><label>Minimum<input type="number" min="0" value={priceMin} onChange={(event) => setPriceMin(Math.max(0, Number(event.target.value || 0)))} /></label><label>Maximum<input type="number" min="0" value={Number.isFinite(priceMax) ? priceMax : ""} onChange={(event) => setPriceMax(event.target.value === "" ? Infinity : Math.max(0, Number(event.target.value)))} /></label></div><div className="service-note" id="services"><b>Need expert advice?</b><p>Message us before you order and we’ll help you choose.</p></div></aside>
 
         <main className="catalogue-main">
-          <div className="catalogue-heading"><div><p className="breadcrumb">Home / {category}</p><h2>{category}</h2><p>{visible.length} products ready to browse</p></div><div className="catalogue-controls"><input aria-label="Search products" placeholder="Search products or SKU" value={query} onChange={(e) => setQuery(e.target.value)} /><select aria-label="Sort products" value={sort} onChange={(e) => setSort(e.target.value)}><option value="featured">Popularity</option><option value="price-low">Price low to high</option><option value="price-high">Price high to low</option><option value="latest">Latest</option></select><select aria-label="Products per page" value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))}>{[20, 30, 40, 50].map((size) => <option key={size} value={size}>{size} per page</option>)}</select></div></div>
+          <div className="catalogue-heading"><div><p className="breadcrumb">Home / {browseMode === "products" ? category : browseMode === "new" ? "New Arrivals" : browseMode === "promotions" ? "Promotions" : "Deals"}</p><h2>{browseMode === "products" ? category : browseMode === "new" ? "New Arrivals" : browseMode === "promotions" ? "Promotions" : "Deals"}</h2><p>{visible.length} products ready to browse</p></div><div className="catalogue-controls"><select aria-label="Sort products" value={sort} onChange={(e) => setSort(e.target.value)}><option value="featured">Popularity</option><option value="price-low">Price low to high</option><option value="price-high">Price high to low</option><option value="latest">Latest</option></select><select aria-label="Products per page" value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))}>{[20, 30, 40, 50].map((size) => <option key={size} value={size}>{size} per page</option>)}</select></div></div>
           {loading && <div className="empty-state"><div className="spinner" /><p>Loading the catalogue…</p></div>}
           {error && !products.length && <div className="empty-state error-panel"><h3>Catalogue unavailable</h3><p>{error}</p></div>}
-          {!loading && !error && !visible.length && <div className="empty-state"><h3>No matching products</h3><p>Try another search or category.</p></div>}
+          {!loading && !error && !visible.length && <div className="empty-state"><h3>No matching products</h3><p>Try another search, category or collection.</p></div>}
           <div className="product-grid">{pagedProducts.map((product) => <article className="product-card" key={product.id}>{product.imageUrl ? <img className="product-photo" src={product.imageUrl} alt={product.name} /> : <ProductArt name={product.name} category={product.category} />}<div className="product-copy"><span className={product.stock > 0 ? "badge success" : "badge danger"}>{product.stock > 0 ? "In stock" : "Out of stock"}</span><p className="sku">{product.id}</p><h3>{product.name}</h3>{product.description && <p className="product-description">{product.description}</p>}<p className="price">{money.format(product.price)}</p><button className="button primary full" disabled={product.stock <= 0} onClick={() => add(product)}>{product.stock > 0 ? "Add to cart" : "Unavailable"}</button></div></article>)}</div>
           {visible.length > pageSize && <div className="pagination"><button disabled={page === 1} onClick={() => setPage((current) => current - 1)}>Previous</button><span>Page {page} of {pageCount}</span><button disabled={page === pageCount} onClick={() => setPage((current) => current + 1)}>Next</button></div>}
         </main>

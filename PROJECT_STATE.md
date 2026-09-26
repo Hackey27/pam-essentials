@@ -3,7 +3,7 @@
 Updated: 2026-09-26
 Repository: https://github.com/Hackey27/pam-essentials
 Primary branch: `main`
-Current status: orchestration setup complete; waiting for the next requested product change.
+Current status: homepage navigation and search chunk 1 built successfully; chunk 2 awaits deployed-page validation.
 
 ## Working protocol
 
@@ -21,10 +21,11 @@ Current status: orchestration setup complete; waiting for the next requested pro
 - The earlier chat reports 264 products in Firestore/Admin, 235 priced products in public views, 29 unpriced products hidden from storefront and POS, and 14 categories. Treat these counts as historical until rechecked.
 - GitHub access for this task was verified as `Hackey27` with push permission to this repository.
 - This setup chunk added `PROJECT_STATE.md` and `AGENTS.md` to preserve the working process.
+- Homepage chunk 1 implemented the requested top Sign In link, main navigation, prominent search, Cart, and popular searches. The New Arrivals, Promotions, and Deals controls filter or sort the catalogue. The local `npm run build` passed on 2026-09-26.
 
 ## Current work in progress
 
-- No product change is in progress. Await the next requested change and define its first five-to-seven-step chunk before editing application code.
+- Chunk 2: confirm Cloud Build and inspect the deployed page at desktop and mobile widths, address any problems, and update this file.
 
 ## Key constraints and requirements
 
@@ -38,26 +39,31 @@ Current status: orchestration setup complete; waiting for the next requested pro
 ## Decisions already made
 
 - The repository's `main` branch is the delivery branch. The user authorized direct commits to `main`.
+- The top-bar Sign In link uses the existing `/login` route, which is staff access; customer browsing remains account-free. A customer account flow was not requested.
 - Use the existing Next.js/Firebase/Firestore/Cloud Run architecture unless a requested change justifies revisiting it.
 - Keep unpriced products manageable in Admin while excluding them from customer and cashier sales surfaces.
 - Do not enable online `Pay Now` without a selected and configured payment provider.
 
-## Files changed or created in this setup chunk
+## Files changed or created
 
 - `PROJECT_STATE.md` — running project state and checkpoint protocol.
 - `AGENTS.md` — durable instruction to read and maintain this file.
+- `app/page.js` — homepage header, navigation, search, popular terms, and catalogue browsing modes.
+- `app/globals.css` — header, navigation, search, and responsive layout styles.
+- `lib/productData.js` — expose product creation time to support New Arrivals.
 
 ## Open issues, risks, and questions
 
-- This Codex task currently has no local repository checkout or runnable local build. GitHub connector writes are available, but local validation needs a writable checkout and dependencies.
+- A temporary repository snapshot was downloaded for local validation. `npm run build` passed; browser and deployment checks are pending.
+- `/login` currently identifies itself as staff access. If customer accounts are wanted, they need a separate requirement and implementation.
 - The earlier chat reported that publishing versioned Firestore rules required an authenticated Firebase account. Current deployed rules have not been verified here.
 - The payment provider for online `Pay Now` has not been selected.
 - Product counts, role behavior, and Cloud Run deployment health should be rechecked when relevant to a requested change.
 
 ## Next recommended steps
 
-1. Receive a specific change request and reread this file and the current `main` head.
-2. Define the first chunk of about five to seven steps, limited to the requested outcome.
-3. Inspect the relevant code and requirements, then make and validate that chunk's changes.
-4. Update this file with completed work, decisions, files, risks, and the next step before the checkpoint.
-5. Commit to `main` when the chunk is ready, then inspect Cloud Build and the live service.
+1. Reread this file and confirm the current `main` head.
+2. Verify Cloud Build and the deployed homepage.
+3. Inspect desktop and mobile header, navigation, and search behavior.
+4. Fix any discovered issues and build the changes.
+5. Update this file, commit fixes if needed, and give the next validation checkpoint.
