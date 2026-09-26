@@ -47,13 +47,20 @@ export default function Storefront() {
   const categories = useMemo(() => ["All categories", ...new Set(products.map((product) => product.category))], [products]);
   const visible = useMemo(() => {
     const term = query.trim().toLowerCase();
+    const searchWords = term.replace(/\bboxes\b/g, "box").replace(/\bbottles\b/g, "bottle").replace(/\bpens\b/g, "pen").replace(/\bpencils\b/g, "pencil").split(/\s+/).filter(Boolean);
+    const matchesSearch = (product) => {
+      if (!term) return true;
+      if (term === "school supplies") return ["Writing Materials & Accessories", "Drawing Materials", "Art", "Lunch Box"].includes(product.category);
+      const text = `${product.name} ${product.id} ${product.category}`.toLowerCase();
+      return searchWords.every((word) => text.includes(word));
+    };
     const hasPromotion = (product) => discountRules.some((rule) =>
       rule.scopeType === "GLOBAL" ||
       (rule.scopeType === "CATEGORY" && rule.scopeId === product.categoryId) ||
       (rule.scopeType === "PRODUCT" && rule.scopeId === product.id)
     );
     const filtered = products.filter((product) =>
-      (!term || `${product.name} ${product.id} ${product.category}`.toLowerCase().includes(term)) &&
+      matchesSearch(product) &&
       (category === "All categories" || product.category === category) &&
       product.price >= priceMin && product.price <= priceMax &&
       (browseMode === "products" || browseMode === "new" || hasPromotion(product))
@@ -148,20 +155,20 @@ export default function Storefront() {
       <header className="store-header">
         <div className="header-main">
           <a className="brand" href="/" aria-label="PAM Essentials home"><span className="brand-mark" aria-hidden="true">P</span><span>PAM Essentials</span></a>
+          <nav className="store-nav" aria-label="Primary navigation">
+            <button type="button" onClick={() => browse("products")}>Products</button>
+            <a href="#services">Services</a>
+            <button type="button" onClick={() => browse("new")}>New Arrivals</button>
+            <button type="button" onClick={() => browse("promotions")}>Promotions</button>
+            <button type="button" onClick={() => browse("deals")}>Deals</button>
+            <a href="#delivery">Payment &amp; Delivery</a>
+          </nav>
           <div className="header-search">
             <input type="search" aria-label="Search products, category or key words" placeholder="Search products, category or key words" value={query} onChange={(event) => { setBrowseMode("products"); setQuery(event.target.value); }} />
             <div className="popular-searches"><span>Popular Searches:</span>{popularSearches.map((term) => <button key={term} type="button" onClick={() => searchPopular(term)}>{term}</button>)}</div>
           </div>
           <button className="cart-button" onClick={() => setCartOpen(true)} aria-label={`Cart, ${cartCount} items`}>Cart <b>{cartCount}</b></button>
         </div>
-        <nav className="store-nav" aria-label="Primary navigation">
-          <button type="button" onClick={() => browse("products")}>Products</button>
-          <a href="#services">Services</a>
-          <button type="button" onClick={() => browse("new")}>New Arrivals</button>
-          <button type="button" onClick={() => browse("promotions")}>Promotions</button>
-          <button type="button" onClick={() => browse("deals")}>Deals</button>
-          <a href="#delivery">Payment &amp; Delivery</a>
-        </nav>
       </header>
 
       <section className="hero"><div><p className="eyebrow">Everyday essentials, thoughtfully selected</p><h1>Find what you need.<br />Pick up or get it delivered.</h1><p>School, home, gifts and daily essentials in one simple shop.</p><a className="button primary" href="#catalogue">Shop products</a></div><div className="hero-panel" aria-hidden="true"><span>P</span><span>A</span><span>M</span></div></section>
