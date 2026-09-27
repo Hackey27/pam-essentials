@@ -30,7 +30,7 @@ Current status: discovery checkpoint for the expanded catalogue and storefront r
 ## Current work in progress
 
 - Discovery chunk complete. The next chunk will update the repository catalogue source and build an idempotent metadata sync for existing Firestore products, then validate the generated data and Admin/POS/public projections.
-- Awaiting answers about unpriced zero-stock visibility, the hero flyer asset, and category/subcategory sort numbers.
+- Awaiting the hero flyer asset and category/subcategory sort numbers. The user confirmed that unpriced zero-stock products remain hidden until priced.
 
 ## Key constraints and requirements
 
@@ -46,7 +46,7 @@ Current status: discovery checkpoint for the expanded catalogue and storefront r
 - The repository's `main` branch is the delivery branch. The user authorized direct commits to `main`.
 - The top-bar Sign In link currently uses the existing `/login` staff route. The new request calls for optional customer accounts and account-based order tracking; design these as a separate customer path while preserving staff role checks and guest checkout.
 - Use the existing Next.js/Firebase/Firestore/Cloud Run architecture unless a requested change justifies revisiting it.
-- Keep unpriced products manageable in Admin while excluding them from customer and cashier sales surfaces.
+- Keep unpriced products manageable in Admin while excluding them from customer and cashier sales surfaces. The user reconfirmed on 2026-09-27 that the 29 unpriced zero-stock rows stay hidden until priced; priced products that later reach zero stock should remain visible with an Out of Stock tag and no purchase action.
 - Do not enable online `Pay Now` without a selected and configured payment provider.
 
 ## Files changed or created
@@ -62,7 +62,7 @@ Current status: discovery checkpoint for the expanded catalogue and storefront r
 
 - A temporary repository snapshot was downloaded for local validation. Local builds and live browser/deployment checks passed for this homepage change.
 - Customer account creation and tracking are now requested; the customer path must remain separate from staff role checks.
-- The previous rule hides unpriced products from the storefront, while the new request asks to show zero-stock products. All 29 zero-stock rows in the supplied workbook also have zero price. Await the user's visibility decision before changing that rule.
+- The zero-stock visibility conflict is resolved: all 29 current zero-stock rows are unpriced and stay hidden until priced. Show future priced zero-stock items with an Out of Stock tag and disabled purchase controls.
 - The repository and supplied workbook contain no hero flyer or product/variant image assets. Request the flyer and accurate product imagery, or use clearly marked placeholders if the user approves.
 - The workbook has no category or subcategory sort-number columns. Existing Admin category `sortOrder` exists; await the user's sorting preference for subcategories.
 - The existing seed endpoints skip existing Firestore documents. A controlled metadata sync and an authenticated execution path are required for the changes to appear live; do not overwrite live stock, prices, or audits.
@@ -82,6 +82,6 @@ Current status: discovery checkpoint for the expanded catalogue and storefront r
 ## Next recommended steps
 
 1. Reread this file and the current `main` head at the next chunk.
-2. Resolve the zero-stock/unpriced display rule, flyer asset, and sort order from the pending user answers when available.
+2. Use the confirmed unpriced-item rule; resolve the flyer asset and sort order from the pending user answers when available.
 3. Complete catalogue-data chunk steps without overwriting live operational quantities or prices.
 4. Update this file and pause at its validation checkpoint.
