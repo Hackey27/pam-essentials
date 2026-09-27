@@ -3,7 +3,7 @@
 Updated: 2026-09-27
 Repository: https://github.com/Hackey27/pam-essentials
 Primary branch: `main`
-Current status: category hierarchy code deployed and storefront category controls verified; authenticated Firestore sync pending.
+Current status: authenticated catalogue metadata import completed; Admin hierarchy, storefront and POS verified.
 
 ## Working protocol
 
@@ -29,7 +29,7 @@ Current status: category hierarchy code deployed and storefront category control
 
 ## Current work in progress
 
-- Catalogue hierarchy code is ready for commit. After deployment, an authenticated Admin must run Import catalogue once to create child hierarchy records and sync descriptive product metadata in Firestore.
+- Catalogue metadata import completed in the live Admin Portal. The next chunk is catalogue browsing and product presentation.
 - Awaiting the hero flyer asset. The user resolved sorting: preserve the current Admin category order and initialize child order from workbook appearance within each parent.
 
 ## Key constraints and requirements
@@ -83,7 +83,7 @@ Current status: category hierarchy code deployed and storefront category control
 
 1. Reread this file and the current `main` head at the next chunk.
 2. Use the confirmed unpriced-item rule and Admin-owned hierarchy sorting. Obtain the flyer asset when available.
-3. Commit the hierarchy change, verify deployment, run the authenticated Admin import and verify live data.
+3. Continue with the catalogue browsing chunk using the imported hierarchy; keep Admin-owned sort and active settings authoritative.
 4. Pause at the catalogue hierarchy validation checkpoint before the browsing chunk.
 
 ## Catalogue hierarchy checkpoint (2026-09-27)
@@ -119,3 +119,13 @@ Current status: category hierarchy code deployed and storefront category control
 - The Admin seed route and UI were reread. The action requires Owner or Admin, preserves existing operational product fields and hierarchy settings, and returns created/updated counts. Its code is deployed on `main`.
 - GitHub `main` was confirmed at `069b5a50b521fb4ea4aa7dad3c65a4facea4bd24` before this checkpoint. Cloud Build for that commit succeeded, and Cloud Run revision `pam-essentials-00028-plj` served 100% of traffic.
 - Next: sign in on the open PAM tab in the Chrome profile available to this task, then click Admin Products > Import catalogue. Verify 264 product records, 51 subcategories and 13 sub-subcategories, current category sort order, 235 priced storefront products, and POS visibility before continuing.
+
+
+## Authenticated catalogue import checkpoint (2026-09-27)
+
+- The user signed in through the Codex in-app PAM browser. The Owner Admin dashboard appeared. GitHub `main` was `31524f78bd85dff308e5c9afa1bff88a3e5181df` before import; the target site was the PAM Cloud Run service backed by Firebase project `pam-essentials-2d7fb`.
+- Admin Products > Import catalogue completed once: 0 products added, 264 product details refreshed, 0 categories added, 51 subcategories added, and 13 sub-subcategories added. The UI confirmed existing Admin sort orders and active settings were kept. The import preserves operational price, stock, cost, images, active/pinned flags and audits by code.
+- Admin Categories showed 14 top-level categories, 51 subcategories and 13 sub-subcategories (78 rows). Writing Materials & Accessories retained sort order 3; its Pencil Cases and Notepads children have sort orders 1 and 2, and Pens > Gel and Ball Point have sort orders 1 and 2 within Pens. Child edit forms exposed sort order within parent, Active and Archived; no manual hierarchy settings were changed in this verification.
+- Storefront reloaded with 235 priced products. POS also exposed exactly 235 product buttons. Both displayed the same ordered nonempty active category list; Drawing Materials had no visible products after recategorisation and was absent from those product filters. The Owner POS session loaded renamed product names and preserved prices/stock.
+- Admin overview showed 264 product records and 29 needing pricing; those unpriced records remain excluded from storefront and POS. No sale, payment or stock movement was made during verification.
+- Files changed in this checkpoint: only `PROJECT_STATE.md`. Next: pause at this validation checkpoint, then implement the requested category checkbox filters, breadcrumbs and availability/offer controls in the next chunk. Continue reading this file before each chunk.
