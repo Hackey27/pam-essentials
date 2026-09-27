@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "test": "node --test tests/discount.test.mjs tests/whatsappOrder.test.mjs && node --import ./tests/fixtures/register-loader.mjs --test tests/customerFlows.test.mjs",
     "start": "next start -p ${PORT:-8080}",
     "seed:firestore": "node scripts/seed_firestore.mjs"
   },
@@ -21,3 +22,4 @@
     "node": ">=22"
   }
 }
+

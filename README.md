@@ -74,5 +74,7 @@ npm install
 npm run dev
 ```
 
+Run `npm test` for focused discount/WhatsApp checks and isolated customer-route integration tests. The latter use an in-memory Firestore double and simulated customer tokens; they never connect to the production Firebase project or create live accounts and orders. They cover guest orders, variants, quantity discounts, guest-order claims, wishlist privacy, staff rejection and unavailable products. Actual Firebase-hosted account registration and Firestore rule deployment still require separate verification in a disposable Firebase project before public launch.
+
 The local environment needs Application Default Credentials to access Firestore-backed API routes. Client authentication uses the Firebase project `pam-essentials-2d7fb`.
 
