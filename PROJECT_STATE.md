@@ -111,3 +111,11 @@ Current status: category hierarchy code deployed and storefront category control
 - The Admin Portal in the available Chrome session still redirects to the staff login form. The one-time Import catalogue action has not been run. Until it runs, the 51 subcategories, 13 sub-subcategories, 13 product renames and 6 recategorizations from the supplied workbook are not confirmed in Firestore or the live storefront/POS.
 - At the next chunk start, reread this file and check the current main head. After staff sign-in, run Import catalogue once, verify the Admin counts/order and public/POS projections, then pause at the next validation checkpoint before the browsing chunk.
 
+
+
+## Admin import access checkpoint (2026-09-27)
+
+- The user reported signing in. The Chrome PAM tab available to this task was refreshed, and direct navigation to `/admin` redirected to `/login`; its staff email and password fields remained empty. The accessible Chrome profile therefore has no usable PAM Admin session. No import was run and no Firestore data was changed.
+- The Admin seed route and UI were reread. The action requires Owner or Admin, preserves existing operational product fields and hierarchy settings, and returns created/updated counts. Its code is deployed on `main`.
+- GitHub `main` was confirmed at `069b5a50b521fb4ea4aa7dad3c65a4facea4bd24` before this checkpoint. Cloud Build for that commit succeeded, and Cloud Run revision `pam-essentials-00028-plj` served 100% of traffic.
+- Next: sign in on the open PAM tab in the Chrome profile available to this task, then click Admin Products > Import catalogue. Verify 264 product records, 51 subcategories and 13 sub-subcategories, current category sort order, 235 priced storefront products, and POS visibility before continuing.
