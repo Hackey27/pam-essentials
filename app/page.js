@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { resolveDiscount } from "@/lib/commerce";
-import { curatedSearches, hasCollection, inCollection, isBestSeller, isNewArrival, isOnSale, isPromotion, matchesSearch, popularityScore } from "@/lib/catalogueBrowse.mjs";
+import { curatedSearches, hasCollection, inCollection, isBestSeller, isNewArrival, isOnSale, isPromotion, matchesSearch } from "@/lib/catalogueBrowse.mjs";
 
 const money = new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS" });
 
@@ -91,7 +91,6 @@ export default function Storefront() {
     }
     if (sort === "price-low") return [...filtered].sort((a, b) => a.price - b.price);
     if (sort === "price-high") return [...filtered].sort((a, b) => b.price - a.price);
-    if (publicLaunch) return [...filtered].sort((a, b) => popularityScore(b) - popularityScore(a) || Number(b.pinned) - Number(a.pinned) || a.name.localeCompare(b.name));
     return filtered;
   }, [products, discountRules, query, category, selectedSubcategories, selectedSubSubcategories, sort, browseMode, priceMin, priceMax, availability, offer, collection, publicLaunch]);
   const pageCount = Math.max(1, Math.ceil(visible.length / pageSize));
@@ -305,7 +304,7 @@ export default function Storefront() {
           {loading && <div className="empty-state"><div className="spinner" /><p>Loading the catalogue…</p></div>}
           {error && !products.length && <div className="empty-state error-panel"><h3>Catalogue unavailable</h3><p>{error}</p></div>}
           {!loading && !error && !visible.length && <div className="empty-state"><h3>No matching products</h3><p>Try another search, category or collection.</p></div>}
-          <div className="product-grid">{pagedProducts.map((product) => <article className="product-card" key={product.id}>{product.imageUrl ? <img className="product-photo" src={product.imageUrl} alt={product.name} /> : <ProductArt name={product.name} category={product.category} />}<div className="product-copy"><div className="product-badges"><span className={product.stock > 0 ? "badge success" : "badge danger"}>{product.stock > 0 ? "In stock" : "Out of stock"}</span>{product.stock > 0 && product.stock < Number(product.lowStockLevel ?? 8) && <span className="badge warning">Low stock</span>}{isNewArrival(product) && <span className="badge neutral">New</span>}{isBestSeller(product) && <span className="badge neutral">Best seller</span>}{isOnSale(product, discountRules) && <span className="badge warning">On sale</span>}</div><p className="sku">{product.id}</p><h3>{product.name}</h3>{product.description && <p className="product-description">{product.description}</p>}<p className="price">{money.format(product.price)}</p>{product.stock > 0 ? <button className="button primary full" onClick={() => add(product)}>Add to cart</button> : <a className="button secondary full" href={`https://wa.me/233207015198?text=${encodeURIComponent(`Hello PAM Essentials & More, please notify me when ${product.name} (${product.id}) is available.`)}`} target="_blank" rel="noreferrer">Notify me when available</a>}</div></article>)}</div>
+          <div className="product-grid">{pagedProducts.map((product) => <article className="product-card" key={product.id}>{product.imageUrl ? <img className="product-photo" src={product.imageUrl} alt={product.name} /> : <ProductArt name={product.name} category={product.category} />}<div className="product-copy"><div className="product-badges"><span className={product.stock > 0 ? "badge success" : "badge danger"}>{product.stock > 0 ? "In stock" : "Out of stock"}</span>{product.stock > 0 && product.stock < Number(product.lowStockLevel ?? 8) && <span className="badge warning">Low stock</span>}{isNewArrival(product) && <span className="badge neutral">New</span>}{publicLaunch && isBestSeller(product) && <span className="badge neutral">Best seller</span>}{isOnSale(product, discountRules) && <span className="badge warning">On sale</span>}</div><p className="sku">{product.id}</p><h3>{product.name}</h3>{product.description && <p className="product-description">{product.description}</p>}<p className="price">{money.format(product.price)}</p>{product.stock > 0 ? <button className="button primary full" onClick={() => add(product)}>Add to cart</button> : <a className="button secondary full" href={`https://wa.me/233207015198?text=${encodeURIComponent(`Hello PAM Essentials & More, please notify me when ${product.name} (${product.id}) is available.`)}`} target="_blank" rel="noreferrer">Notify me when available</a>}</div></article>)}</div>
           {visible.length > pageSize && <div className="pagination"><button disabled={page === 1} onClick={() => setPage((current) => current - 1)}>Previous</button><span>Page {page} of {pageCount}</span><button disabled={page === pageCount} onClick={() => setPage((current) => current + 1)}>Next</button></div>}
         </main>
       </section>
