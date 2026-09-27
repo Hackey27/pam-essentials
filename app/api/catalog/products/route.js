@@ -10,7 +10,9 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   try {
     const store = adminDb();
-    const [snapshot, context] = await Promise.all([store.collection("products").get(), catalogueContext(store)]);
+    const [snapshot, context, dealsSetting, flyerSetting] = await Promise.all([store.collection("products").get(), catalogueContext(store), store.collection("settings").doc("PAM_DEALS_ACTIVE").get(), store.collection("settings").doc("HERO_FLYER_URL").get()]);
+    const dealsActive = dealsSetting.exists && dealsSetting.data().value === true;
+    const flyerUrl = flyerSetting.exists ? String(flyerSetting.data().value || "") : "";
     const publicLaunch = process.env.STORE_PUBLIC === "true";
     const ranked = snapshot.docs
       .map(serializeDoc)
@@ -24,7 +26,7 @@ export async function GET() {
       .map(({ id, name }) => ({ id, name })) : [];
     const products = ranked.map(({ _score, _popular, ...product }) => product);
 
-    return NextResponse.json({ products, ...context.activeHierarchy, discountRules: context.rules.map(publicDiscountRule), popularProducts, publicLaunch });
+    return NextResponse.json({ products, ...context.activeHierarchy, discountRules: context.rules.map(publicDiscountRule), popularProducts, publicLaunch, dealsActive, flyerUrl });
   } catch (error) {
     console.error("catalog", error);
     return NextResponse.json({ products: [], error: "The catalogue is temporarily unavailable." }, { status: 503 });

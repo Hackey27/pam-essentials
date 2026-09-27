@@ -36,6 +36,14 @@ Customers can check out as guests or create an account at `/account`. Staff sign
 
 The global seeded 5% rule applies when the cart contains at least three units across products, subject to the active Admin rule. Storefront, order creation and POS use the same rule and keep server-side prices authoritative. Self-arranged delivery records the shop collection address; shop-arranged delivery requires a destination. Both fields appear in order details and linked POS receipts. Online payment remains unavailable until a provider is configured.
 
+## Storefront presentation
+
+The hero uses an abstract placeholder until the owner supplies the official flyer. Set `HERO_FLYER_URL` to an HTTPS image URL in Admin Settings to display that image at 55% transparency. Product photos remain individually editable in Admin.
+
+Admin Settings has a PAM Deals activation button. Tag products with the `PAM Deals` collection in Products, then activate the collection to show its navigation, filter and feature section. Add an active product or category percentage discount rule if the feature should advertise an actual discount; the storefront displays a percentage only when a selected product has an applicable rule of 20% or less. Deactivation hides the Deals discovery controls without changing product tags or discount rules.
+
+The footer links to contact, delivery, returns, privacy, FAQ and about pages. Social profile URLs and an email address have not been supplied, so the footer does not invent them. Online payment remains unavailable until a provider is selected.
+
 ## Server-authoritative operations
 
 - Public orders are repriced from Firestore before being created.

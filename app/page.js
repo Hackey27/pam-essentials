@@ -30,6 +30,8 @@ export default function Storefront() {
   const [collection, setCollection] = useState("");
   const [popularProducts, setPopularProducts] = useState([]);
   const [publicLaunch, setPublicLaunch] = useState(false);
+  const [dealsActive, setDealsActive] = useState(false);
+  const [flyerUrl, setFlyerUrl] = useState("");
   const [discountRules, setDiscountRules] = useState([]);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("All categories");
@@ -54,7 +56,7 @@ export default function Storefront() {
 
   useEffect(() => {
     fetch("/api/catalog/products")
-      .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error); setProducts(data.products || []); setCategoryList(data.categories || []); setSubcategoryList(data.subcategories || []); setSubSubcategoryList(data.subSubcategories || []); setDiscountRules(data.discountRules || []); setPopularProducts(data.popularProducts || []); setPublicLaunch(data.publicLaunch === true); const highest = Math.ceil(Math.max(0, ...(data.products || []).map((product) => Number(product.price || 0)))); setPriceMax(highest || Infinity); const current = readCart(); const refreshed = current.map((line) => { const product = (data.products || []).find((item) => item.id === line.id); return product && product.stock > 0 ? { ...product, quantity: Math.min(Number(line.quantity), Number(product.stock)) } : null; }).filter(Boolean); saveCart(refreshed); setCart(refreshed); })
+      .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error); setProducts(data.products || []); setCategoryList(data.categories || []); setSubcategoryList(data.subcategories || []); setSubSubcategoryList(data.subSubcategories || []); setDiscountRules(data.discountRules || []); setPopularProducts(data.popularProducts || []); setPublicLaunch(data.publicLaunch === true); setDealsActive(data.dealsActive === true); setFlyerUrl(data.flyerUrl || ""); const mode = new URLSearchParams(window.location.search).get("browse"); if (["new", "promotions"].includes(mode) || mode === "deals" && data.dealsActive === true) { setBrowseMode(mode); setSort(mode === "new" ? "latest" : mode === "deals" ? "price-low" : "featured"); } const highest = Math.ceil(Math.max(0, ...(data.products || []).map((product) => Number(product.price || 0)))); setPriceMax(highest || Infinity); const current = readCart(); const refreshed = current.map((line) => { const product = (data.products || []).find((item) => item.id === line.id); return product && product.stock > 0 ? { ...product, quantity: Math.min(Number(line.quantity), Number(product.stock)) } : null; }).filter(Boolean); saveCart(refreshed); setCart(refreshed); })
       .catch((err) => setError(err.message || "The catalogue is unavailable."))
       .finally(() => setLoading(false));
   }, []);
@@ -89,7 +91,7 @@ export default function Storefront() {
       (availability === "all" || (availability === "in" ? product.stock > 0 : product.stock <= 0)) &&
       (offer === "all" || (offer === "sale" ? isOnSale(product, discountRules) : isPromotion(product, discountRules))) &&
       inCollection(product, collection, discountRules) &&
-      (browseMode === "products" || (browseMode === "new" ? isNewArrival(product) : browseMode === "promotions" ? isPromotion(product, discountRules) : hasCollection(product, "PAM Deals")))
+      (browseMode === "products" || (browseMode === "new" ? isNewArrival(product) : browseMode === "promotions" ? isPromotion(product, discountRules) : dealsActive && hasCollection(product, "PAM Deals")))
     );
     if (browseMode === "new" || sort === "latest") {
       return [...filtered].sort((a, b) => (Date.parse(b.createdAt || "") || 0) - (Date.parse(a.createdAt || "") || 0) || a.name.localeCompare(b.name));
@@ -97,7 +99,9 @@ export default function Storefront() {
     if (sort === "price-low") return [...filtered].sort((a, b) => a.price - b.price);
     if (sort === "price-high") return [...filtered].sort((a, b) => b.price - a.price);
     return filtered;
-  }, [products, discountRules, query, category, selectedSubcategories, selectedSubSubcategories, sort, browseMode, priceMin, priceMax, availability, offer, collection, publicLaunch]);
+  }, [products, discountRules, query, category, selectedSubcategories, selectedSubSubcategories, sort, browseMode, priceMin, priceMax, availability, offer, collection, publicLaunch, dealsActive]);
+  const dealProducts = products.filter((product) => hasCollection(product, "PAM Deals"));
+  const dealPercent = Math.max(0, ...discountRules.filter((rule) => rule.discountType === "PERCENT" && Number(rule.value) <= 20 && rule.scopeType !== "GLOBAL" && dealProducts.some((product) => rule.scopeType === "PRODUCT" ? rule.scopeId === product.id : rule.scopeType === "CATEGORY" && rule.scopeId === product.categoryId)).map((rule) => Number(rule.value || 0)));
   const pageCount = Math.max(1, Math.ceil(visible.length / pageSize));
   const pagedProducts = visible.slice((page - 1) * pageSize, page * pageSize);
 
@@ -111,6 +115,7 @@ export default function Storefront() {
   const quantityDiscountApplied = quantityRule && cart.some((item) => resolveDiscount(item, item.quantity, discountRules, new Date(), cartCount).rule?.ruleId === quantityRule.ruleId);
 
   function browse(mode) {
+    if (mode === "deals" && !dealsActive) return;
     setBrowseMode(mode);
     setCategory("All categories");
     setSelectedSubcategories([]);
@@ -245,8 +250,8 @@ export default function Storefront() {
             <a href="#services">Services</a>
             <button type="button" onClick={() => browse("new")}>New Arrivals</button>
             <button type="button" onClick={() => browse("promotions")}>Promotions</button>
-            <button type="button" onClick={() => browse("deals")}>Deals</button>
-            <a href="#delivery">Payment &amp; Delivery</a>
+            {dealsActive && <button type="button" onClick={() => browse("deals")}>Deals</button>}
+            <a href="/info/delivery">Payment &amp; Delivery</a>
           </nav>
           <div className="header-search">
             <input type="search" aria-label="Search products, category or key words" placeholder="Search products, category or key words" value={query} onChange={(event) => { setBrowseMode("products"); setQuery(event.target.value); }} />
@@ -256,7 +261,8 @@ export default function Storefront() {
         </div>
       </header>
 
-      <section className="hero"><div><p className="eyebrow">Everyday essentials, thoughtfully selected</p><h1>Find what you need.<br />Pick up or get it delivered.</h1><p>School, home, gifts and daily essentials in one simple shop.</p><a className="button primary" href="#catalogue">Shop products</a></div><div className="hero-panel" aria-hidden="true"><span>P</span><span>A</span><span>M</span></div></section>
+      <section className="hero"><div className="hero-flyer" aria-hidden="true" style={flyerUrl ? { backgroundImage: `url(${JSON.stringify(flyerUrl)})` } : undefined} /><div className="hero-content"><p className="eyebrow">Everyday Essentials, thoughtfully selected.</p><h1>Find what you need.<br />Pick up or get it delivered.</h1><p>School, home, gifts and daily essentials in one simple shop.</p><div className="hero-actions"><a className="button primary" href="#catalogue">Shop products</a><a className="button whatsapp" href="https://wa.me/233207015198" target="_blank" rel="noreferrer">WhatsApp us</a></div></div><div className="hero-panel" aria-hidden="true"><span>P</span><span>A</span><span>M</span></div></section>
+      {dealsActive && dealProducts.length > 0 && <section className="deals-feature"><div><p className="eyebrow">Selected for you</p><h2>PAM Deals</h2><p>{dealPercent > 0 ? `Up to ${dealPercent}% off selected products` : "Selected everyday offers"}</p></div><a className="button accent" href="/?browse=deals#catalogue">Shop deals</a></section>}
 
       <section className="catalogue" id="catalogue">
         <aside className="filters" aria-label="Product filters">
@@ -295,8 +301,8 @@ export default function Storefront() {
           <div className="price-filter"><b>Price range</b><label>Minimum<input type="number" min="0" value={priceMin} onChange={(event) => setPriceMin(Math.max(0, Number(event.target.value || 0)))} /></label><label>Maximum<input type="number" min="0" value={Number.isFinite(priceMax) ? priceMax : ""} onChange={(event) => setPriceMax(event.target.value === "" ? Infinity : Math.max(0, Number(event.target.value)))} /></label></div>
           <fieldset className="facet-group"><legend>Availability</legend>{[["all", "All"], ["in", "In Stock"], ["out", "Out of Stock"]].map(([value, label]) => <label key={value}><input type="radio" name="availability" checked={availability === value} onChange={() => setAvailability(value)} /> {label}</label>)}</fieldset>
           <fieldset className="facet-group"><legend>Offers</legend>{[["all", "All"], ["sale", "On Sale"], ["promotions", "Promotions"]].map(([value, label]) => <label key={value}><input type="radio" name="offer" checked={offer === value} onChange={() => setOffer(value)} /> {label}</label>)}</fieldset>
-          <fieldset className="facet-group"><legend>Collections</legend><label><input type="radio" name="collection" checked={!collection} onChange={() => setCollection("")} /> All</label>{["New Arrivals", "Best Sellers", "Back to School", "Promotion", "PAM Deals"].map((name) => <label key={name}><input type="radio" name="collection" checked={collection === name} onChange={() => setCollection(name)} /> {name}</label>)}</fieldset>
-          <div className="service-note" id="services"><b>Need expert advice?</b><p>Message us before you order and we’ll help you choose.</p></div>
+          <fieldset className="facet-group"><legend>Collections</legend><label><input type="radio" name="collection" checked={!collection} onChange={() => setCollection("")} /> All</label>{["New Arrivals", "Best Sellers", "Back to School", "Promotion", ...(dealsActive ? ["PAM Deals"] : [])].map((name) => <label key={name}><input type="radio" name="collection" checked={collection === name} onChange={() => setCollection(name)} /> {name}</label>)}</fieldset>
+          <div className="service-note"><b>Need expert advice?</b><p>Message us before you order and we’ll help you choose.</p></div>
         </aside>
 
         <main className="catalogue-main">
@@ -321,14 +327,25 @@ export default function Storefront() {
         </main>
       </section>
 
-      <footer className="store-footer" id="delivery"><b>PAM Essentials & More</b><span>Pickup and delivery available</span><span>Prices shown in Ghana Cedis</span></footer>
+      <section className="why-shop" id="services" aria-labelledby="why-shop-title"><div><p className="eyebrow">Why shop with PAM?</p><h2 id="why-shop-title">Everyday shopping made easier</h2></div><ul><li>✓ Affordable everyday essentials</li><li>✓ Convenient ordering</li><li>✓ Pickup or delivery</li><li>✓ WhatsApp ordering</li></ul></section>
+      <footer className="store-footer" id="delivery">
+        <div className="footer-grid">
+          <div className="footer-brand"><b>PAM Essentials &amp; More</b><p>School, home, gifts and daily essentials in one simple shop.</p><p className="footer-payment">Secured payment: Online payment is coming soon. Pay on pickup or delivery is available.</p></div>
+          <nav aria-label="Shop links"><h2>Shop</h2><a href="/#catalogue">All Products</a><a href="/#catalogue">Categories</a>{dealsActive && <a href="/?browse=deals#catalogue">Deals</a>}<a href="/?browse=new#catalogue">New Arrivals</a></nav>
+          <nav aria-label="Customer service links"><h2>Customer Service</h2><a href="/info/contact">Contact Us</a><a href="https://wa.me/233207015198" target="_blank" rel="noreferrer">WhatsApp</a><a href="/account#orders">Track My Order</a><a href="/info/delivery">Delivery Information</a><a href="/info/returns">Returns &amp; Exchanges</a><a href="/info/privacy">Privacy Policy</a><a href="/info/faqs">FAQs</a></nav>
+          <div><h2>Contact</h2><p>Awoshie, Accra, Ghana</p><a href="tel:+233207015198">+233 20 701 5198</a></div>
+          <nav aria-label="About PAM links"><h2>About PAM</h2><a href="/info/about">About Us</a><a href="/info/story">Our Story</a></nav>
+          <nav aria-label="Social links"><h2>Follow Us</h2><a href="/info/social?platform=Facebook">Facebook</a><a href="/info/social?platform=Instagram">Instagram</a><a href="/info/social?platform=TikTok">TikTok</a></nav>
+        </div>
+        <p className="footer-bottom">© 2026 PAM Essentials &amp; More</p>
+      </footer>
 
       {quickProduct && <div className="modal-backdrop" role="presentation" onMouseDown={() => setQuickProduct(null)}><div className="modal quick-view-modal" role="dialog" aria-modal="true" aria-label={`Quick View ${quickProduct.name}`} onMouseDown={(event) => event.stopPropagation()}><ProductOptions key={quickProduct.id} initialProduct={quickProduct} products={products} compact onClose={() => setQuickProduct(null)} onAdd={add} /></div></div>}
       {addedProduct && <div className="modal-backdrop" role="presentation"><div className="modal" role="dialog" aria-modal="true" aria-label="Added to cart"><h2>Added to cart</h2><p>{addedProduct.quantity} × {addedProduct.name}</p><p>SKU: {addedProduct.id}{addedProduct.colour && ` · ${addedProduct.colour}`}{addedProduct.size && ` · ${addedProduct.size}`}</p><div className="added-actions"><button className="button secondary" onClick={() => { setAddedProduct(null); document.getElementById("catalogue")?.scrollIntoView({ behavior: "smooth" }); }}>Continue shopping</button><button className="button primary" onClick={() => { setAddedProduct(null); setCartOpen(true); }}>View cart</button></div></div></div>}
 
       {cartOpen && <div className="drawer-backdrop" onMouseDown={() => setCartOpen(false)}><aside className="cart-drawer" onMouseDown={(event) => event.stopPropagation()}><div className="drawer-title"><div><p className="eyebrow">Your order</p><h2>Shopping cart</h2></div><button className="icon-button" onClick={() => setCartOpen(false)}>×</button></div>{error && <p className="notice error-notice">{error}</p>}{!cart.length ? <div className="empty-state"><h3>Your cart is empty</h3><p>Add a product to get started.</p></div> : <><div className="cart-lines">{cart.map((item) => <div className="cart-line" key={item.id}><ProductArt name={item.name} category={item.category} /><div><h3>{item.name}</h3><p>{[item.colour, item.size, `SKU: ${item.id}`].filter(Boolean).join(" · ")}</p><p>{money.format(item.price)}</p><div className="stepper"><button onClick={() => updateQuantity(item.id, item.quantity - 1)}>−</button><span>{item.quantity}</span><button onClick={() => updateQuantity(item.id, item.quantity + 1)}>+</button></div></div><b>{money.format(item.price * item.quantity - resolveDiscount(item, item.quantity, discountRules, new Date(), cartCount).amount)}</b></div>)}</div>{quantityRule && cartCount > 0 && cartCount < 3 && <p className="discount-nudge" role="status">Add {3 - cartCount} more to qualify for 5% off</p>}{quantityDiscountApplied && <p className="discount-applied" role="status">5% quantity discount applied</p>}<div className="cart-total"><span>Subtotal</span><strong>{money.format(subtotal)}</strong></div>{discount > 0 && <div className="cart-total discount-total"><span>Discount</span><strong>−{money.format(discount)}</strong></div>}<div className="cart-total grand-total"><span>Total</span><strong>{money.format(total)}</strong></div>{!checkout ? <button className="button accent full" onClick={() => setCheckout(true)}>Continue to checkout</button> : <form className="checkout-form" onSubmit={placeOrder}><label>Full name<input required value={order.customer} onChange={(e) => setOrder({ ...order, customer: e.target.value })} /></label><label>Mobile number<input required type="tel" value={order.phone} onChange={(e) => setOrder({ ...order, phone: e.target.value })} /></label><label>Fulfilment<select value={order.deliveryMethod} onChange={(e) => setOrder({ ...order, deliveryMethod: e.target.value })}><option value="pickup">Pickup</option><option value="delivery-self">Delivery – self initiated</option><option value="delivery-shop">Delivery – arranged by shop</option></select></label>{order.deliveryMethod === "delivery-self" && <p className="pickup-address">Your courier collects from: <b>{SHOP_ADDRESS}</b></p>}{order.deliveryMethod !== "pickup" && <label>Delivery destination or landmark<input required={order.deliveryMethod === "delivery-shop"} value={order.deliveryAddress} onChange={(e) => setOrder({ ...order, deliveryAddress: e.target.value })} /></label>}<button className="button accent full" type="submit" disabled={placingOrder}>{placingOrder ? "Creating order…" : `Pay on pickup/delivery · ${money.format(total)}`}</button><button className="button whatsapp full" type="button" disabled={placingOrder} onClick={orderOnWhatsApp}>Order on WhatsApp</button><button className="button secondary full" type="button" disabled title="Payment provider has not been selected yet">Pay now · coming soon</button></form>}</>}</aside></div>}
       {confirmation && <div className="modal-backdrop"><div className="modal"><span className="success-mark">✓</span><h2>Order received</h2><p>Keep this reference for pickup or delivery.</p><strong className="order-reference">{confirmation.orderId}</strong><p>{user && !role ? "Track this order in your account." : "Create a customer account and link this guest order to track it."}</p><a className="button secondary full" href="/account#orders">Track my order</a><button className="button primary full" onClick={() => { setConfirmation(null); setCartOpen(false); }}>Continue shopping</button></div></div>}
-      <a className="whatsapp-fab" href="https://wa.me/" target="_blank" rel="noreferrer" aria-label="Chat with PAM Essentials on WhatsApp">WhatsApp</a>
+      <a className="whatsapp-fab" href="https://wa.me/233207015198" target="_blank" rel="noreferrer" aria-label="Chat with PAM Essentials on WhatsApp">WhatsApp</a>
       {cookieVisible && <div className="cookie-banner"><p><b>Privacy notice</b> We use essential browser storage for your cart, staff sign-in and offline till sync.</p><button className="button accent" onClick={() => { localStorage.setItem("pam-cookie-notice", "accepted"); setCookieVisible(false); }}>Okay</button></div>}
     </div>
   );
