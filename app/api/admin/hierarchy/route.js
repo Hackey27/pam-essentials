@@ -40,6 +40,7 @@ export async function POST(request) {
     ...(kind === "subSubcategory" ? { subcategoryId } : {}),
     description: text(body.description, 1000),
     sortOrder: requestedSort,
+    collections: (Array.isArray(body.collections) ? body.collections : existing.data()?.collections || []).map((item) => text(item, 80)).filter(Boolean).slice(0, 12),
     active: body.active !== false,
     archived: Boolean(body.archived),
     updatedAt: FieldValue.serverTimestamp(),

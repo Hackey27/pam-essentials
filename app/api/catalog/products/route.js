@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { adminDb } from "@/lib/admin";
 import { availableForSale, catalogueContext, publicDiscountRule } from "@/lib/commerce";
 import { publicProduct, serializeDoc } from "@/lib/productData";
-import { categoryLabels } from "@/lib/categoryHierarchy";
+import { categoryLabels, effectiveCollections } from "@/lib/categoryHierarchy";
 import { popularityScore } from "@/lib/catalogueBrowse.mjs";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +17,7 @@ export async function GET() {
     const ranked = snapshot.docs
       .map(serializeDoc)
       .filter((product) => availableForSale(product, context))
-      .map((product) => ({ ...publicProduct(product), ...categoryLabels(product, context.hierarchy), _score: popularityScore(product), _popular: Number(product.clickCount || 0) >= 20 || Number(product.purchaseCount || 0) >= 3 }))
+      .map((product) => ({ ...publicProduct(product), ...categoryLabels(product, context.hierarchy), collections: effectiveCollections(product, context.hierarchy), _score: popularityScore(product), _popular: Number(product.clickCount || 0) >= 20 || Number(product.purchaseCount || 0) >= 3 }))
       .sort((a, b) => (publicLaunch ? b._score - a._score : 0) || Number(b.pinned) - Number(a.pinned) || a.name.localeCompare(b.name));
 
     const popularProducts = publicLaunch ? ranked

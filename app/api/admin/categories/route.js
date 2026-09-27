@@ -28,6 +28,7 @@ export async function POST(request) {
     active: body.active !== false,
     archived: Boolean(body.archived),
     sortOrder: requestedSort,
+    collections: (Array.isArray(body.collections) ? body.collections : existing.data()?.collections || []).map((item) => text(item, 80)).filter(Boolean).slice(0, 12),
     updatedAt: FieldValue.serverTimestamp(),
   };
   const batch = store.batch();

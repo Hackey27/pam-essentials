@@ -20,6 +20,23 @@ export async function POST(request) {
   if (body.create && existing.exists) return NextResponse.json({ error: "That product ID already exists." }, { status: 409 });
   if (!body.create && !existing.exists) return NextResponse.json({ error: "Product not found." }, { status: 404 });
 
+  const oldValue = existing.exists ? existing.data() : null;
+  const subcategoryId = text(body.subcategoryId ?? (oldValue?.categoryId === categoryId ? oldValue?.subcategoryId : ""), 250);
+  const subSubcategoryId = text(body.subSubcategoryId ?? (oldValue?.categoryId === categoryId ? oldValue?.subSubcategoryId : ""), 350);
+  let subcategoryName = "";
+  let subSubcategoryName = "";
+  if (subcategoryId) {
+    const subcategory = await store.collection("subcategories").doc(subcategoryId).get();
+    if (!subcategory.exists || subcategory.data().categoryId !== categoryId) return NextResponse.json({ error: "Choose a subcategory within the selected category." }, { status: 400 });
+    subcategoryName = subcategory.data().name;
+  }
+  if (subSubcategoryId) {
+    if (!subcategoryId) return NextResponse.json({ error: "Choose a subcategory before a sub-subcategory." }, { status: 400 });
+    const subSubcategory = await store.collection("sub_subcategories").doc(subSubcategoryId).get();
+    if (!subSubcategory.exists || subSubcategory.data().subcategoryId !== subcategoryId || subSubcategory.data().categoryId !== categoryId) return NextResponse.json({ error: "Choose a sub-subcategory within the selected subcategory." }, { status: 400 });
+    subSubcategoryName = subSubcategory.data().name;
+  }
+
   const barcode = text(body.barcode, 100);
   if (barcode) {
     const matches = await store.collection("products").where("barcode", "==", barcode).limit(2).get();
@@ -31,7 +48,6 @@ export async function POST(request) {
   if ((price != null && price < 0) || (costPrice != null && costPrice < 0)) return NextResponse.json({ error: "Prices cannot be negative." }, { status: 400 });
   const openingStock = body.create ? Math.floor(Number(body.openingStock || 0)) : 0;
   if (openingStock < 0 || !Number.isFinite(openingStock)) return NextResponse.json({ error: "Opening stock must be zero or greater." }, { status: 400 });
-  const oldValue = existing.exists ? existing.data() : null;
   const collections = Array.isArray(body.collections) ? body.collections : oldValue?.collections || [];
   const product = {
     id,
@@ -41,6 +57,10 @@ export async function POST(request) {
     description: text(body.description, 3000),
     categoryId,
     category: category.data().name,
+    subcategoryId,
+    subcategory: subcategoryName,
+    subSubcategoryId,
+    subSubcategory: subSubcategoryName,
     price,
     costPrice,
     pinned: Boolean(body.pinned),

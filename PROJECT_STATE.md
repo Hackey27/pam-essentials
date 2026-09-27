@@ -239,3 +239,11 @@ Current status: storefront, customer flows and presentation are live; corrected 
 - The read-only release check passed: health, catalogue, protected routes and anonymous Firestore denial. A 390px browser inspection showed the expanded category panel below the mobile header with its internal close button; the WhatsApp action no longer covers the filter toggle. No order or Admin record was changed during verification.
 - Chunk 1 is complete. Next chunk: reread this file and current `main`, then implement dependent Admin product hierarchy fields and collection management for category, subcategory and sub-subcategory. Preserve existing IDs, operational product fields, hierarchy sort order and active state.
 
+### Chunk 2: Admin hierarchy and inherited collections (2026-09-27)
+
+- Reread this file and confirmed `main` at `c74133dde98f6076b92edef5bcd552d312682b3f` before editing. The existing category and child sort orders, active states, and workbook schema were left intact.
+- Admin product create/edit now offers dependent category, subcategory and optional sub-subcategory selectors. Changing a parent clears the child selection. The product API validates the chosen parent relationships, saves both IDs and names, and preserves existing child IDs when an older edit payload omits them.
+- Category, subcategory and sub-subcategory Admin editors now assign Back to School, Promotion and PAM Deals collections. Firestore stores these tags on each hierarchy node without replacing product tags. Storefront and POS product projections combine product tags with matching ancestor tags, so one Admin category choice applies to its descendants while sibling collections remain separate.
+- Changed `app/admin/page.js`, `app/api/admin/products/route.js`, `app/api/admin/categories/route.js`, `app/api/admin/hierarchy/route.js`, `app/api/catalog/products/route.js`, `app/api/pos/products/route.js`, `lib/categoryHierarchy.js`, `package.json`, `tests/categoryCollections.test.mjs`, and this file. Local `npm test` and `npm run build` passed.
+- Pending: publish the code to `main`, verify Cloud Build and live read-only release health, then pause at the checkpoint. No production category, collection or product record was edited in this chunk.
+
