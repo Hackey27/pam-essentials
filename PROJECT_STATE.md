@@ -3,7 +3,7 @@
 Updated: 2026-09-27
 Repository: https://github.com/Hackey27/pam-essentials
 Primary branch: `main`
-Current status: public-safe hierarchy commit deployed; sidebar correction and authenticated Firestore sync pending.
+Current status: category hierarchy code deployed and storefront category controls verified; authenticated Firestore sync pending.
 
 ## Working protocol
 
@@ -95,7 +95,7 @@ Current status: public-safe hierarchy commit deployed; sidebar correction and au
 - Public and POS APIs return the same ordered active hierarchy and hide products under deactivated child nodes. The storefront and POS category controls use API category order. Admin product labels follow current hierarchy names.
 - Files changed in the public-safe commit: `data/product_metadata.json`, `data/category_hierarchy.json`, `scripts/generate_seed_data.py`, `lib/categoryHierarchy.js`, `lib/commerce.js`, `lib/productData.js`, `app/api/admin/catalog/route.js`, `app/api/admin/categories/route.js`, `app/api/admin/hierarchy/route.js`, `app/api/admin/seed/route.js`, `app/api/catalog/products/route.js`, `app/api/pos/products/route.js`, `app/api/orders/route.js`, `app/api/pos/sales/route.js`, `app/admin/page.js`, `app/page.js`, `app/pos/page.js`, and this file.
 - Local `npm run build` passed. The initial validation attempt used a dependency junction that Turbopack rejected; a normal offline install resolved that local-only issue.
-- Outstanding release work: deploy the sidebar correction, execute the authenticated Admin import, and verify live hierarchy and order. No live Firestore change is yet confirmed. If the workbook itself must be stored in GitHub, the owner must choose a private destination and approve that separate publication. The hero flyer and product images remain unavailable.
+- Outstanding release work: execute the authenticated Admin import and verify live child hierarchy and order. No live Firestore change is yet confirmed. If the workbook itself must be stored in GitHub, the owner must choose a private destination and approve that separate publication. The hero flyer and product images remain unavailable.
 
 ## Deployment verification and sidebar correction
 
@@ -103,4 +103,11 @@ Current status: public-safe hierarchy commit deployed; sidebar correction and au
 - The live storefront still shows 235 priced products, but its category sidebar showed only “All categories” before the Firestore import. This follow-up normalizes Firestore document IDs in the hierarchy API and falls back to categories derived from visible products when category records cannot be matched. Apply the same correction in POS.
 - The PAM Admin tab is still at the staff login form. The user has been asked to sign in; no Admin import has run and no live hierarchy records have been created yet.
 - After the sidebar correction deploys, verify category buttons, then use the signed-in Admin Import catalogue action and validate sorted hierarchy counts and active settings before starting the next chunk.
+
+## Final validation checkpoint for this work session
+
+- Commits `2922f7daba14ab9c93f0fa74ada0e9f78b6bec42` and `37253ed428f3ed2e7bd516fb9f7d0d3080b8ce3f` corrected category display and normalized hierarchy IDs to Firestore document IDs. Both local production builds passed.
+- Cloud Builds `5b462a70` and `ed3834cb` succeeded. Cloud Run revision `pam-essentials-00027-kgk` has 100% traffic. A fresh live storefront load shows 235 priced products and individual category controls, including Writing Materials & Accessories and Bottles & Accessories.
+- The Admin Portal in the available Chrome session still redirects to the staff login form. The one-time Import catalogue action has not been run. Until it runs, the 51 subcategories, 13 sub-subcategories, 13 product renames and 6 recategorizations from the supplied workbook are not confirmed in Firestore or the live storefront/POS.
+- At the next chunk start, reread this file and check the current main head. After staff sign-in, run Import catalogue once, verify the Admin counts/order and public/POS projections, then pause at the next validation checkpoint before the browsing chunk.
 
