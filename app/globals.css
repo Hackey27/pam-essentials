@@ -92,6 +92,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .hero-panel span:nth-child(3) { background: var(--red); }
 .catalogue { display: grid; grid-template-columns: 260px 1fr; gap: 2.25rem; max-width: 1480px; margin: 0 auto; padding: 3rem 4vw 5rem; }
 .mobile-filter-toggle { display: none; }
+.mobile-filter-close { display: none; }
 .filters { align-self: start; position: sticky; top: 190px; max-height: calc(100vh - 205px); overflow-y: auto; padding-right: .35rem; }
 .filters h2, .catalogue-heading h2 { margin-bottom: .7rem; color: var(--navy); }
 .filter { display: flex; width: 100%; justify-content: space-between; gap: .7rem; border: 0; border-bottom: 1px solid var(--line); padding: .8rem .65rem; color: var(--ink); background: transparent; text-align: left; }
@@ -192,7 +193,7 @@ input, select { min-height: 44px; border: 1px solid var(--line); border-radius: 
 .receipt-total { color: var(--navy); font-size: 1.5rem; font-weight: 900; }
 .tracked-order { display: grid; justify-items: center; gap: .35rem; border-radius: 10px; padding: 1rem; background: var(--soft-blue); text-align: center; }
 .tracked-order h3, .tracked-order p { margin: 0; }
-.whatsapp-fab { position: fixed; left: 1rem; bottom: 1rem; z-index: 25; display: grid; width: 52px; height: 52px; place-items: center; border-radius: 999px; color: white; background: #187b4c; box-shadow: var(--shadow); }
+.whatsapp-fab { position: fixed; right: 1rem; bottom: 1rem; z-index: 25; display: grid; width: 52px; height: 52px; place-items: center; border-radius: 999px; color: white; background: #187b4c; box-shadow: var(--shadow); }
 .cookie-banner { position: fixed; right: 1rem; bottom: 1rem; z-index: 26; display: flex; max-width: 620px; align-items: center; gap: 1rem; border: 1px solid var(--line); border-radius: 12px; padding: .8rem; background: white; box-shadow: var(--shadow); }
 .cookie-banner p { margin: 0; color: var(--muted); font-size: .78rem; }
 
@@ -461,10 +462,11 @@ body > div > main h1 { color: var(--navy); }
   .hero { grid-template-columns: 1fr; min-height: auto; }
   .hero-panel { display: none; }
   .catalogue { grid-template-columns: 1fr; }
-  .mobile-filter-toggle { position: sticky; top: 150px; z-index: 18; display: inline-flex; width: fit-content; align-items: center; gap: .55rem; border: 1px solid var(--navy); border-radius: 8px; padding: .7rem .9rem; color: white; background: var(--navy); box-shadow: var(--shadow); font-weight: 900; }
+  .mobile-filter-toggle { position: sticky; top: 170px; z-index: 18; display: inline-flex; width: fit-content; align-items: center; gap: .55rem; border: 1px solid var(--navy); border-radius: 8px; padding: .7rem .9rem; color: white; background: var(--navy); box-shadow: var(--shadow); font-weight: 900; }
   .mobile-filter-toggle span { font-size: 1.25rem; line-height: 1; }
-  .filters { position: fixed; z-index: 19; top: 205px; left: 4vw; display: none; width: min(340px, 92vw); max-height: calc(100vh - 225px); overflow-y: auto; border: 1px solid var(--line); border-radius: 12px; padding: 1rem; background: white; box-shadow: var(--shadow); }
+  .filters { position: fixed; z-index: 19; top: 225px; left: 4vw; display: none; width: min(340px, 92vw); max-height: calc(100vh - 245px); overflow-y: auto; border: 1px solid var(--line); border-radius: 12px; padding: 1rem; background: white; box-shadow: var(--shadow); }
   .filters.mobile-open { display: block; }
+  .mobile-filter-close { display: block; width: 100%; border: 0; border-bottom: 1px solid var(--line); padding: .4rem .2rem .7rem; color: var(--navy); background: white; text-align: right; font-weight: 900; }
   .admin-shell { grid-template-columns: 76px 1fr; }
   .admin-sidebar { padding: 1rem .6rem; }
   .admin-brand span, .admin-user, .admin-sidebar nav button:not(.active) span:not(.nav-dot), .sidebar-actions { display: none; }
@@ -484,8 +486,8 @@ body > div > main h1 { color: var(--navy); }
   .hero { padding: 3rem 1rem; }
   .hero h1 { font-size: 2.4rem; }
   .catalogue { padding: 2rem 1rem; }
-  .mobile-filter-toggle { top: 145px; }
-  .filters { top: 200px; left: 1rem; }
+  .mobile-filter-toggle { top: 285px; }
+  .filters { top: 340px; left: 1rem; max-height: calc(100vh - 360px); }
   .catalogue-heading { align-items: stretch; flex-direction: column; }
   .catalogue-controls { display: grid; grid-template-columns: 1fr; }
   .catalogue-controls input { width: 100%; }
