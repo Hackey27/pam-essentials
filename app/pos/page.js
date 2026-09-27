@@ -113,7 +113,10 @@ function Till() {
     return () => { window.removeEventListener("online", update); window.removeEventListener("offline", update); };
   }, [user]);
 
-  const categories = useMemo(() => ["All", ...categoryList.filter((item) => products.some((product) => product.categoryId === item.categoryId)).map((item) => item.name)], [products, categoryList]);
+  const categories = useMemo(() => {
+    const ordered = categoryList.filter((item) => products.some((product) => product.categoryId === (item.categoryId || item.id))).map((item) => item.name);
+    return ["All", ...(ordered.length ? ordered : [...new Set(products.map((product) => product.category))])];
+  }, [products, categoryList]);
   const visible = useMemo(() => products.filter((product) => (category === "All" || product.category === category) && `${product.name} ${product.id}`.toLowerCase().includes(query.toLowerCase())), [products, query, category]);
   const visibleOrders = useMemo(() => orders.filter((order) => {
     const matches = `${order.customer} ${order.phone} ${order.orderId} ${order.createdAt}`.toLowerCase().includes(orderQuery.toLowerCase());

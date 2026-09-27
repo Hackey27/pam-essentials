@@ -45,7 +45,10 @@ export default function Storefront() {
 
   useEffect(() => { setCookieVisible(localStorage.getItem("pam-cookie-notice") !== "accepted"); }, []);
 
-  const categories = useMemo(() => ["All categories", ...categoryList.filter((item) => products.some((product) => product.categoryId === item.categoryId)).map((item) => item.name)], [products, categoryList]);
+  const categories = useMemo(() => {
+    const ordered = categoryList.filter((item) => products.some((product) => product.categoryId === (item.categoryId || item.id))).map((item) => item.name);
+    return ["All categories", ...(ordered.length ? ordered : [...new Set(products.map((product) => product.category))])];
+  }, [products, categoryList]);
   const visible = useMemo(() => {
     const term = query.trim().toLowerCase();
     const searchWords = term.replace(/\bboxes\b/g, "box").replace(/\bbottles\b/g, "bottle").replace(/\bpens\b/g, "pen").replace(/\bpencils\b/g, "pencil").split(/\s+/).filter(Boolean);

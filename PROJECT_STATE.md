@@ -3,7 +3,7 @@
 Updated: 2026-09-27
 Repository: https://github.com/Hackey27/pam-essentials
 Primary branch: `main`
-Current status: catalogue hierarchy implementation validated locally; public-safe commit, deployment and authenticated Firestore sync pending.
+Current status: public-safe hierarchy commit deployed; sidebar correction and authenticated Firestore sync pending.
 
 ## Working protocol
 
@@ -95,5 +95,12 @@ Current status: catalogue hierarchy implementation validated locally; public-saf
 - Public and POS APIs return the same ordered active hierarchy and hide products under deactivated child nodes. The storefront and POS category controls use API category order. Admin product labels follow current hierarchy names.
 - Files changed in the public-safe commit: `data/product_metadata.json`, `data/category_hierarchy.json`, `scripts/generate_seed_data.py`, `lib/categoryHierarchy.js`, `lib/commerce.js`, `lib/productData.js`, `app/api/admin/catalog/route.js`, `app/api/admin/categories/route.js`, `app/api/admin/hierarchy/route.js`, `app/api/admin/seed/route.js`, `app/api/catalog/products/route.js`, `app/api/pos/products/route.js`, `app/api/orders/route.js`, `app/api/pos/sales/route.js`, `app/admin/page.js`, `app/page.js`, `app/pos/page.js`, and this file.
 - Local `npm run build` passed. The initial validation attempt used a dependency junction that Turbopack rejected; a normal offline install resolved that local-only issue.
-- Outstanding release work: commit the public-safe files to main, verify Cloud Build/Cloud Run, execute the authenticated Admin import, verify live hierarchy and order. No live Firestore change is yet confirmed. If the workbook itself must be stored in GitHub, the owner must choose a private destination and approve that separate publication. The hero flyer and product images remain unavailable.
+- Outstanding release work: deploy the sidebar correction, execute the authenticated Admin import, and verify live hierarchy and order. No live Firestore change is yet confirmed. If the workbook itself must be stored in GitHub, the owner must choose a private destination and approve that separate publication. The hero flyer and product images remain unavailable.
+
+## Deployment verification and sidebar correction
+
+- Public-safe hierarchy commit `dd740d1d6a039b0a577b5471a5349934b8ff74e7` was pushed to `main`. Cloud Build `b59a7721-0c19-4ea5-8f7a-6e0284b8ad42` succeeded, and Cloud Run revision `pam-essentials-00025-thh` serves 100% of traffic.
+- The live storefront still shows 235 priced products, but its category sidebar showed only “All categories” before the Firestore import. This follow-up normalizes Firestore document IDs in the hierarchy API and falls back to categories derived from visible products when category records cannot be matched. Apply the same correction in POS.
+- The PAM Admin tab is still at the staff login form. The user has been asked to sign in; no Admin import has run and no live hierarchy records have been created yet.
+- After the sidebar correction deploys, verify category buttons, then use the signed-in Admin Import catalogue action and validate sorted hierarchy counts and active settings before starting the next chunk.
 
