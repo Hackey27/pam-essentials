@@ -247,3 +247,9 @@ Current status: storefront, customer flows and presentation are live; corrected 
 - Changed `app/admin/page.js`, `app/api/admin/products/route.js`, `app/api/admin/categories/route.js`, `app/api/admin/hierarchy/route.js`, `app/api/catalog/products/route.js`, `app/api/pos/products/route.js`, `lib/categoryHierarchy.js`, `package.json`, `tests/categoryCollections.test.mjs`, and this file. Local `npm test` and `npm run build` passed.
 - Pending: publish the code to `main`, verify Cloud Build and live read-only release health, then pause at the checkpoint. No production category, collection or product record was edited in this chunk.
 
+### Chunk 2 validation checkpoint (2026-09-27)
+
+- Commit `c2dbfedd9871d1bb15db010b1d5172118dd8e43b` is on `main`; Cloud Build `3f50beb8-185a-495b-82c2-5c51235434c7` succeeded. The live read-only release check passed with 235 priced products, protected route denials and anonymous Firestore denial.
+- In the live Owner Admin Portal, New product exposed dependent category, subcategory and sub-subcategory selectors. Choosing Pens showed Gel and Ball Point leaves. Editing the Writing Materials & Accessories category exposed the three collection checkboxes while keeping its existing sort order 3 and Active state. The modal was cancelled; no production record was changed.
+- Chunk 2 is complete. Next chunk: reread this file and `main`, then investigate the reported discount problem and implement time-aware discount rules, a Promotions management tab and configurable multi-product PAM Deals prices. Keep server-side price validation and the existing Firestore fields.
+
