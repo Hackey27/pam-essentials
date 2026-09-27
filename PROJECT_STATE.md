@@ -233,3 +233,9 @@ Current status: storefront, customer flows and presentation are live; corrected 
 - Live inspection found that the explicitly named “random shapes and colours” item did not match the first narrow phrase detector; the follow-up widens it and a direct check confirms true for that item and false for an ordinary product. At 390px the category panel expanded, but the sticky header covered its top and the WhatsApp action overlapped the category toggle. The follow-up moves the panel below the mobile header, adds an internal close control and moves the WhatsApp icon to the right. The viewport override was reset after inspection. The follow-up production build passed.
 - Pending: publish and verify that follow-up, then pause at the checkpoint before Admin hierarchy work.
 
+### Chunk 1 validation checkpoint (2026-09-27)
+
+- The correction commit `da3c0a36a18c1b4ea6c1255389b4fb5b8f9c84b4` is on `main`; Cloud Build `bc6c9034-4c05-4856-9bcc-4986adfda14a` succeeded. The live public API returned 235 priced products and `randomColours: true` for `BKG-SLM-002`, the explicitly named random-shapes-and-colours item.
+- The read-only release check passed: health, catalogue, protected routes and anonymous Firestore denial. A 390px browser inspection showed the expanded category panel below the mobile header with its internal close button; the WhatsApp action no longer covers the filter toggle. No order or Admin record was changed during verification.
+- Chunk 1 is complete. Next chunk: reread this file and current `main`, then implement dependent Admin product hierarchy fields and collection management for category, subcategory and sub-subcategory. Preserve existing IDs, operational product fields, hierarchy sort order and active state.
+
