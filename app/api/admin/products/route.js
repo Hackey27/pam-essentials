@@ -32,6 +32,7 @@ export async function POST(request) {
   const openingStock = body.create ? Math.floor(Number(body.openingStock || 0)) : 0;
   if (openingStock < 0 || !Number.isFinite(openingStock)) return NextResponse.json({ error: "Opening stock must be zero or greater." }, { status: 400 });
   const oldValue = existing.exists ? existing.data() : null;
+  const collections = Array.isArray(body.collections) ? body.collections : oldValue?.collections || [];
   const product = {
     id,
     sku: text(body.sku || id, 100),
@@ -43,6 +44,8 @@ export async function POST(request) {
     price,
     costPrice,
     pinned: Boolean(body.pinned),
+    newArrival: Boolean(body.newArrival),
+    collections: collections.map((value) => text(value, 80)).filter(Boolean).slice(0, 12),
     active: body.active !== false,
     archived: Boolean(body.archived),
     sellable: body.active !== false && !body.archived && Number(price) > 0,
@@ -76,3 +79,4 @@ export async function POST(request) {
   await batch.commit();
   return NextResponse.json({ ok: true, id });
 }
+

@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { resolveDiscount } from "@/lib/commerce";
+import { curatedSearches, hasCollection, inCollection, isBestSeller, isNewArrival, isOnSale, isPromotion, matchesSearch, popularityScore } from "@/lib/catalogueBrowse.mjs";
 
 const money = new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS" });
-const popularSearches = ["Water bottles", "Lunch boxes", "Pens", "Pencils", "School supplies"];
 
 function ProductArt({ name, category }) {
   const initials = name.split(" ").slice(0, 2).map((word) => word[0]).join("");
@@ -14,6 +14,17 @@ function ProductArt({ name, category }) {
 export default function Storefront() {
   const [products, setProducts] = useState([]);
   const [categoryList, setCategoryList] = useState([]);
+  const [subcategoryList, setSubcategoryList] = useState([]);
+  const [subSubcategoryList, setSubSubcategoryList] = useState([]);
+  const [expandedCategories, setExpandedCategories] = useState([]);
+  const [expandedSubcategories, setExpandedSubcategories] = useState([]);
+  const [selectedSubcategories, setSelectedSubcategories] = useState([]);
+  const [selectedSubSubcategories, setSelectedSubSubcategories] = useState([]);
+  const [availability, setAvailability] = useState("all");
+  const [offer, setOffer] = useState("all");
+  const [collection, setCollection] = useState("");
+  const [popularProducts, setPopularProducts] = useState([]);
+  const [publicLaunch, setPublicLaunch] = useState(false);
   const [discountRules, setDiscountRules] = useState([]);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("All categories");
@@ -35,10 +46,11 @@ export default function Storefront() {
   const [track, setTrack] = useState({ reference: "", phone: "" });
   const [trackedOrder, setTrackedOrder] = useState(null);
   const [cookieVisible, setCookieVisible] = useState(false);
+  const clickSession = useRef({ id: "", seen: new Set() });
 
   useEffect(() => {
     fetch("/api/catalog/products")
-      .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error); setProducts(data.products || []); setCategoryList(data.categories || []); setDiscountRules(data.discountRules || []); const highest = Math.ceil(Math.max(0, ...(data.products || []).map((product) => Number(product.price || 0)))); setPriceMax(highest || Infinity); })
+      .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error); setProducts(data.products || []); setCategoryList(data.categories || []); setSubcategoryList(data.subcategories || []); setSubSubcategoryList(data.subSubcategories || []); setDiscountRules(data.discountRules || []); setPopularProducts(data.popularProducts || []); setPublicLaunch(data.publicLaunch === true); const highest = Math.ceil(Math.max(0, ...(data.products || []).map((product) => Number(product.price || 0)))); setPriceMax(highest || Infinity); })
       .catch((err) => setError(err.message || "The catalogue is unavailable."))
       .finally(() => setLoading(false));
   }, []);
@@ -46,40 +58,46 @@ export default function Storefront() {
   useEffect(() => { setCookieVisible(localStorage.getItem("pam-cookie-notice") !== "accepted"); }, []);
 
   const categories = useMemo(() => {
-    const ordered = categoryList.filter((item) => products.some((product) => product.categoryId === (item.categoryId || item.id))).map((item) => item.name);
+    const ordered = categoryList.map((item) => item.name);
     return ["All categories", ...(ordered.length ? ordered : [...new Set(products.map((product) => product.category))])];
   }, [products, categoryList]);
+  const currentCategory = categoryList.find((item) => item.name === category);
+  const currentCategoryId = currentCategory?.categoryId || currentCategory?.id || "";
+  const selectedNodes = [
+    ...selectedSubcategories.map((id) => subcategoryList.find((item) => item.subcategoryId === id)).filter(Boolean),
+    ...selectedSubSubcategories.map((id) => subSubcategoryList.find((item) => item.subSubcategoryId === id)).filter(Boolean),
+  ];
+  const singleSelection = selectedNodes.length === 1 ? selectedNodes[0] : null;
+  const categoryHeading = browseMode === "products" ? category : browseMode === "new" ? "New Arrivals" : browseMode === "promotions" ? "Promotions" : "Deals";
+  const heading = browseMode === "products" && singleSelection ? singleSelection.name : categoryHeading;
+  const breadcrumb = browseMode !== "products" ? `Home / ${categoryHeading}` :
+    category === "All categories" ? "Home / All categories" :
+    singleSelection?.subSubcategoryId ? `Home / ${category} / ${subcategoryList.find((item) => item.subcategoryId === singleSelection.subcategoryId)?.name || ""} / ${singleSelection.name}` :
+    singleSelection ? `Home / ${category} / ${singleSelection.name}` : `Home / ${category}`;
   const visible = useMemo(() => {
-    const term = query.trim().toLowerCase();
-    const searchWords = term.replace(/\bboxes\b/g, "box").replace(/\bbottles\b/g, "bottle").replace(/\bpens\b/g, "pen").replace(/\bpencils\b/g, "pencil").split(/\s+/).filter(Boolean);
-    const matchesSearch = (product) => {
-      if (!term) return true;
-      if (term === "school supplies") return ["Writing Materials & Accessories", "Drawing Materials", "Art", "Lunch Box"].includes(product.category);
-      const text = `${product.name} ${product.id} ${product.category}`.toLowerCase();
-      return searchWords.every((word) => text.includes(word));
-    };
-    const hasPromotion = (product) => discountRules.some((rule) =>
-      rule.scopeType === "GLOBAL" ||
-      (rule.scopeType === "CATEGORY" && rule.scopeId === product.categoryId) ||
-      (rule.scopeType === "PRODUCT" && rule.scopeId === product.id)
-    );
     const filtered = products.filter((product) =>
-      matchesSearch(product) &&
+      matchesSearch(product, query) &&
       (category === "All categories" || product.category === category) &&
+      (!selectedSubcategories.length && !selectedSubSubcategories.length ||
+        selectedSubcategories.includes(product.subcategoryId) || selectedSubSubcategories.includes(product.subSubcategoryId)) &&
       product.price >= priceMin && product.price <= priceMax &&
-      (browseMode === "products" || browseMode === "new" || hasPromotion(product))
+      (availability === "all" || (availability === "in" ? product.stock > 0 : product.stock <= 0)) &&
+      (offer === "all" || (offer === "sale" ? isOnSale(product, discountRules) : isPromotion(product, discountRules))) &&
+      inCollection(product, collection, discountRules) &&
+      (browseMode === "products" || (browseMode === "new" ? isNewArrival(product) : browseMode === "promotions" ? isPromotion(product, discountRules) : hasCollection(product, "PAM Deals")))
     );
     if (browseMode === "new" || sort === "latest") {
       return [...filtered].sort((a, b) => (Date.parse(b.createdAt || "") || 0) - (Date.parse(a.createdAt || "") || 0) || a.name.localeCompare(b.name));
     }
     if (sort === "price-low") return [...filtered].sort((a, b) => a.price - b.price);
     if (sort === "price-high") return [...filtered].sort((a, b) => b.price - a.price);
+    if (publicLaunch) return [...filtered].sort((a, b) => popularityScore(b) - popularityScore(a) || Number(b.pinned) - Number(a.pinned) || a.name.localeCompare(b.name));
     return filtered;
-  }, [products, discountRules, query, category, sort, browseMode, priceMin, priceMax]);
+  }, [products, discountRules, query, category, selectedSubcategories, selectedSubSubcategories, sort, browseMode, priceMin, priceMax, availability, offer, collection, publicLaunch]);
   const pageCount = Math.max(1, Math.ceil(visible.length / pageSize));
   const pagedProducts = visible.slice((page - 1) * pageSize, page * pageSize);
 
-  useEffect(() => { setPage(1); }, [query, category, sort, browseMode, priceMin, priceMax, pageSize]);
+  useEffect(() => { setPage(1); }, [query, category, selectedSubcategories, selectedSubSubcategories, availability, offer, collection, sort, browseMode, priceMin, priceMax, pageSize]);
 
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
   const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -89,6 +107,11 @@ export default function Storefront() {
   function browse(mode) {
     setBrowseMode(mode);
     setCategory("All categories");
+    setSelectedSubcategories([]);
+    setSelectedSubSubcategories([]);
+    setAvailability("all");
+    setOffer("all");
+    setCollection("");
     setQuery("");
     setSort(mode === "new" ? "latest" : mode === "deals" ? "price-low" : "featured");
     document.getElementById("catalogue")?.scrollIntoView({ behavior: "smooth" });
@@ -97,11 +120,69 @@ export default function Storefront() {
   function searchPopular(term) {
     setBrowseMode("products");
     setCategory("All categories");
+    setSelectedSubcategories([]);
+    setSelectedSubSubcategories([]);
     setQuery(term);
     document.getElementById("catalogue")?.scrollIntoView({ behavior: "smooth" });
   }
 
+  function selectCategory(name, id = "") {
+    setSelectedSubcategories([]);
+    setSelectedSubSubcategories([]);
+    if (name === "All categories") {
+      setCategory(name);
+      return;
+    }
+    if (category !== name) {
+      setCategory(name);
+      setExpandedCategories((current) => [...new Set([...current, id])]);
+    } else {
+      setExpandedCategories((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
+    }
+    setBrowseMode("products");
+  }
+
+  function toggleSubcategory(item) {
+    const id = item.subcategoryId || item.id;
+    const parent = categoryList.find((entry) => (entry.categoryId || entry.id) === item.categoryId);
+    if (parent && category !== parent.name) {
+      setCategory(parent.name);
+      setSelectedSubcategories([id]);
+    } else {
+      setSelectedSubcategories((current) => current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id]);
+    }
+    setSelectedSubSubcategories([]);
+    setExpandedCategories((current) => [...new Set([...current, item.categoryId])]);
+    setExpandedSubcategories((current) => [...new Set([...current, id])]);
+    setBrowseMode("products");
+  }
+
+  function toggleSubSubcategory(item) {
+    const id = item.subSubcategoryId || item.id;
+    const parent = subcategoryList.find((entry) => (entry.subcategoryId || entry.id) === item.subcategoryId);
+    const top = categoryList.find((entry) => (entry.categoryId || entry.id) === item.categoryId);
+    if (top) setCategory(top.name);
+    setSelectedSubcategories([]);
+    setSelectedSubSubcategories((current) => current.length === 1 && current[0] === id ? [] : [id]);
+    if (top) setExpandedCategories((current) => [...new Set([...current, item.categoryId])]);
+    if (parent) setExpandedSubcategories((current) => [...new Set([...current, item.subcategoryId])]);
+    setBrowseMode("products");
+  }
+
+  function recordClick(product) {
+    if (!publicLaunch || clickSession.current.seen.has(product.id)) return;
+    if (!clickSession.current.id) clickSession.current.id = crypto.randomUUID();
+    clickSession.current.seen.add(product.id);
+    fetch("/api/catalog/engagement", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ productId: product.id, visitorId: clickSession.current.id }),
+      keepalive: true,
+    }).catch(() => {});
+  }
+
   function add(product) {
+    recordClick(product);
     setCart((current) => {
       const found = current.find((item) => item.id === product.id);
       return found ? current.map((item) => item.id === product.id ? { ...item, quantity: Math.min(item.stock, item.quantity + 1) } : item) : [...current, { ...product, quantity: 1 }];
@@ -169,7 +250,7 @@ export default function Storefront() {
           </nav>
           <div className="header-search">
             <input type="search" aria-label="Search products, category or key words" placeholder="Search products, category or key words" value={query} onChange={(event) => { setBrowseMode("products"); setQuery(event.target.value); }} />
-            <div className="popular-searches"><span>Popular Searches:</span>{popularSearches.map((term) => <button key={term} type="button" onClick={() => searchPopular(term)}>{term}</button>)}</div>
+            <div className="popular-searches"><span>Popular Searches:</span>{[...curatedSearches, ...popularProducts.map((product) => product.name)].map((term) => <button key={term} type="button" onClick={() => searchPopular(term)}>{term}</button>)}</div>
           </div>
           <button className="cart-button" onClick={() => setCartOpen(true)} aria-label={`Cart, ${cartCount} items`}>Cart <b>{cartCount}</b></button>
         </div>
@@ -178,14 +259,53 @@ export default function Storefront() {
       <section className="hero"><div><p className="eyebrow">Everyday essentials, thoughtfully selected</p><h1>Find what you need.<br />Pick up or get it delivered.</h1><p>School, home, gifts and daily essentials in one simple shop.</p><a className="button primary" href="#catalogue">Shop products</a></div><div className="hero-panel" aria-hidden="true"><span>P</span><span>A</span><span>M</span></div></section>
 
       <section className="catalogue" id="catalogue">
-        <aside className="filters"><p className="eyebrow">Browse</p><h2>Categories</h2>{categories.map((name) => <button key={name} className={category === name ? "filter active" : "filter"} onClick={() => setCategory(name)}><span>{name}</span><small>{name === "All categories" ? products.length : products.filter((p) => p.category === name).length}</small></button>)}<div className="price-filter"><b>Price range</b><label>Minimum<input type="number" min="0" value={priceMin} onChange={(event) => setPriceMin(Math.max(0, Number(event.target.value || 0)))} /></label><label>Maximum<input type="number" min="0" value={Number.isFinite(priceMax) ? priceMax : ""} onChange={(event) => setPriceMax(event.target.value === "" ? Infinity : Math.max(0, Number(event.target.value)))} /></label></div><div className="service-note" id="services"><b>Need expert advice?</b><p>Message us before you order and we’ll help you choose.</p></div></aside>
+        <aside className="filters" aria-label="Product filters">
+          <p className="eyebrow">Browse</p><h2>Categories</h2>
+          <button type="button" className={category === "All categories" ? "filter active" : "filter"} onClick={() => selectCategory("All categories")}>
+            <span>All categories</span><small>{products.length}</small>
+          </button>
+          {categoryList.map((item) => {
+            const id = item.categoryId || item.id;
+            const children = subcategoryList.filter((child) => child.categoryId === id);
+            const expanded = expandedCategories.includes(id);
+            return <div className="category-tree" key={id}>
+              <button type="button" className={category === item.name ? "filter category-toggle active" : "filter category-toggle"} aria-expanded={expanded} onClick={() => selectCategory(item.name, id)}>
+                <span><span aria-hidden="true">{expanded ? "▾" : "▸"}</span> {item.name}</span>
+                <small>{products.filter((product) => product.categoryId === id).length}</small>
+              </button>
+              {expanded && children.length > 0 && <div className="subcategory-tree">
+                {children.map((child) => {
+                  const childId = child.subcategoryId || child.id;
+                  const leaves = subSubcategoryList.filter((leaf) => leaf.subcategoryId === childId);
+                  const childExpanded = expandedSubcategories.includes(childId);
+                  return <div className="subcategory-node" key={childId}>
+                    <div className="subcategory-row">
+                      <label><input type="checkbox" checked={selectedSubcategories.includes(childId)} onChange={() => toggleSubcategory(child)} /> <span>{child.name}</span></label>
+                      {leaves.length > 0 && <button type="button" className="tree-expander" aria-label={`${childExpanded ? "Collapse" : "Expand"} ${child.name}`} aria-expanded={childExpanded} onClick={() => setExpandedSubcategories((current) => current.includes(childId) ? current.filter((entry) => entry !== childId) : [...current, childId])}>{childExpanded ? "▾" : "▸"}</button>}
+                    </div>
+                    {childExpanded && leaves.length > 0 && <div className="sub-subcategory-tree">
+                      {leaves.map((leaf) => <label key={leaf.subSubcategoryId || leaf.id}><input type="checkbox" checked={selectedSubSubcategories.includes(leaf.subSubcategoryId || leaf.id)} onChange={() => toggleSubSubcategory(leaf)} /> <span>{leaf.name}</span></label>)}
+                    </div>}
+                  </div>;
+                })}
+              </div>}
+            </div>;
+          })}
+          {!categoryList.length && categories.slice(1).map((name) => <button type="button" className={category === name ? "filter active" : "filter"} key={name} onClick={() => selectCategory(name)}>{name}</button>)}
+          <div className="price-filter"><b>Price range</b><label>Minimum<input type="number" min="0" value={priceMin} onChange={(event) => setPriceMin(Math.max(0, Number(event.target.value || 0)))} /></label><label>Maximum<input type="number" min="0" value={Number.isFinite(priceMax) ? priceMax : ""} onChange={(event) => setPriceMax(event.target.value === "" ? Infinity : Math.max(0, Number(event.target.value)))} /></label></div>
+          <fieldset className="facet-group"><legend>Availability</legend>{[["all", "All"], ["in", "In Stock"], ["out", "Out of Stock"]].map(([value, label]) => <label key={value}><input type="radio" name="availability" checked={availability === value} onChange={() => setAvailability(value)} /> {label}</label>)}</fieldset>
+          <fieldset className="facet-group"><legend>Offers</legend>{[["all", "All"], ["sale", "On Sale"], ["promotions", "Promotions"]].map(([value, label]) => <label key={value}><input type="radio" name="offer" checked={offer === value} onChange={() => setOffer(value)} /> {label}</label>)}</fieldset>
+          <fieldset className="facet-group"><legend>Collections</legend><label><input type="radio" name="collection" checked={!collection} onChange={() => setCollection("")} /> All</label>{["New Arrivals", "Best Sellers", "Back to School", "Promotion", "PAM Deals"].map((name) => <label key={name}><input type="radio" name="collection" checked={collection === name} onChange={() => setCollection(name)} /> {name}</label>)}</fieldset>
+          <div className="service-note" id="services"><b>Need expert advice?</b><p>Message us before you order and we’ll help you choose.</p></div>
+        </aside>
 
         <main className="catalogue-main">
-          <div className="catalogue-heading"><div><p className="breadcrumb">Home / {browseMode === "products" ? category : browseMode === "new" ? "New Arrivals" : browseMode === "promotions" ? "Promotions" : "Deals"}</p><h2>{browseMode === "products" ? category : browseMode === "new" ? "New Arrivals" : browseMode === "promotions" ? "Promotions" : "Deals"}</h2><p>{visible.length} products ready to browse</p></div><div className="catalogue-controls"><select aria-label="Sort products" value={sort} onChange={(e) => setSort(e.target.value)}><option value="featured">Popularity</option><option value="price-low">Price low to high</option><option value="price-high">Price high to low</option><option value="latest">Latest</option></select><select aria-label="Products per page" value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))}>{[20, 30, 40, 50].map((size) => <option key={size} value={size}>{size} per page</option>)}</select></div></div>
+          <div className="catalogue-heading"><div><p className="breadcrumb">{breadcrumb}</p><h2>{heading}</h2><p>{selectedNodes.length > 1 ? `Showing ${visible.length} products from ${selectedNodes.length} selected subcategories` : `${visible.length} products ready to browse`}</p></div><div className="catalogue-controls"><select aria-label="Sort products" value={sort} onChange={(e) => setSort(e.target.value)}><option value="featured">Popularity</option><option value="price-low">Price low to high</option><option value="price-high">Price high to low</option><option value="latest">Latest</option></select><select aria-label="Products per page" value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))}>{[20, 30, 40, 50].map((size) => <option key={size} value={size}>{size} per page</option>)}</select></div></div>
+          {selectedNodes.length > 0 && <div className="filter-chips" aria-label="Selected subcategories"><span>{selectedNodes.length} {selectedNodes.length === 1 ? "subcategory" : "subcategories"} selected</span>{selectedNodes.map((item) => <button type="button" key={item.subSubcategoryId || item.subcategoryId} onClick={() => item.subSubcategoryId ? toggleSubSubcategory(item) : toggleSubcategory(item)} aria-label={`Remove ${item.name} filter`}>{item.name} ×</button>)}<button type="button" onClick={() => { setSelectedSubcategories([]); setSelectedSubSubcategories([]); }}>Clear</button></div>}
           {loading && <div className="empty-state"><div className="spinner" /><p>Loading the catalogue…</p></div>}
           {error && !products.length && <div className="empty-state error-panel"><h3>Catalogue unavailable</h3><p>{error}</p></div>}
           {!loading && !error && !visible.length && <div className="empty-state"><h3>No matching products</h3><p>Try another search, category or collection.</p></div>}
-          <div className="product-grid">{pagedProducts.map((product) => <article className="product-card" key={product.id}>{product.imageUrl ? <img className="product-photo" src={product.imageUrl} alt={product.name} /> : <ProductArt name={product.name} category={product.category} />}<div className="product-copy"><span className={product.stock > 0 ? "badge success" : "badge danger"}>{product.stock > 0 ? "In stock" : "Out of stock"}</span><p className="sku">{product.id}</p><h3>{product.name}</h3>{product.description && <p className="product-description">{product.description}</p>}<p className="price">{money.format(product.price)}</p><button className="button primary full" disabled={product.stock <= 0} onClick={() => add(product)}>{product.stock > 0 ? "Add to cart" : "Unavailable"}</button></div></article>)}</div>
+          <div className="product-grid">{pagedProducts.map((product) => <article className="product-card" key={product.id}>{product.imageUrl ? <img className="product-photo" src={product.imageUrl} alt={product.name} /> : <ProductArt name={product.name} category={product.category} />}<div className="product-copy"><div className="product-badges"><span className={product.stock > 0 ? "badge success" : "badge danger"}>{product.stock > 0 ? "In stock" : "Out of stock"}</span>{product.stock > 0 && product.stock < Number(product.lowStockLevel ?? 8) && <span className="badge warning">Low stock</span>}{isNewArrival(product) && <span className="badge neutral">New</span>}{isBestSeller(product) && <span className="badge neutral">Best seller</span>}{isOnSale(product, discountRules) && <span className="badge warning">On sale</span>}</div><p className="sku">{product.id}</p><h3>{product.name}</h3>{product.description && <p className="product-description">{product.description}</p>}<p className="price">{money.format(product.price)}</p>{product.stock > 0 ? <button className="button primary full" onClick={() => add(product)}>Add to cart</button> : <a className="button secondary full" href={`https://wa.me/233207015198?text=${encodeURIComponent(`Hello PAM Essentials & More, please notify me when ${product.name} (${product.id}) is available.`)}`} target="_blank" rel="noreferrer">Notify me when available</a>}</div></article>)}</div>
           {visible.length > pageSize && <div className="pagination"><button disabled={page === 1} onClick={() => setPage((current) => current - 1)}>Previous</button><span>Page {page} of {pageCount}</span><button disabled={page === pageCount} onClick={() => setPage((current) => current + 1)}>Next</button></div>}
         </main>
       </section>

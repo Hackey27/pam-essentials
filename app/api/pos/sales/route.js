@@ -47,6 +47,7 @@ export async function POST(request) {
       if (!shiftSnap.exists || shiftSnap.data().status !== "open" || shiftSnap.data().staffId !== access.user.uid) throw new Error("This till shift is no longer open.");
 
       const normalizedItems = [...quantities].map(([id, quantity]) => ({ id, quantity }));
+      const salesChannel = ["walk-in", "website", "whatsapp"].includes(body.salesChannel) ? body.salesChannel : "walk-in";
       const productRefs = normalizedItems.map(({ id }) => store.collection("products").doc(encodeURIComponent(id)));
       const productSnaps = await tx.getAll(...productRefs);
       const lines = [];
@@ -83,7 +84,7 @@ export async function POST(request) {
           categorySnapshot: { id: product.categoryId, name: product.category },
           discountRuleSnapshot: applied.rule ? { ruleId: applied.rule.ruleId, name: applied.rule.name, amount: applied.amount } : null,
         });
-        tx.update(productRef, { stock: Number(product.stock) - quantity, updatedAt: FieldValue.serverTimestamp() });
+        tx.update(productRef, { stock: Number(product.stock) - quantity, ...(salesChannel === "walk-in" ? { purchaseCount: FieldValue.increment(quantity) } : {}), updatedAt: FieldValue.serverTimestamp() });
         tx.create(store.collection("stock_movements").doc(), {
           type: "sale",
           productId: product.id,
@@ -103,7 +104,6 @@ export async function POST(request) {
       const receiptId = `PAM-${Date.now().toString(36).toUpperCase()}`;
       const total = Math.round((subtotal - discount) * 100) / 100;
       const paymentMethod = ["cash", "mobile-money", "card"].includes(body.paymentMethod) ? body.paymentMethod : "cash";
-      const salesChannel = ["walk-in", "website", "whatsapp"].includes(body.salesChannel) ? body.salesChannel : "walk-in";
       const orderReference = String(body.orderReference || "").trim().slice(0, 100) || null;
       const tendered = paymentMethod === "cash" ? Number(body.amountPaid) : total;
       if (!Number.isFinite(tendered) || tendered < total) throw new Error("Amount paid cannot be less than the sale total.");

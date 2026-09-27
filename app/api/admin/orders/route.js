@@ -22,12 +22,19 @@ export async function POST(request) {
       const order = snap.data();
       const pickupCode = status === "ready" ? order.pickupCode || String(Math.floor(100000 + Math.random() * 900000)) : order.pickupCode || null;
       const paymentStatus = status === "paid" || (status === "completed" && body.confirmPayment) ? "paid" : order.paymentStatus || "pending";
+      const countPurchases = !order.popularityCounted && paymentStatus === "paid";
+      const productRefs = countPurchases ? (order.items || []).map((item) => store.collection("products").doc(encodeURIComponent(item.productId))) : [];
+      const productSnaps = productRefs.length ? await tx.getAll(...productRefs) : [];
       tx.update(ref, {
         status,
         paymentStatus,
+        popularityCounted: order.popularityCounted === true || countPurchases,
         pickupCode,
         statusHistory: FieldValue.arrayUnion({ status, at: new Date(), by: access.user.uid, email: access.user.email }),
         updatedAt: FieldValue.serverTimestamp(),
+      });
+      productRefs.forEach((productRef, index) => {
+        if (productSnaps[index].exists) tx.update(productRef, { purchaseCount: FieldValue.increment(Number(order.items[index].quantity || 0)) });
       });
       tx.create(store.collection("admin_audit").doc(), auditPayload(access.user, "UPDATE_ORDER_STATUS", "order", orderId, `Changed order ${orderId} from ${order.status} to ${status}.`, { status: order.status }, { status, paymentStatus, pickupCode }));
       return { orderId, status, paymentStatus, pickupCode };
@@ -37,3 +44,4 @@ export async function POST(request) {
     return NextResponse.json({ error: error.message || "Order could not be updated." }, { status: 409 });
   }
 }
+
