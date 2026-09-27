@@ -609,7 +609,22 @@ body > div > main h1 { color: var(--navy); }
 .pos-detail-modal { max-height: 80vh; overflow-y: auto; }.pos-detail-totals { display: flex; flex-wrap: wrap; gap: 12px; margin: 15px 0; }.pos-detail-totals b { padding: 8px; border-radius: 8px; background: #e9f5f6; }
 .pos-loading { padding: 36px; border-radius: 12px; background: white; text-align: center; }
 .pos-simple-view { min-height: calc(100vh - 72px); }
+.pos-search-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(210px, .55fr); gap: 12px; margin: 12px 0; }
+.pos-search-row label, .pos-filter-row label, .till-checkout label { display: grid; gap: 5px; color: #29475e; font-size: .78rem; font-weight: 800; }
+.pos-search-row input, .pos-filter-row select, .till-checkout input, .till-checkout select { width: 100%; min-height: 42px; border: 1px solid #b9cbd8; border-radius: 8px; padding: 8px 10px; background: white; color: #00235b; font: inherit; }
+.pos-search-row form { display: flex; align-items: end; gap: 7px; }.pos-search-row form label { flex: 1; min-width: 0; }.pos-search-row form button { white-space: nowrap; }
+.pos-filter-row { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; margin-bottom: 14px; }.pos-filter-row select { min-width: 155px; }.pos-filter-row span { color: #536b7e; font-size: .78rem; }
+.pos-product:disabled { opacity: .7; cursor: not-allowed; }.pos-product div span.low { color: #9b6300; }.pos-product div span.out { color: #b72535; font-weight: 900; }.pos-product div span.healthy { color: #087966; }
+.till-checkout { max-height: 58vh; overflow-y: auto; border-top: 1px solid #dce6ee; padding-top: 10px; }.till-checkout > label { margin-bottom: 8px; }
+.pos-customer-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }.pos-customer-fields input { min-width: 0; }
+.till-summary .payment-methods { grid-template-columns: repeat(2, 1fr); margin: 5px 0; }.payment-methods button { min-height: 39px; font-size: .76rem; }
+.pos-verify { display: flex !important; align-items: center; gap: 8px; margin: 8px 0; }.pos-verify input { width: 20px; min-height: 20px; }
+.till-summary .change-due strong { font-size: 1.25rem; }.pos-checkout-warning { color: #b72535; font-size: .75rem; font-weight: 800; }
+.pos-remove-line { grid-column: 2; border: 0; color: #b72535; background: transparent; font-size: .7rem; font-weight: 800; cursor: pointer; }
+.pos-cart-notice { display: grid; gap: 5px; margin-bottom: 10px; }.pos-cart-notice button { justify-self: start; border: 0; color: #00235b; background: transparent; font-weight: 900; cursor: pointer; }
+.pos-cart-toggle { display: none; }
 @media (max-width: 1100px) { .pos-header { flex-wrap: wrap; }.pos-header .pos-actions { flex-wrap: wrap; } }
 @media (max-width: 900px) { .pos-sidebar { transform: translateX(-100%); transition: transform .2s ease; }.pos-sidebar.open { transform: translateX(0); }.pos-header, .pos-main, .pos-orders, .pos-dashboard, .pos-simple-view { margin-left: 0; }.pos-global-error { margin-left: 20px; }.pos-menu-button { display: inline-block; }.pos-dashboard-sections { grid-template-columns: 1fr; } }
 @media (max-width: 600px) { .pos-dashboard { padding: 12px; }.pos-dashboard-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }.pos-summary-card strong { font-size: 1.2rem; }.pos-header .pos-staff, .pos-header time { display: none; }.pos-period strong { width: 100%; } }
+@media (max-width: 600px) { .pos-search-row { grid-template-columns: 1fr; }.pos-search-row form { display: grid; grid-template-columns: 1fr auto; }.pos-main { padding-bottom: 80px; }.till-cart { height: 70px; padding: 10px 14px; transition: height .2s ease; }.till-cart.open { height: min(78vh, 680px); }.till-cart:not(.open) .till-lines, .till-cart:not(.open) .till-checkout, .till-cart:not(.open) .text-button { display: none; }.till-cart .drawer-title h2 { font-size: 1rem; }.pos-cart-toggle { display: inline-block; min-height: 42px; border: 0; border-radius: 8px; padding: 8px 12px; color: white; background: #00235b; font-weight: 800; }.till-checkout { max-height: 50vh; }.pos-filter-row label { flex: 1; }.pos-filter-row select { min-width: 0; } }
 

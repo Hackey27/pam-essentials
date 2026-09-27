@@ -5,6 +5,7 @@ import { EmailAuthProvider, reauthenticateWithCredential } from "firebase/auth";
 import RequireRole from "@/components/RequireRole";
 import { signOut, useAuth } from "@/components/AuthProvider";
 import PosDashboard from "@/components/PosDashboard";
+import PosTill from "@/components/PosTill";
 import { priceCart } from "@/lib/commerce";
 import { SHOP_ADDRESS } from "@/lib/shop";
 
@@ -27,11 +28,17 @@ function Till() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [clock, setClock] = useState(new Date());
   const shiftAction = useRef(false);
+  const checkoutAction = useRef(false);
+  const saleAttempt = useRef(null);
+  const barcodeInput = useRef(null);
   const [orderQuery, setOrderQuery] = useState("");
   const [orderStatus, setOrderStatus] = useState("all");
   const [query, setQuery] = useState("");
+  const [barcode, setBarcode] = useState("");
+  const [stockFilter, setStockFilter] = useState("all");
   const [category, setCategory] = useState("All");
   const [cart, setCart] = useState([]);
+  const [cartNotice, setCartNotice] = useState("");
   const [online, setOnline] = useState(true);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -43,6 +50,10 @@ function Till() {
   const [amountPaid, setAmountPaid] = useState("");
   const [orderReference, setOrderReference] = useState("");
   const [orderChannel, setOrderChannel] = useState("walk-in");
+  const [customerName, setCustomerName] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
+  const [transactionVerified, setTransactionVerified] = useState(false);
+  const [confirmSale, setConfirmSale] = useState(false);
 
   async function request(url, options = {}) {
     const token = await user.getIdToken();
@@ -160,11 +171,38 @@ function Till() {
     return () => { window.removeEventListener("online", update); window.removeEventListener("offline", update); };
   }, [user]);
 
+  useEffect(() => {
+    if (view !== "sale" || !cart.length || !online) return;
+    let cancelled = false;
+    const check = async () => {
+      try {
+        const response = await request("/api/pos/products");
+        const fresh = await response.json();
+        if (!response.ok) throw new Error(fresh.error || "Stock check failed.");
+        if (cancelled) return;
+        const byId = new Map((fresh.products || []).map((product) => [product.id, product]));
+        const changed = cart.some((item) => !byId.has(item.id) || byId.get(item.id).stock < item.quantity || byId.get(item.id).price !== item.price);
+        const nextPrice = changed ? null : priceCart(cart.map((item) => ({ ...byId.get(item.id), quantity: item.quantity })), fresh.discountRules || [], fresh.dealBundles || []);
+        setCartNotice((current) => changed || nextPrice.total !== total ? "Stock, price or promotion changed. Review the cart before checkout." : current.startsWith("Stock, price") ? current : "");
+      } catch (err) { if (!cancelled) setCartNotice(`Live stock check failed: ${err.message}`); }
+    };
+    check();
+    const timer = setInterval(check, 45000);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [user, view, cart, online, total]);
+  useEffect(() => { if (!cart.length) setCartNotice(""); }, [cart.length]);
+
   const categories = useMemo(() => {
     const ordered = categoryList.filter((item) => products.some((product) => product.categoryId === (item.categoryId || item.id))).map((item) => item.name);
     return ["All", ...(ordered.length ? ordered : [...new Set(products.map((product) => product.category))])];
   }, [products, categoryList]);
-  const visible = useMemo(() => products.filter((product) => (category === "All" || product.category === category) && `${product.name} ${product.id}`.toLowerCase().includes(query.toLowerCase())), [products, query, category]);
+  const visible = useMemo(() => products.filter((product) => {
+    const matchesCategory = category === "All" || product.category === category;
+    const matchesQuery = `${product.name} ${product.id} ${product.sku || ""} ${product.barcode || ""}`.toLowerCase().includes(query.trim().toLowerCase());
+    const threshold = Number(product.lowStockLevel ?? 8);
+    const matchesStock = stockFilter === "all" || (stockFilter === "high" && (product.pinned || product.purchaseCount >= 3)) || (stockFilter === "low" && product.stock > 0 && product.stock < threshold) || (stockFilter === "out" && product.stock <= 0);
+    return matchesCategory && matchesQuery && matchesStock;
+  }), [products, query, category, stockFilter]);
   const visibleOrders = useMemo(() => orders.filter((order) => {
     const matches = `${order.customer} ${order.phone} ${order.orderId} ${order.createdAt}`.toLowerCase().includes(orderQuery.toLowerCase());
     const state = orderStatus === "all" || order.status === orderStatus || (orderStatus === "pending-payment" && order.paymentStatus !== "paid");
@@ -172,11 +210,14 @@ function Till() {
   }), [orders, orderQuery, orderStatus]);
   const pricing = priceCart(cart, discountRules, dealBundles);
   const { subtotal, discount, total } = pricing;
-  const tendered = paymentMethod === "cash" ? Number(amountPaid || total) : total;
-  const changeDue = paymentMethod === "cash" && Number.isFinite(tendered) ? Math.max(0, tendered - total) : 0;
+  const tendered = amountPaid.trim() === "" ? NaN : Number(amountPaid);
+  const changeDue = Number.isFinite(tendered) ? Math.max(0, tendered - total) : 0;
+  const referenceReady = !["website", "whatsapp"].includes(orderChannel) || Boolean(orderReference.trim() || (customerName.trim() && customerPhone.trim()));
+  const paymentReady = Number.isFinite(tendered) && tendered >= total && (paymentMethod === "cash" || transactionVerified);
 
   function add(product) {
     if (product.stock <= 0) return;
+    setCartNotice("");
     setCart((current) => {
       const found = current.find((item) => item.id === product.id);
       if (found && found.quantity < product.stock) return current.map((item) => item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item);
@@ -184,7 +225,19 @@ function Till() {
     });
   }
 
+  function scanBarcode(event) {
+    event.preventDefault();
+    const code = barcode.trim().toLowerCase();
+    if (!code) return;
+    const product = products.find((item) => String(item.barcode || "").toLowerCase() === code);
+    if (!product) setError(`Barcode ${barcode.trim()} was not recognised. Search by product name or SKU instead.`);
+    else if (product.stock <= 0) setError(`${product.name} is out of stock.`);
+    else { add(product); setError(""); setBarcode(""); }
+    barcodeInput.current?.focus();
+  }
+
   function change(id, delta) {
+    setCartNotice("");
     setCart((current) => current.map((item) => item.id === id ? { ...item, quantity: Math.min(item.stock, Math.max(0, item.quantity + delta)) } : item).filter((item) => item.quantity));
   }
 
@@ -199,41 +252,62 @@ function Till() {
     setCart(nextCart);
     setOrderReference(order.orderId);
     setOrderChannel(order.channel || "website");
+    setCustomerName(order.customer || "");
+    setCustomerPhone(order.phone || "");
     setPaymentMethod("cash");
     setAmountPaid("");
+    setTransactionVerified(false);
     setError("");
     setView("sale");
   }
 
   async function checkout() {
-    if (!cart.length) return;
+    if (!cart.length || checkoutAction.current) return;
     if (!shift) { setError("Open a till shift before checkout."); return; }
-    if (!online && paymentMethod !== "cash") { setError("Offline sales must be paid in cash. Reconnect before confirming an electronic payment."); return; }
-    if (paymentMethod === "cash" && (!Number.isFinite(tendered) || tendered < total)) { setError("Amount paid cannot be less than the total."); return; }
+    if (!online) { setError("The till is offline. Reconnect before completing a sale so the receipt and stock can be saved."); return; }
+    if (!referenceReady) { setError("Add an order reference or the customer name and phone for this sales channel."); return; }
+    if (!paymentReady) { setError("Enter the amount paid and verify electronic payment before completing the sale."); return; }
+    checkoutAction.current = true;
     setBusy(true); setError("");
-    const receiptItems = cart.map(({ id, name, quantity, price, productGroupId, colour, size }) => ({ id, name, quantity, price, productGroupId, variantId: productGroupId ? id : "", colour, size }));
-    const linkedOrder = orders.find((item) => item.orderId === orderReference);
-    const receiptFulfilment = { deliveryMethod: linkedOrder?.deliveryMethod || "pickup", originAddress: linkedOrder?.originAddress || SHOP_ADDRESS, deliveryAddress: linkedOrder?.deliveryAddress || linkedOrder?.landmark || "" };
-    const payload = { transactionId: crypto.randomUUID(), paymentMethod, salesChannel: orderChannel, orderReference: orderReference || null, amountPaid: tendered, shiftId: shift.shiftId, deviceId, items: cart.map(({ id, quantity }) => ({ id, quantity })) };
-    if (!online) {
-      const queue = JSON.parse(localStorage.getItem("pam-pos-queue") || "[]");
-      localStorage.setItem("pam-pos-queue", JSON.stringify([...queue, payload]));
-      setReceipt({ receiptId: `OFFLINE-${payload.transactionId.slice(0, 8).toUpperCase()}`, total, subtotal, discount, paymentMethod, amountPaid: tendered, change: changeDue, items: receiptItems, orderReference, ...receiptFulfilment, queued: true });
-      setCart([]); setOrderReference(""); setOrderChannel("walk-in"); setAmountPaid(""); setBusy(false); return;
-    }
     try {
+      const fingerprint = JSON.stringify({ cart: cart.map(({ id, quantity }) => [id, quantity]), paymentMethod, tendered, orderChannel, orderReference, customerName, customerPhone });
+      if (saleAttempt.current?.fingerprint !== fingerprint) {
+      const freshResponse = await request("/api/pos/products");
+      const fresh = await freshResponse.json();
+      if (!freshResponse.ok) throw new Error(fresh.error || "Current stock and prices could not be checked.");
+      const freshMap = new Map((fresh.products || []).map((product) => [product.id, product]));
+      const changed = cart.find((item) => { const latest = freshMap.get(item.id); return !latest || latest.stock < item.quantity || latest.price !== item.price; });
+      const freshPricing = changed ? null : priceCart(cart.map((item) => ({ ...freshMap.get(item.id), quantity: item.quantity })), fresh.discountRules || [], fresh.dealBundles || []);
+      setProducts(fresh.products || []); setDiscountRules(fresh.discountRules || []); setDealBundles(fresh.dealBundles || []);
+      if (changed || freshPricing.total !== total) {
+        setCart(cart.map((item) => freshMap.has(item.id) ? { ...freshMap.get(item.id), quantity: Math.min(item.quantity, freshMap.get(item.id).stock) } : { ...item, stock: 0 }).filter((item) => item.quantity > 0 && item.stock > 0));
+        setConfirmSale(false); saleAttempt.current = null;
+        setCartNotice("Stock, price or promotion changed. The cart was refreshed. Review it before checkout.");
+        throw new Error("Stock, price or promotion changed. The cart has been refreshed; review the new total before confirming.");
+      }
+      setCartNotice("");
+      }
+      const receiptItems = cart.map(({ id, name, quantity, price, productGroupId, colour, size }) => ({ id, name, quantity, price, productGroupId, variantId: productGroupId ? id : "", colour, size }));
+      const linkedOrder = orders.find((item) => item.orderId === orderReference);
+      const receiptFulfilment = { deliveryMethod: linkedOrder?.deliveryMethod || "pickup", originAddress: linkedOrder?.originAddress || SHOP_ADDRESS, deliveryAddress: linkedOrder?.deliveryAddress || linkedOrder?.landmark || "" };
+      if (saleAttempt.current?.fingerprint !== fingerprint) saleAttempt.current = { fingerprint, transactionId: crypto.randomUUID() };
+      const payload = { transactionId: saleAttempt.current.transactionId, paymentMethod, transactionVerified, salesChannel: orderChannel, orderReference: orderReference || null, customerName, customerPhone, amountPaid: tendered, shiftId: shift.shiftId, deviceId, items: cart.map(({ id, quantity }) => ({ id, quantity })) };
       const response = await request("/api/pos/sales", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error);
+      if (!response.ok) { saleAttempt.current = null; setConfirmSale(false); throw new Error(data.error); }
       setReceipt({ ...data, subtotal, discount, items: receiptItems, orderReference, ...receiptFulfilment });
-      if (orderReference) {
-        const orderResponse = await request("/api/admin/orders", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ orderId: orderReference, status: "paid" }) });
-        const orderResult = await orderResponse.json();
-        if (!orderResponse.ok) setError(`Sale completed, but the linked order needs attention: ${orderResult.error}`);
+      saleAttempt.current = null;
+      setConfirmSale(false);
+      if (linkedOrder) {
+        try {
+          const orderResponse = await request("/api/admin/orders", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ orderId: orderReference, status: "paid" }) });
+          const orderResult = await orderResponse.json();
+          if (!orderResponse.ok) throw new Error(orderResult.error);
+        } catch (orderError) { setError(`Sale completed, but the linked order needs attention: ${orderError.message}`); }
       }
-      setCart([]); setOrderReference(""); setOrderChannel("walk-in"); setAmountPaid(""); await loadProducts(); await loadOrders();
+      setCart([]); setOrderReference(""); setOrderChannel("walk-in"); setCustomerName(""); setCustomerPhone(""); setAmountPaid(""); setTransactionVerified(false); await Promise.allSettled([loadProducts(), loadOrders()]);
     } catch (err) { setError(err.message || "Checkout failed."); }
-    finally { setBusy(false); }
+    finally { checkoutAction.current = false; setBusy(false); }
   }
 
   async function updateOrder(orderId, status) {
@@ -270,14 +344,13 @@ function Till() {
   return <div className="pos-shell">
     <aside className={"pos-sidebar " + (sidebarOpen ? "open" : "")}><div className="pos-sidebar-brand"><a href="/" className="admin-brand">PAM <span>Essentials &amp; More</span></a><small>Sales &amp; inventory</small></div><nav aria-label="POS navigation">{[["dashboard", "Dashboard"], ["sale", "New Sale"], ["orders", "Orders"], ...(["owner", "admin", "supervisor"].includes(role) ? [["inventory", "Inventory"]] : []), ...(["owner", "admin"].includes(role) ? [["expenses", "Expenses"], ["admin", "Admin"]] : [])].map(([id, label]) => <button key={id} className={view === id ? "active" : ""} onClick={() => { if (id === "admin") window.location.href = "/admin"; else setView(id); setSidebarOpen(false); }}>{label}</button>)}</nav></aside>
     <header className="pos-header"><div className="pos-header-title"><button className="pos-menu-button" aria-label="Toggle POS navigation" onClick={() => setSidebarOpen((open) => !open)}>☰</button><div><h2>{({ dashboard: "Dashboard", sale: "New Sale", orders: "Orders", inventory: "Inventory", expenses: "Expenses" })[view]}</h2><p>{view === "dashboard" ? "Current sales and stock health" : view === "sale" ? "Find products and complete a sale" : "Sales & inventory"}</p></div></div><div className="pos-actions"><span className={online ? "connection online" : "connection offline"}>{syncing ? "Syncing sales…" : online ? "Online" : "Offline"}</span><span className="pos-staff">{user?.email} · {role?.toUpperCase()}<small>Shift started {shift.startedAt ? new Date(shift.startedAt).toLocaleTimeString("en-GH", { hour: "numeric", minute: "2-digit" }) : "—"}</small></span><time>{clock.toLocaleString("en-GH", { dateStyle: "short", timeStyle: "short" })}</time><button className="button secondary" onClick={() => { loadProducts(); loadOrders(); loadShift(); }}>Refresh</button><button className="shift-button open" onClick={() => setConfirmEndShift(true)} disabled={busy}>End Shift</button></div></header>
-    {!online && <div className="offline-banner">Working offline. Cash sales will be queued on this device and synced when the connection returns.</div>}
+    {!online && <div className="offline-banner">Working offline. New sales cannot be completed until the database connection returns. Existing queued sales will sync when available.</div>}
     {error && <div className="pos-global-error notice error-notice" role="alert">{error}</div>}
-    {view === "dashboard" ? <PosDashboard user={user} role={role} onNewSale={() => setView("sale")} onScan={() => { setView("sale"); setTimeout(() => document.querySelector(".pos-search")?.focus(), 0); }} onOrders={() => setView("orders")} onInventory={() => setView("inventory")} onExpense={() => { window.location.href = "/admin?newExpense=1"; }} /> : view === "inventory" ? <main className="pos-simple-view"><h1>Inventory</h1><p>Current priced products and stock status.</p><div className="data-table-wrap"><table className="data-table"><thead><tr><th>Product</th><th>SKU</th><th>Stock</th><th>Status</th></tr></thead><tbody>{products.map((product) => <tr key={product.id}><td>{product.name}</td><td>{product.id}</td><td>{product.stock}</td><td><span className={product.stock <= 0 ? "badge danger" : product.stock < Number(product.lowStockLevel ?? 8) ? "badge warning" : "badge success"}>{product.stock <= 0 ? "Out of stock" : product.stock < Number(product.lowStockLevel ?? 8) ? "Low stock" : "In stock"}</span></td></tr>)}</tbody></table></div></main> : view === "expenses" ? <main className="pos-simple-view"><h1>Expenses</h1><p>Record and review expenses in the Admin Portal.</p><a className="button primary" href="/admin?newExpense=1">Add expense</a></main> : view === "sale" ? <main className="pos-main">
-      <section className="pos-catalogue"><div className="pos-title"><div><p className="eyebrow">Point of sale · {shift ? shift.shiftId : "No open shift"}</p><h1>New sale</h1></div>{["owner", "admin"].includes(role) && <a className="button secondary" href="/admin">Admin Portal</a>}</div><input className="pos-search" autoFocus placeholder="Search product name, SKU or scan barcode" value={query} onChange={(event) => setQuery(event.target.value)} /><div className="category-pills">{categories.map((item) => <button key={item} className={category === item ? "active" : ""} onClick={() => setCategory(item)}>{item}</button>)}</div>{error && <p className="notice error-notice">{error}</p>}<div className="pos-grid">{visible.map((product) => <button key={product.id} className="pos-product" onClick={() => add(product)} disabled={product.stock <= 0}><span className="product-monogram">{product.name.slice(0, 2).toUpperCase()}</span><b>{product.name}</b><small>{product.id}</small><div><strong>{money.format(product.price)}</strong><span className={product.stock <= product.lowStockLevel ? "low" : ""}>{product.stock} left</span></div></button>)}</div></section>
-      <aside className="till-cart"><div className="drawer-title"><div><p className="eyebrow">Current basket</p><h2>{cart.reduce((sum, item) => sum + item.quantity, 0)} items</h2></div><button className="text-button" onClick={() => { setCart([]); setOrderReference(""); setOrderChannel("walk-in"); }}>Clear</button></div>{orderReference && <div className="linked-order"><span>Linked order</span><b>{orderReference}</b><button onClick={() => { setOrderReference(""); setOrderChannel("walk-in"); }}>Detach</button></div>}<div className="till-lines">{cart.length ? cart.map((item) => <div className="till-line" key={item.id}><div><b>{item.name}</b><small>{item.id} · {[item.colour, item.size].filter(Boolean).join(" / ")} · {money.format(item.price)} each</small></div><div className="stepper"><button onClick={() => change(item.id, -1)}>−</button><span>{item.quantity}</span><button onClick={() => change(item.id, 1)}>+</button></div><strong>{money.format(pricing.lines.find((line) => line.id === item.id)?.lineTotal || 0)}</strong></div>) : <div className="empty-state"><span className="status-icon">+</span><h3>No items yet</h3><p>Select products to begin a sale.</p></div>}</div><div className="till-summary"><div><span>Subtotal</span><strong>{money.format(subtotal)}</strong></div><div><span>Discount</span><strong>−{money.format(discount)}</strong></div><div className="grand-total"><span>Total</span><strong>{money.format(total)}</strong></div><div className="payment-methods"><button className={paymentMethod === "cash" ? "active" : ""} onClick={() => setPaymentMethod("cash")}>Cash</button><button className={paymentMethod === "mobile-money" ? "active" : ""} onClick={() => setPaymentMethod("mobile-money")} disabled={!online}>Mobile money</button><button className={paymentMethod === "card" ? "active" : ""} onClick={() => setPaymentMethod("card")} disabled={!online}>Card</button></div>{paymentMethod === "cash" && <label className="amount-paid">Amount paid<input type="number" min={total} step="0.01" placeholder={total.toFixed(2)} value={amountPaid} onChange={(event) => setAmountPaid(event.target.value)} /></label>}{paymentMethod === "cash" && changeDue > 0 && <div className="change-due"><span>Change due</span><strong>{money.format(changeDue)}</strong></div>}<button className="button accent full" onClick={checkout} disabled={!cart.length || busy}>{busy ? "Completing sale…" : online ? `Complete ${paymentMethod.replace("-", " ")} sale` : "Queue cash sale"}</button></div></aside>
-    </main> : <main className="pos-orders"><div className="pos-title"><div><p className="eyebrow">All channels</p><h1>Orders</h1></div>{["owner", "admin", "supervisor"].includes(role) && <a className="button secondary" href="/admin">Admin Portal</a>}</div><div className="table-tools"><input placeholder="Search client, phone, reference or time" value={orderQuery} onChange={(event) => setOrderQuery(event.target.value)} /><select value={orderStatus} onChange={(event) => setOrderStatus(event.target.value)}><option value="all">All orders</option><option value="pending-payment">Pending payment</option><option value="pending">Pending</option><option value="processing">Processing</option><option value="ready">Ready</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option></select><span>{visibleOrders.length} orders</span></div>{error && <p className="notice error-notice">{error}</p>}<div className="order-card-grid">{visibleOrders.map((order) => <article className="panel pos-order" key={order.orderId}><div className="panel-title"><div><b>{order.orderId}</b><p>{new Date(order.createdAt).toLocaleString("en-GH")}</p></div><span className={order.status === "completed" ? "badge success" : order.status === "cancelled" ? "badge danger" : "badge warning"}>{order.status}</span></div><h3>{order.customer}</h3><p>{order.phone} · {order.deliveryMethod}</p>{order.landmark && <p>{order.landmark}</p>}<div className="order-items">{(order.items || []).map((item) => <span key={item.productId}>{item.quantity} × {item.name} · {item.sku || item.productId}{item.colour && ` · ${item.colour}`}{item.size && ` / ${item.size}`}</span>)}</div><div className="order-total"><span>{order.paymentStatus === "paid" ? "Paid" : "Pending payment"}</span><strong>{money.format(order.total || 0)}</strong></div><div className="order-actions"><button className="button primary" disabled={busy || ["completed", "cancelled"].includes(order.status)} onClick={() => openOrderAtTill(order)}>Open at till</button><select disabled={busy} value={order.status} onChange={(event) => updateOrder(order.orderId, event.target.value)}>{["pending", "confirmed", "paid", "processing", "ready", "completed", "cancelled"].map((status) => <option key={status}>{status}</option>)}</select></div>{order.pickupCode && <strong className="pickup-code">Code {order.pickupCode}</strong>}</article>)}</div></main>}
+    {view === "dashboard" ? <PosDashboard user={user} role={role} onNewSale={() => setView("sale")} onScan={() => { setView("sale"); setTimeout(() => barcodeInput.current?.focus(), 0); }} onOrders={() => setView("orders")} onInventory={() => setView("inventory")} onExpense={() => { window.location.href = "/admin?newExpense=1"; }} /> : view === "inventory" ? <main className="pos-simple-view"><h1>Inventory</h1><p>Current priced products and stock status.</p><div className="data-table-wrap"><table className="data-table"><thead><tr><th>Product</th><th>SKU</th><th>Stock</th><th>Status</th></tr></thead><tbody>{products.map((product) => <tr key={product.id}><td>{product.name}</td><td>{product.id}</td><td>{product.stock}</td><td><span className={product.stock <= 0 ? "badge danger" : product.stock < Number(product.lowStockLevel ?? 8) ? "badge warning" : "badge success"}>{product.stock <= 0 ? "Out of stock" : product.stock < Number(product.lowStockLevel ?? 8) ? "Low stock" : "In stock"}</span></td></tr>)}</tbody></table></div></main> : view === "expenses" ? <main className="pos-simple-view"><h1>Expenses</h1><p>Record and review expenses in the Admin Portal.</p><a className="button primary" href="/admin?newExpense=1">Add expense</a></main> : view === "sale" ? 
+      <PosTill shift={shift} role={role} query={query} setQuery={setQuery} barcode={barcode} setBarcode={setBarcode} barcodeInput={barcodeInput} scanBarcode={scanBarcode} category={category} setCategory={setCategory} categories={categories} stockFilter={stockFilter} setStockFilter={setStockFilter} visible={visible} add={add} cart={cart} setCart={setCart} cartNotice={cartNotice} setCartNotice={setCartNotice} change={change} pricing={pricing} orderReference={orderReference} setOrderReference={setOrderReference} orderChannel={orderChannel} setOrderChannel={setOrderChannel} customerName={customerName} setCustomerName={setCustomerName} customerPhone={customerPhone} setCustomerPhone={setCustomerPhone} paymentMethod={paymentMethod} setPaymentMethod={setPaymentMethod} amountPaid={amountPaid} setAmountPaid={setAmountPaid} transactionVerified={transactionVerified} setTransactionVerified={setTransactionVerified} changeDue={changeDue} paymentReady={paymentReady} referenceReady={referenceReady} online={online} busy={busy} setConfirmSale={setConfirmSale} /> : <main className="pos-orders"><div className="pos-title"><div><p className="eyebrow">All channels</p><h1>Orders</h1></div>{["owner", "admin", "supervisor"].includes(role) && <a className="button secondary" href="/admin">Admin Portal</a>}</div><div className="table-tools"><input placeholder="Search client, phone, reference or time" value={orderQuery} onChange={(event) => setOrderQuery(event.target.value)} /><select value={orderStatus} onChange={(event) => setOrderStatus(event.target.value)}><option value="all">All orders</option><option value="pending-payment">Pending payment</option><option value="pending">Pending</option><option value="processing">Processing</option><option value="ready">Ready</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option></select><span>{visibleOrders.length} orders</span></div>{error && <p className="notice error-notice">{error}</p>}<div className="order-card-grid">{visibleOrders.map((order) => <article className="panel pos-order" key={order.orderId}><div className="panel-title"><div><b>{order.orderId}</b><p>{new Date(order.createdAt).toLocaleString("en-GH")}</p></div><span className={order.status === "completed" ? "badge success" : order.status === "cancelled" ? "badge danger" : "badge warning"}>{order.status}</span></div><h3>{order.customer}</h3><p>{order.phone} · {order.deliveryMethod}</p>{order.landmark && <p>{order.landmark}</p>}<div className="order-items">{(order.items || []).map((item) => <span key={item.productId}>{item.quantity} × {item.name} · {item.sku || item.productId}{item.colour && ` · ${item.colour}`}{item.size && ` / ${item.size}`}</span>)}</div><div className="order-total"><span>{order.paymentStatus === "paid" ? "Paid" : "Pending payment"}</span><strong>{money.format(order.total || 0)}</strong></div><div className="order-actions"><button className="button primary" disabled={busy || ["completed", "cancelled"].includes(order.status)} onClick={() => openOrderAtTill(order)}>Open at till</button><select disabled={busy} value={order.status} onChange={(event) => updateOrder(order.orderId, event.target.value)}>{["pending", "confirmed", "paid", "processing", "ready", "completed", "cancelled"].map((status) => <option key={status}>{status}</option>)}</select></div>{order.pickupCode && <strong className="pickup-code">Code {order.pickupCode}</strong>}</article>)}</div></main>}
     {receipt && <div className="modal-backdrop receipt-backdrop"><div className="modal receipt-modal"><div className="receipt-print"><p className="receipt-brand">PAM Essentials & More</p><span className="success-mark">✓</span><h2>{receipt.shiftSummary ? "Shift closed" : receipt.queued ? "Sale queued" : "Payment complete"}</h2><p>{receipt.shiftSummary ? `${receipt.shiftSummary.transactions} transactions recorded.` : receipt.queued ? "This sale will sync when the device reconnects." : "The sale was recorded and stock was updated."}</p><strong className="order-reference">{receipt.receiptId}</strong>{receipt.orderReference && <p>Order {receipt.orderReference}</p>}{receipt.deliveryMethod && <p>{receipt.deliveryMethod}</p>}{receipt.originAddress && <p>Shop collection: {receipt.originAddress}</p>}{receipt.deliveryAddress && <p>Delivery destination: {receipt.deliveryAddress}</p>}{receipt.items?.length > 0 && <div className="receipt-lines">{receipt.items.map((item) => <div key={item.id}><span>{item.quantity} × {item.name} · {item.id}{item.colour && ` · ${item.colour}`}{item.size && ` / ${item.size}`}</span><b>{money.format(item.price * item.quantity)}</b></div>)}</div>}{receipt.discount > 0 && <div className="receipt-row"><span>Discount</span><b>−{money.format(receipt.discount)}</b></div>}<div className="receipt-row total"><span>Total</span><b>{money.format(receipt.total || total)}</b></div>{!receipt.shiftSummary && <><div className="receipt-row"><span>{String(receipt.paymentMethod || "cash").replace("-", " ")}</span><b>{money.format(receipt.amountPaid || receipt.total || 0)}</b></div><div className="receipt-row"><span>Change</span><b>{money.format(receipt.change || 0)}</b></div></>}{receipt.shiftSummary?.paymentMix && <div className="receipt-lines">{Object.entries(receipt.shiftSummary.paymentMix).map(([method, value]) => <div key={method}><span>{method.replace("-", " ")}</span><b>{money.format(value)}</b></div>)}</div>}<p className="receipt-thanks">Thank you for shopping with us.</p></div><div className="receipt-actions">{!receipt.queued && <button className="button secondary" onClick={() => window.print()}>Print receipt</button>}<button className="button primary" onClick={() => setReceipt(null)}>{receipt.shiftSummary ? "Done" : "New sale"}</button></div></div></div>}
     {confirmEndShift && <div className="modal-backdrop"><div className="modal" role="dialog" aria-modal="true" aria-label="Confirm end shift"><h2>End this shift?</h2><p>Sales and payment totals will be recorded. This action cannot be undone.</p><div className="editor-actions"><button className="button secondary" onClick={() => setConfirmEndShift(false)} disabled={busy}>Keep shift open</button><button className="button primary" onClick={toggleShift} disabled={busy}>{busy ? "Ending shift…" : "Confirm End Shift"}</button></div></div></div>}
+    {confirmSale && <div className="modal-backdrop"><div className="modal" role="dialog" aria-modal="true" aria-label="Confirm sale"><h2>Complete this sale?</h2><p>{cart.reduce((count, item) => count + item.quantity, 0)} items · {money.format(total)} · {paymentMethod.replaceAll("-", " ")}</p><p>Check the amount paid and customer details before saving.</p><div className="editor-actions"><button className="button secondary" onClick={() => setConfirmSale(false)} disabled={busy}>Review cart</button><button className="button primary" onClick={checkout} disabled={busy}>{busy ? "Saving sale…" : "Confirm Complete Sale"}</button></div></div></div>}
   </div>;
 }
 

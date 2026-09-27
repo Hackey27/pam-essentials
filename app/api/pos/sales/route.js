@@ -48,12 +48,15 @@ export async function POST(request) {
       if (!shiftSnap.exists || shiftSnap.data().status !== "open" || shiftSnap.data().staffId !== access.user.uid) throw new Error("This till shift is no longer open.");
 
       const normalizedItems = [...quantities].map(([id, quantity]) => ({ id, quantity }));
-      const salesChannel = ["walk-in", "website", "whatsapp"].includes(body.salesChannel) ? body.salesChannel : "walk-in";
+      const salesChannel = ["walk-in", "website", "whatsapp", "phone"].includes(body.salesChannel) ? body.salesChannel : "walk-in";
       const orderReference = String(body.orderReference || "").trim().slice(0, 100) || null;
+      const customerName = String(body.customerName || "").trim().slice(0, 120);
+      const customerPhone = String(body.customerPhone || "").trim().slice(0, 40);
+      if (["website", "whatsapp"].includes(salesChannel) && !(orderReference || (customerName && customerPhone))) throw new Error("Website and WhatsApp sales need an order reference or customer name and phone.");
       const productRefs = normalizedItems.map(({ id }) => store.collection("products").doc(encodeURIComponent(id)));
       const productSnaps = await tx.getAll(...productRefs);
       const linkedOrderSnap = orderReference ? await tx.get(store.collection("orders").doc(orderReference)) : null;
-      if (orderReference && !linkedOrderSnap.exists) throw new Error("The linked order no longer exists.");
+      if (salesChannel === "website" && orderReference && !linkedOrderSnap.exists) throw new Error("The linked website order no longer exists.");
       const linkedOrder = linkedOrderSnap?.data();
       for (let index = 0; index < normalizedItems.length; index += 1) {
         const snap = productSnaps[index];
@@ -113,10 +116,11 @@ export async function POST(request) {
 
       const receiptId = `PAM-${Date.now().toString(36).toUpperCase()}`;
       const total = pricing.total;
-      const paymentMethod = ["cash", "mobile-money", "card"].includes(body.paymentMethod) ? body.paymentMethod : "cash";
-      const tendered = paymentMethod === "cash" ? Number(body.amountPaid) : total;
+      const paymentMethod = ["cash", "mobile-money", "card", "bank-transfer"].includes(body.paymentMethod) ? body.paymentMethod : "cash";
+      if (paymentMethod !== "cash" && body.transactionVerified !== true) throw new Error("Confirm the payment provider notification before completing this sale.");
+      const tendered = Number(body.amountPaid);
       if (!Number.isFinite(tendered) || tendered < total) throw new Error("Amount paid cannot be less than the sale total.");
-      const change = paymentMethod === "cash" ? Math.round((tendered - total) * 100) / 100 : 0;
+      const change = Math.round((tendered - total) * 100) / 100;
       tx.create(saleRef, {
         receiptId,
         clientTransactionId: transactionId,
@@ -131,6 +135,8 @@ export async function POST(request) {
         change,
         salesChannel,
         orderReference,
+        customerName,
+        customerPhone,
         fulfilmentSnapshot: { deliveryMethod: linkedOrder?.deliveryMethod || "pickup", originAddress: linkedOrder?.originAddress || SHOP_ADDRESS, deliveryAddress: linkedOrder?.deliveryAddress || linkedOrder?.landmark || "" },
         taxSnapshot: { enabled: false },
         staffId: access.user.uid,
@@ -139,6 +145,7 @@ export async function POST(request) {
         deviceId,
         createdAt: FieldValue.serverTimestamp(),
       });
+      if (shiftSnap.data().aggregationVersion === 1) tx.update(shiftRef, { transactionCount: FieldValue.increment(1), salesTotal: FieldValue.increment(total), [`paymentMix.${paymentMethod}`]: FieldValue.increment(total) });
       return { receiptId, total, paymentMethod, amountPaid: tendered, change, duplicate: false };
     });
     return NextResponse.json(result);

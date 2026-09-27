@@ -28,6 +28,10 @@ export async function POST(request) {
       staffEmail: access.user.email,
       deviceId: text(body.deviceId, 120),
       status: "open",
+      aggregationVersion: 1,
+      transactionCount: 0,
+      salesTotal: 0,
+      paymentMix: {},
       startedAt: FieldValue.serverTimestamp(),
       createdAt: FieldValue.serverTimestamp(),
     };
@@ -40,18 +44,20 @@ export async function POST(request) {
     const ref = store.collection("shifts").doc(shiftId);
     const snap = await ref.get();
     if (!snap.exists || snap.data().staffId !== access.user.uid || snap.data().status !== "open") return NextResponse.json({ error: "Open shift not found." }, { status: 404 });
-    const salesSnap = await store.collection("sales").where("shiftId", "==", shiftId).get();
-    const sales = salesSnap.docs.map((doc) => doc.data());
-    const summary = {
-      transactions: sales.length,
-      salesTotal: sales.reduce((sum, sale) => sum + Number(sale.total || 0), 0),
-      paymentMix: sales.reduce((mix, sale) => ({ ...mix, [sale.paymentMethod || "other"]: (mix[sale.paymentMethod || "other"] || 0) + Number(sale.total || 0) }), {}),
-    };
+    let summary;
+    if (snap.data().aggregationVersion === 1) summary = { transactions: 0, salesTotal: 0, paymentMix: {} };
+    else {
+      const salesSnap = await store.collection("sales").where("shiftId", "==", shiftId).get();
+      const sales = salesSnap.docs.map((doc) => doc.data());
+      summary = { transactions: sales.length, salesTotal: sales.reduce((sum, sale) => sum + Number(sale.total || 0), 0), paymentMix: sales.reduce((mix, sale) => ({ ...mix, [sale.paymentMethod || "other"]: (mix[sale.paymentMethod || "other"] || 0) + Number(sale.total || 0) }), {}) };
+    }
     try {
       await store.runTransaction(async (tx) => {
         const latest = await tx.get(ref);
         if (!latest.exists || latest.data().status !== "open" || latest.data().staffId !== access.user.uid) throw new Error("This shift has already ended.");
-        tx.update(ref, { status: "closed", endedAt: FieldValue.serverTimestamp(), summary });
+        const finalSummary = latest.data().aggregationVersion === 1 ? { transactions: Number(latest.data().transactionCount || 0), salesTotal: Number(latest.data().salesTotal || 0), paymentMix: latest.data().paymentMix || {} } : summary;
+        summary = finalSummary;
+        tx.update(ref, { status: "closed", endedAt: FieldValue.serverTimestamp(), summary: finalSummary });
       });
     } catch (error) { return NextResponse.json({ error: error.message || "Shift could not be ended." }, { status: 409 }); }
     return NextResponse.json({ shift: { ...serializeDoc(snap), status: "closed", endedAt: new Date().toISOString(), summary } });
