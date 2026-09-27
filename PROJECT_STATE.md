@@ -279,3 +279,9 @@ Current status: storefront, customer flows and presentation are live; corrected 
 - Files changed: `app/pos/page.js`, `app/api/pos/dashboard/route.js`, `app/api/pos/shifts/route.js`, `app/admin/page.js`, `components/PosDashboard.jsx`, `app/globals.css`, `package.json`, `tests/posDashboardEmulator.test.mjs`, and this file. `npm test`, `npm run build`, and the real Auth/Firestore emulator customer-plus-POS suite passed. The emulator test verified that cashier JSON has no cost or profit keys while Owner sees gross/net profit.
 - Pending: publish to `main`, verify Cloud Build, live release health and the POS entry screen without starting a production shift. Then pause at the checkpoint. Next chunk: read this file and `main`, then implement dedicated barcode search, stock and checkout/payment safeguards on the till.
 
+### Chunk 4 validation checkpoint (2026-09-27)
+
+- Commit `fe9ae34740de54cc9368bfbeb9fdd2807c99e015` is on `main`; Cloud Build `ce4c7dbf-1e52-419d-87e4-2ec7b0aa0396` succeeded. The read-only production release check passed: health, 235 priced products, four protected API routes and direct anonymous Firestore denial.
+- The deployed Owner POS tab visibly shows the new PAM Essentials & More shift entry and Staff Sign In button. No production shift or sale was created; password reconfirmation and the 10-minute lock were checked in code/build and the emulator role test, not by leaving a live till running.
+- Chunk 4 is complete. Next chunk: reread this file and current `main`, then implement till barcode scanning, filters, stock/price/promotion revalidation, payment confirmation and duplicate submission safeguards. Preserve the existing server transaction and receipt IDs. The receipt overhaul and transaction detail views follow in chunk 6.
+
