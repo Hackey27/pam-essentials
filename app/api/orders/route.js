@@ -36,6 +36,7 @@ export async function POST(request) {
   if (requested.length > 100 || customer.length > 120 || !/^\+?[0-9 ()-]{7,25}$/.test(phone)) return NextResponse.json({ error: "Check the order details and use a valid phone number." }, { status: 400 });
   const deliveryMethod = String(body.deliveryMethod || "pickup");
   const deliveryAddress = String(body.deliveryAddress || body.landmark || "").trim().slice(0, 500);
+  const notes = String(body.notes || "").trim().slice(0, 1000);
   if (!deliveryMethods.includes(deliveryMethod) || (deliveryMethod === "delivery-shop" && !deliveryAddress)) return NextResponse.json({ error: "Choose a valid fulfilment method and delivery address." }, { status: 400 });
 
   const store = adminDb();
@@ -104,12 +105,13 @@ export async function POST(request) {
     originAddress: SHOP_ADDRESS,
     deliveryAddress: deliveryMethod === "pickup" ? "" : deliveryAddress,
     landmark: deliveryMethod === "pickup" ? "" : deliveryAddress,
+    notes,
     paymentStatus: "pending",
     status: "pending",
     statusHistory: [{ status: "pending", at: new Date(), by: "customer" }],
     createdAt: FieldValue.serverTimestamp(),
   };
   await store.collection("orders").doc(orderId).create(orderSnapshot);
-  return NextResponse.json({ orderId, subtotal: orderSnapshot.subtotal, discount: orderSnapshot.discount, total, items: items.map(({ name, sku, colour, size, quantity, unitPrice, lineTotal }) => ({ name, sku, colour, size, quantity, unitPrice, lineTotal })), deliveryMethod, originAddress: SHOP_ADDRESS, deliveryAddress: orderSnapshot.deliveryAddress });
+  return NextResponse.json({ orderId, subtotal: orderSnapshot.subtotal, discount: orderSnapshot.discount, total, items: items.map(({ name, sku, colour, size, quantity, unitPrice, lineTotal }) => ({ name, sku, colour, size, quantity, unitPrice, lineTotal })), deliveryMethod, originAddress: SHOP_ADDRESS, deliveryAddress: orderSnapshot.deliveryAddress, notes });
 }
 

@@ -39,12 +39,14 @@ function setup() {
 
 test("guest order, claim, account isolation and exact variant totals", async () => {
   const store = setup();
-  const created = await json(await createOrder(request("/api/orders", null, { customer: "Ada", phone: "+233 20 701 5198", deliveryMethod: "delivery-self", deliveryAddress: "Near the school", items: [{ id: "PAM-WB001-PNK-500", quantity: 3 }] })));
+  const created = await json(await createOrder(request("/api/orders", null, { customer: "Ada", phone: "+233 20 701 5198", deliveryMethod: "delivery-self", deliveryAddress: "Near the school", notes: "Please send pink", items: [{ id: "PAM-WB001-PNK-500", quantity: 3 }] })));
   assert.equal(created.status, 200);
   assert.match(created.body.orderId, /^ORD-[A-Z0-9]+-[A-Z0-9]+$/);
   assert.deepEqual([created.body.subtotal, created.body.discount, created.body.total], [105, 5.25, 99.75]);
   assert.deepEqual(created.body.items[0], { name: "Cartoon Water Bottle", sku: "PAM-WB001-PNK-500", colour: "Pink", size: "500ml", quantity: 3, unitPrice: 35, lineTotal: 99.75 });
   assert.equal(store.inspect("orders", created.body.orderId).customerUid, null);
+  assert.equal(store.inspect("orders", created.body.orderId).notes, "Please send pink");
+  assert.match(whatsappOrderMessage(created.body, "Ada", "+233 20 701 5198"), /Notes: Please send pink/);
   assert.equal(store.inspect("orders", created.body.orderId).items[0].variantId, "PAM-WB001-PNK-500");
   assert.equal((await json(await getOrders(request("/api/orders", "customer-a")))).body.orders.length, 0);
   assert.equal((await json(await getOrders(request("/api/orders", "customer-b")))).body.orders.length, 0);

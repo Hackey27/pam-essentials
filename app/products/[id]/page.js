@@ -12,6 +12,8 @@ export default function ProductPage() {
   const [error, setError] = useState("");
   const [added, setAdded] = useState(null);
   const [shared, setShared] = useState(false);
+  const [quickReturnId, setQuickReturnId] = useState("");
+  useEffect(() => { setQuickReturnId(new URLSearchParams(window.location.search).get("quick") || ""); }, []);
   useEffect(() => {
     fetch("/api/catalog/products").then(async (response) => {
       const data = await response.json();
@@ -45,6 +47,7 @@ export default function ProductPage() {
   return <div className="product-page store-shell">
     <header className="product-page-header"><a className="brand" href="/"><span className="brand-mark">P</span><span>PAM Essentials</span></a><a href="/?cart=1">View cart</a></header>
     <main className="product-page-main">
+      <a className="detail-back" href={quickReturnId ? `/?quick=${encodeURIComponent(quickReturnId)}` : "/#catalogue"}>← Back {quickReturnId ? "to Quick View" : "to products"}</a>
       {loading && <div className="empty-state">Loading product…</div>}
       {(error || !loading && !product) && <div className="empty-state"><h1>Product unavailable</h1><p>{error || "This product is no longer in the storefront."}</p><a href="/">Shop products</a></div>}
       {product && <>

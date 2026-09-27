@@ -3,7 +3,7 @@
 Updated: 2026-09-27
 Repository: https://github.com/Hackey27/pam-essentials
 Primary branch: `main`
-Current status: storefront, customer flows and presentation are live; corrected Firestore rules are deployed and verified. Owner-supplied media and contact details remain pending.
+Current status: storefront, customer flows and presentation are live; corrected Firestore rules are deployed and verified. A new storefront/Admin/POS/receipt expansion is in progress. Owner-supplied media and contact details remain pending.
 
 ## Working protocol
 
@@ -217,4 +217,17 @@ Current status: storefront, customer flows and presentation are live; corrected 
 - Remaining validation limit: this is an actual local Firebase service integration, but it does not exercise hosted Firebase/Cloud Run together under a disposable cloud project. Owner-supplied media, footer details and payment provider remain pending.
 - Release status: the test-only change was pushed to `main` as `354818ab04f758917264a3c6db87df0be06422bc`. Its Cloud Build succeeded, and Cloud Run reported revision `pam-essentials-00051-2mg` as created and ready. The live read-only release check passed again with 235 public products, protected endpoint denials and direct Firestore read denial. The state-only checkpoint commit that records this result will trigger its own build.
 - Next: pause at this validation checkpoint. Remaining work depends on the official flyer, product photos, footer contact/social details and payment provider; a full hosted customer-flow check in a disposable cloud project can be scheduled before public launch.
+
+## New storefront, Admin, POS and receipt request (2026-09-27)
+
+- The owner requested additive changes across product discovery, checkout notes and colour handling, category collections, discount/promotion/deal management, POS shift/dashboard/till controls, and 80 mm receipts. Keep existing product/order/category fields and collections; add fields and routes rather than replacing Firestore structures. The example receipt phone number is a placeholder; use the existing verified shop number until the owner supplies a replacement.
+- Planned chunks, each with a fresh state/main check and about six steps: (1) storefront search, mobile filters, Quick View return, colour guidance and checkout notes; (2) Admin product hierarchy and category-level collections; (3) discount, promotions and multi-product PAM Deals rules; (4) POS shift entry, inactivity lock and dashboard; (5) till search, stock/payment/duplicate safeguards; (6) receipt overhaul, transaction details and final cross-surface verification.
+
+### Chunk 1: storefront discovery and notes
+
+- Confirmed GitHub `main` at `befdfec86a6ed84fc9c9ab26427d4090c42917ec` and read this file and `AGENTS.md` before editing. No workbook schema was changed. Existing named random-colour item `BKG-SLM-002` is detected from its explicit name; Admin can also set a new `randomColours` product flag for others.
+- Added random-colour guidance on cards, Quick View/details and cart. Checkout now accepts optional notes (up to 1,000 characters), stores them in the order, returns them in the server snapshot, and includes them in the generated WhatsApp order. The Admin product editor can mark random colours. Existing fields and pricing logic remain intact.
+- Search now shows up to eight matching product suggestions in an active panel above the hero on desktop and mobile. A suggestion opens Quick View. Product detail links carry a return ID and the back arrow restores the original Quick View. The card Quick View action is white; Add to Cart is navy. The mobile catalogue hides the long category tree behind a floating three-line control. WhatsApp controls use an icon.
+- Files changed: `app/page.js`, `app/products/[id]/page.js`, `app/api/orders/route.js`, `app/api/admin/products/route.js`, `app/admin/page.js`, `app/globals.css`, `components/ProductOptions.js`, `components/WhatsAppIcon.js`, `lib/productData.js`, `lib/whatsappOrder.mjs`, `tests/customerFlows.test.mjs`, and this file.
+- Local `npm test` (eight checks) and `npm run build` passed. The note test checks the saved order and WhatsApp text. Pending for this chunk: push to `main`, verify Cloud Build and live desktop/mobile behavior, then pause at the checkpoint before Admin hierarchy work.
 
