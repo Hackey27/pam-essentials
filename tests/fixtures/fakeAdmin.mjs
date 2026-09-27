@@ -3,6 +3,7 @@ export function adminDb() {
 }
 
 export function adminAuth() {
+  if (globalThis.__pamTestAuth) return globalThis.__pamTestAuth;
   return {
     async verifyIdToken(token) {
       const user = globalThis.__pamTestUsers?.get(token);

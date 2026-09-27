@@ -74,7 +74,9 @@ npm install
 npm run dev
 ```
 
-Run `npm test` for focused discount/WhatsApp checks and isolated customer-route integration tests. The latter use an in-memory Firestore double and simulated customer tokens; they never connect to the production Firebase project or create live accounts and orders. They cover guest orders, variants, quantity discounts, guest-order claims, wishlist privacy, staff rejection and unavailable products. Actual Firebase-hosted account registration and Firestore rule deployment still require separate verification in a disposable Firebase project before public launch.
+Run `npm test` for focused discount/WhatsApp checks and isolated customer-route integration tests. The latter use an in-memory Firestore double and simulated customer tokens; they never connect to the production Firebase project or create live accounts and orders. They cover guest orders, variants, quantity discounts, guest-order claims, wishlist privacy, staff rejection and unavailable products.
+
+For an additional identity-service check, start the official Authentication emulator with `npx firebase-tools@15.31.0 emulators:start --only auth --project demo-pam-essentials`. In another terminal, set `FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099` and run `npm run test:auth-emulator`. This creates and deletes two disposable accounts, signs them in through the Firebase client SDK, verifies their tokens with the Admin SDK, then checks the real customer order routes against the in-memory order store. The `demo-` project ID keeps this test separate from production. Deployed Firestore rules and the hosted Firebase service still require a disposable Firebase project for a full service-level check before public launch.
 
 The local environment needs Application Default Credentials to access Firestore-backed API routes. Client authentication uses the Firebase project `pam-essentials-2d7fb`.
 
