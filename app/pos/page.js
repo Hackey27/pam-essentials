@@ -10,6 +10,7 @@ const money = new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS
 function Till() {
   const { user, role } = useAuth();
   const [products, setProducts] = useState([]);
+  const [categoryList, setCategoryList] = useState([]);
   const [discountRules, setDiscountRules] = useState([]);
   const [orders, setOrders] = useState([]);
   const [view, setView] = useState("sale");
@@ -41,11 +42,13 @@ function Till() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
       setProducts(data.products || []);
+      setCategoryList(data.categories || []);
       setDiscountRules(data.discountRules || []);
-      localStorage.setItem("pam-pos-catalogue", JSON.stringify({ products: data.products || [], discountRules: data.discountRules || [] }));
+      localStorage.setItem("pam-pos-catalogue", JSON.stringify({ products: data.products || [], categories: data.categories || [], discountRules: data.discountRules || [] }));
     } catch (err) {
       const cached = JSON.parse(localStorage.getItem("pam-pos-catalogue") || "{}");
       setProducts(cached.products || []);
+      setCategoryList(cached.categories || []);
       setDiscountRules(cached.discountRules || []);
       if (!cached.products?.length) setError(err.message || "Products could not be loaded.");
     }
@@ -110,7 +113,7 @@ function Till() {
     return () => { window.removeEventListener("online", update); window.removeEventListener("offline", update); };
   }, [user]);
 
-  const categories = useMemo(() => ["All", ...new Set(products.map((product) => product.category))], [products]);
+  const categories = useMemo(() => ["All", ...categoryList.filter((item) => products.some((product) => product.categoryId === item.categoryId)).map((item) => item.name)], [products, categoryList]);
   const visible = useMemo(() => products.filter((product) => (category === "All" || product.category === category) && `${product.name} ${product.id}`.toLowerCase().includes(query.toLowerCase())), [products, query, category]);
   const visibleOrders = useMemo(() => orders.filter((order) => {
     const matches = `${order.customer} ${order.phone} ${order.orderId} ${order.createdAt}`.toLowerCase().includes(orderQuery.toLowerCase());
@@ -222,3 +225,4 @@ function Till() {
 export default function PosPage() {
   return <RequireRole allow={["owner", "admin", "supervisor", "cashier"]}><Till /></RequireRole>;
 }
+

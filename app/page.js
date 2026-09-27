@@ -13,6 +13,7 @@ function ProductArt({ name, category }) {
 
 export default function Storefront() {
   const [products, setProducts] = useState([]);
+  const [categoryList, setCategoryList] = useState([]);
   const [discountRules, setDiscountRules] = useState([]);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("All categories");
@@ -37,14 +38,14 @@ export default function Storefront() {
 
   useEffect(() => {
     fetch("/api/catalog/products")
-      .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error); setProducts(data.products || []); setDiscountRules(data.discountRules || []); const highest = Math.ceil(Math.max(0, ...(data.products || []).map((product) => Number(product.price || 0)))); setPriceMax(highest || Infinity); })
+      .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error); setProducts(data.products || []); setCategoryList(data.categories || []); setDiscountRules(data.discountRules || []); const highest = Math.ceil(Math.max(0, ...(data.products || []).map((product) => Number(product.price || 0)))); setPriceMax(highest || Infinity); })
       .catch((err) => setError(err.message || "The catalogue is unavailable."))
       .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => { setCookieVisible(localStorage.getItem("pam-cookie-notice") !== "accepted"); }, []);
 
-  const categories = useMemo(() => ["All categories", ...new Set(products.map((product) => product.category))], [products]);
+  const categories = useMemo(() => ["All categories", ...categoryList.filter((item) => products.some((product) => product.categoryId === item.categoryId)).map((item) => item.name)], [products, categoryList]);
   const visible = useMemo(() => {
     const term = query.trim().toLowerCase();
     const searchWords = term.replace(/\bboxes\b/g, "box").replace(/\bbottles\b/g, "bottle").replace(/\bpens\b/g, "pen").replace(/\bpencils\b/g, "pencil").split(/\s+/).filter(Boolean);
@@ -196,3 +197,4 @@ export default function Storefront() {
     </div>
   );
 }
+

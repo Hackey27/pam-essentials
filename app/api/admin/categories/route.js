@@ -18,6 +18,8 @@ export async function POST(request) {
   if (nameMatches.docs.some((doc) => doc.id !== categoryId)) return NextResponse.json({ error: "Category names must be unique." }, { status: 409 });
   if (body.create && existing.exists) return NextResponse.json({ error: "That category already exists." }, { status: 409 });
   if (!body.create && !existing.exists) return NextResponse.json({ error: "Category not found." }, { status: 404 });
+  const requestedSort = Number(body.sortOrder);
+  if (!Number.isInteger(requestedSort) || requestedSort < 0) return NextResponse.json({ error: "Sort order must be a nonnegative whole number." }, { status: 400 });
 
   const value = {
     categoryId,
@@ -25,7 +27,7 @@ export async function POST(request) {
     description: text(body.description, 1000),
     active: body.active !== false,
     archived: Boolean(body.archived),
-    sortOrder: Math.max(0, Math.floor(Number(body.sortOrder || 0))),
+    sortOrder: requestedSort,
     updatedAt: FieldValue.serverTimestamp(),
   };
   const batch = store.batch();
@@ -35,3 +37,4 @@ export async function POST(request) {
   await batch.commit();
   return NextResponse.json({ ok: true, categoryId });
 }
+

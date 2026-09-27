@@ -3,7 +3,7 @@
 Updated: 2026-09-27
 Repository: https://github.com/Hackey27/pam-essentials
 Primary branch: `main`
-Current status: discovery checkpoint for the expanded catalogue and storefront request; no application or catalogue data has been changed yet.
+Current status: catalogue hierarchy implementation validated locally; public-safe commit, deployment and authenticated Firestore sync pending.
 
 ## Working protocol
 
@@ -29,14 +29,14 @@ Current status: discovery checkpoint for the expanded catalogue and storefront r
 
 ## Current work in progress
 
-- Discovery chunk complete. The next chunk will update the repository catalogue source and build an idempotent metadata sync for existing Firestore products, then validate the generated data and Admin/POS/public projections.
-- Awaiting the hero flyer asset and category/subcategory sort numbers. The user confirmed that unpriced zero-stock products remain hidden until priced.
+- Catalogue hierarchy code is ready for commit. After deployment, an authenticated Admin must run Import catalogue once to create child hierarchy records and sync descriptive product metadata in Firestore.
+- Awaiting the hero flyer asset. The user resolved sorting: preserve the current Admin category order and initialize child order from workbook appearance within each parent.
 
 ## Key constraints and requirements
 
 - Apply approved changes to this repository and commit them to `main`, as the user instructed. Recheck the branch head before every write.
 - Every push to `main` triggers Cloud Build and a Cloud Run revision according to `README.md`; verify the build and live site after a push.
-- `Data.xlsx` is the catalogue source. Include every product in Admin. Products without a positive selling price must stay out of the storefront and POS.
+- The user-supplied `Data.xlsx` is the source for descriptive catalogue metadata. Keep its sensitive pricing, cost and stock columns out of new public commits. Include every product in Admin. Products without a positive selling price must stay out of the storefront and POS.
 - Preserve server-side pricing, stock validation, role checks, audit trails, and cost/profit access controls when changing commerce flows.
 - Target Google Cloud/Firebase project `pam-essentials-2d7fb`, Cloud Run service `pam-essentials`, region `europe-west1`. Confirm the target explicitly before cloud operations.
 - Firestore rules are deployed separately from the Cloud Run image.
@@ -64,8 +64,8 @@ Current status: discovery checkpoint for the expanded catalogue and storefront r
 - Customer account creation and tracking are now requested; the customer path must remain separate from staff role checks.
 - The zero-stock visibility conflict is resolved: all 29 current zero-stock rows are unpriced and stay hidden until priced. Show future priced zero-stock items with an Out of Stock tag and disabled purchase controls.
 - The repository and supplied workbook contain no hero flyer or product/variant image assets. Request the flyer and accurate product imagery, or use clearly marked placeholders if the user approves.
-- The workbook has no category or subcategory sort-number columns. Existing Admin category `sortOrder` exists; await the user's sorting preference for subcategories.
-- The existing seed endpoints skip existing Firestore documents. A controlled metadata sync and an authenticated execution path are required for the changes to appear live; do not overwrite live stock, prices, or audits.
+- The workbook has no sort-number columns. Existing Admin category order is authoritative; child initial order follows workbook appearance within each parent. Admin can change all three levels later.
+- The Admin Import catalogue endpoint now safely syncs descriptive metadata for existing products. An authenticated execution is still required for changes to appear live; live stock, prices, cost and audits must remain intact.
 - The earlier chat reported that publishing versioned Firestore rules required an authenticated Firebase account. Current deployed rules have not been verified here.
 - The payment provider for online `Pay Now` has not been selected.
 - Public storefront count was 235 priced products on 2026-09-26; role behavior should be rechecked when relevant to a requested change.
@@ -82,6 +82,18 @@ Current status: discovery checkpoint for the expanded catalogue and storefront r
 ## Next recommended steps
 
 1. Reread this file and the current `main` head at the next chunk.
-2. Use the confirmed unpriced-item rule; resolve the flyer asset and sort order from the pending user answers when available.
-3. Complete catalogue-data chunk steps without overwriting live operational quantities or prices.
-4. Update this file and pause at its validation checkpoint.
+2. Use the confirmed unpriced-item rule and Admin-owned hierarchy sorting. Obtain the flyer asset when available.
+3. Commit the hierarchy change, verify deployment, run the authenticated Admin import and verify live data.
+4. Pause at the catalogue hierarchy validation checkpoint before the browsing chunk.
+
+## Catalogue hierarchy checkpoint (2026-09-27)
+
+- The supplied workbook was read locally without changing its columns or records. Its SHA-256 is `8DE099EE2C5E2C442359AD4E260AC07D48EB8F4298AA04D0AE268B44C5870E68`. Automatic approval review rejected publishing this workbook or the generated full catalogue to the public GitHub repository because they expose internal cost, wholesale pricing and stock. The public commit therefore leaves the existing workbook and full product seed intact, and adds `data/product_metadata.json` with only descriptive fields.
+- Header-based generation produced 264 product metadata records, 13 category source labels, 51 subcategories and 13 sub-subcategories. Child initial sort orders follow first appearance in the workbook within each parent. The workbook needs no sort-number columns.
+- Admin forms now manage sort order and active/archived state at category, subcategory and sub-subcategory levels. New Firestore collections `subcategories` and `sub_subcategories` add to the existing data structure. Existing category records, their sort orders and their active states are preserved.
+- The Admin Import catalogue action is idempotent: it updates product names, category assignment and descriptive hierarchy/variant/search metadata, but does not overwrite live stock, selling price, cost, product active state, images or pinned status. It creates only missing hierarchy records and preserves any child Admin edits on later imports.
+- Public and POS APIs return the same ordered active hierarchy and hide products under deactivated child nodes. The storefront and POS category controls use API category order. Admin product labels follow current hierarchy names.
+- Files changed in the public-safe commit: `data/product_metadata.json`, `data/category_hierarchy.json`, `scripts/generate_seed_data.py`, `lib/categoryHierarchy.js`, `lib/commerce.js`, `lib/productData.js`, `app/api/admin/catalog/route.js`, `app/api/admin/categories/route.js`, `app/api/admin/hierarchy/route.js`, `app/api/admin/seed/route.js`, `app/api/catalog/products/route.js`, `app/api/pos/products/route.js`, `app/api/orders/route.js`, `app/api/pos/sales/route.js`, `app/admin/page.js`, `app/page.js`, `app/pos/page.js`, and this file.
+- Local `npm run build` passed. The initial validation attempt used a dependency junction that Turbopack rejected; a normal offline install resolved that local-only issue.
+- Outstanding release work: commit the public-safe files to main, verify Cloud Build/Cloud Run, execute the authenticated Admin import, verify live hierarchy and order. No live Firestore change is yet confirmed. If the workbook itself must be stored in GitHub, the owner must choose a private destination and approve that separate publication. The hero flyer and product images remain unavailable.
+

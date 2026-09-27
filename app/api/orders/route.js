@@ -57,7 +57,7 @@ export async function POST(request) {
   for (let index = 0; index < normalizedItems.length; index += 1) {
     const item = normalizedItems[index];
     const snap = productSnaps[index];
-    if (!snap.exists || !availableForSale(snap.data(), context.activeCategoryIds)) {
+    if (!snap.exists || !availableForSale(snap.data(), context)) {
       return NextResponse.json({ error: "A selected product is no longer available." }, { status: 409 });
     }
     const product = snap.data();
@@ -99,3 +99,4 @@ export async function POST(request) {
   });
   return NextResponse.json({ orderId, total });
 }
+

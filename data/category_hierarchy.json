@@ -1,0 +1,471 @@
+{
+  "categories": [
+    {
+      "categoryId": "bottles-accessories",
+      "name": "Bottles & Accessories",
+      "sortOrder": 1
+    },
+    {
+      "categoryId": "lunch-box",
+      "name": "Lunch Box",
+      "sortOrder": 2
+    },
+    {
+      "categoryId": "writing-materials-accessories",
+      "name": "Writing Materials & Accessories",
+      "sortOrder": 3
+    },
+    {
+      "categoryId": "storage",
+      "name": "Storage",
+      "sortOrder": 4
+    },
+    {
+      "categoryId": "packaging",
+      "name": "Packaging",
+      "sortOrder": 5
+    },
+    {
+      "categoryId": "hygiene",
+      "name": "Hygiene",
+      "sortOrder": 6
+    },
+    {
+      "categoryId": "toys",
+      "name": "Toys",
+      "sortOrder": 7
+    },
+    {
+      "categoryId": "label-stickers",
+      "name": "Label Stickers",
+      "sortOrder": 8
+    },
+    {
+      "categoryId": "art",
+      "name": "Art",
+      "sortOrder": 9
+    },
+    {
+      "categoryId": "supplies",
+      "name": "Supplies",
+      "sortOrder": 10
+    },
+    {
+      "categoryId": "seasonals",
+      "name": "Seasonals",
+      "sortOrder": 11
+    },
+    {
+      "categoryId": "home-accessories",
+      "name": "Home Accessories",
+      "sortOrder": 12
+    },
+    {
+      "categoryId": "personal",
+      "name": "Personal",
+      "sortOrder": 13
+    }
+  ],
+  "subcategories": [
+    {
+      "subcategoryId": "bottles-accessories--bottles",
+      "categoryId": "bottles-accessories",
+      "name": "Bottles",
+      "sortOrder": 1
+    },
+    {
+      "subcategoryId": "bottles-accessories--cup",
+      "categoryId": "bottles-accessories",
+      "name": "Cup",
+      "sortOrder": 2
+    },
+    {
+      "subcategoryId": "bottles-accessories--accessories",
+      "categoryId": "bottles-accessories",
+      "name": "Accessories",
+      "sortOrder": 3
+    },
+    {
+      "subcategoryId": "bottles-accessories--brush",
+      "categoryId": "bottles-accessories",
+      "name": "Brush",
+      "sortOrder": 4
+    },
+    {
+      "subcategoryId": "lunch-box--bento",
+      "categoryId": "lunch-box",
+      "name": "Bento",
+      "sortOrder": 1
+    },
+    {
+      "subcategoryId": "writing-materials-accessories--pencil-cases",
+      "categoryId": "writing-materials-accessories",
+      "name": "Pencil Cases",
+      "sortOrder": 1
+    },
+    {
+      "subcategoryId": "storage--spray-bottles",
+      "categoryId": "storage",
+      "name": "Spray Bottles",
+      "sortOrder": 1
+    },
+    {
+      "subcategoryId": "packaging--paper-bags",
+      "categoryId": "packaging",
+      "name": "Paper Bags",
+      "sortOrder": 1
+    },
+    {
+      "subcategoryId": "storage--kitchen",
+      "categoryId": "storage",
+      "name": "Kitchen",
+      "sortOrder": 2
+    },
+    {
+      "subcategoryId": "storage--organiser",
+      "categoryId": "storage",
+      "name": "Organiser",
+      "sortOrder": 3
+    },
+    {
+      "subcategoryId": "packaging--plastic-bags",
+      "categoryId": "packaging",
+      "name": "Plastic Bags",
+      "sortOrder": 2
+    },
+    {
+      "subcategoryId": "writing-materials-accessories--notepads",
+      "categoryId": "writing-materials-accessories",
+      "name": "Notepads",
+      "sortOrder": 2
+    },
+    {
+      "subcategoryId": "writing-materials-accessories--book-cover",
+      "categoryId": "writing-materials-accessories",
+      "name": "Book Cover",
+      "sortOrder": 3
+    },
+    {
+      "subcategoryId": "writing-materials-accessories--sticky-notes",
+      "categoryId": "writing-materials-accessories",
+      "name": "Sticky Notes",
+      "sortOrder": 4
+    },
+    {
+      "subcategoryId": "toys--stickers",
+      "categoryId": "toys",
+      "name": "Stickers",
+      "sortOrder": 1
+    },
+    {
+      "subcategoryId": "writing-materials-accessories--markers",
+      "categoryId": "writing-materials-accessories",
+      "name": "Markers",
+      "sortOrder": 5
+    },
+    {
+      "subcategoryId": "writing-materials-accessories--cleaning",
+      "categoryId": "writing-materials-accessories",
+      "name": "Cleaning",
+      "sortOrder": 6
+    },
+    {
+      "subcategoryId": "writing-materials-accessories--pens",
+      "categoryId": "writing-materials-accessories",
+      "name": "Pens",
+      "sortOrder": 7
+    },
+    {
+      "subcategoryId": "supplies--office-shop",
+      "categoryId": "supplies",
+      "name": "Office/Shop",
+      "sortOrder": 1
+    },
+    {
+      "subcategoryId": "writing-materials-accessories--pencils",
+      "categoryId": "writing-materials-accessories",
+      "name": "Pencils",
+      "sortOrder": 8
+    },
+    {
+      "subcategoryId": "writing-materials-accessories--highlighters",
+      "categoryId": "writing-materials-accessories",
+      "name": "Highlighters",
+      "sortOrder": 9
+    },
+    {
+      "subcategoryId": "writing-materials-accessories--erasers",
+      "categoryId": "writing-materials-accessories",
+      "name": "Erasers",
+      "sortOrder": 10
+    },
+    {
+      "subcategoryId": "packaging--plastic-bag",
+      "categoryId": "packaging",
+      "name": "Plastic Bag",
+      "sortOrder": 3
+    },
+    {
+      "subcategoryId": "writing-materials-accessories--sharpeners",
+      "categoryId": "writing-materials-accessories",
+      "name": "Sharpeners",
+      "sortOrder": 11
+    },
+    {
+      "subcategoryId": "writing-materials-accessories--rulers",
+      "categoryId": "writing-materials-accessories",
+      "name": "Rulers",
+      "sortOrder": 12
+    },
+    {
+      "subcategoryId": "hygiene--wipes",
+      "categoryId": "hygiene",
+      "name": "Wipes",
+      "sortOrder": 1
+    },
+    {
+      "subcategoryId": "supplies--office",
+      "categoryId": "supplies",
+      "name": "Office",
+      "sortOrder": 2
+    },
+    {
+      "subcategoryId": "writing-materials-accessories--office",
+      "categoryId": "writing-materials-accessories",
+      "name": "Office",
+      "sortOrder": 13
+    },
+    {
+      "subcategoryId": "toys--educational",
+      "categoryId": "toys",
+      "name": "Educational",
+      "sortOrder": 2
+    },
+    {
+      "subcategoryId": "toys--play",
+      "categoryId": "toys",
+      "name": "Play",
+      "sortOrder": 3
+    },
+    {
+      "subcategoryId": "home-accessories--kitchen",
+      "categoryId": "home-accessories",
+      "name": "Kitchen",
+      "sortOrder": 1
+    },
+    {
+      "subcategoryId": "personal--beauty",
+      "categoryId": "personal",
+      "name": "Beauty",
+      "sortOrder": 1
+    },
+    {
+      "subcategoryId": "hygiene--kitchen",
+      "categoryId": "hygiene",
+      "name": "Kitchen",
+      "sortOrder": 2
+    },
+    {
+      "subcategoryId": "hygiene--tissue",
+      "categoryId": "hygiene",
+      "name": "Tissue",
+      "sortOrder": 3
+    },
+    {
+      "subcategoryId": "supplies--school",
+      "categoryId": "supplies",
+      "name": "School",
+      "sortOrder": 3
+    },
+    {
+      "subcategoryId": "art--creative",
+      "categoryId": "art",
+      "name": "Creative",
+      "sortOrder": 1
+    },
+    {
+      "subcategoryId": "supplies--shop",
+      "categoryId": "supplies",
+      "name": "Shop",
+      "sortOrder": 4
+    },
+    {
+      "subcategoryId": "supplies--tape",
+      "categoryId": "supplies",
+      "name": "Tape",
+      "sortOrder": 5
+    },
+    {
+      "subcategoryId": "hygiene--earbuds",
+      "categoryId": "hygiene",
+      "name": "Earbuds",
+      "sortOrder": 4
+    },
+    {
+      "subcategoryId": "writing-materials-accessories--file-folders",
+      "categoryId": "writing-materials-accessories",
+      "name": "File & Folders",
+      "sortOrder": 14
+    },
+    {
+      "subcategoryId": "home-accessories--home",
+      "categoryId": "home-accessories",
+      "name": "Home",
+      "sortOrder": 2
+    },
+    {
+      "subcategoryId": "home-accessories--cleaning",
+      "categoryId": "home-accessories",
+      "name": "Cleaning",
+      "sortOrder": 3
+    },
+    {
+      "subcategoryId": "hygiene--plaster",
+      "categoryId": "hygiene",
+      "name": "Plaster",
+      "sortOrder": 5
+    },
+    {
+      "subcategoryId": "hygiene--face-towel",
+      "categoryId": "hygiene",
+      "name": "Face Towel",
+      "sortOrder": 6
+    },
+    {
+      "subcategoryId": "hygiene--towel",
+      "categoryId": "hygiene",
+      "name": "Towel",
+      "sortOrder": 7
+    },
+    {
+      "subcategoryId": "supplies--organiser",
+      "categoryId": "supplies",
+      "name": "Organiser",
+      "sortOrder": 6
+    },
+    {
+      "subcategoryId": "packaging--envelope",
+      "categoryId": "packaging",
+      "name": "Envelope",
+      "sortOrder": 4
+    },
+    {
+      "subcategoryId": "seasonals--plastic-bags",
+      "categoryId": "seasonals",
+      "name": "Plastic Bags",
+      "sortOrder": 1
+    },
+    {
+      "subcategoryId": "personal--shoes",
+      "categoryId": "personal",
+      "name": "Shoes",
+      "sortOrder": 2
+    },
+    {
+      "subcategoryId": "supplies--kitchen",
+      "categoryId": "supplies",
+      "name": "Kitchen",
+      "sortOrder": 7
+    },
+    {
+      "subcategoryId": "packaging--paper-bag",
+      "categoryId": "packaging",
+      "name": "Paper bag",
+      "sortOrder": 5
+    }
+  ],
+  "subSubcategories": [
+    {
+      "subSubcategoryId": "bottles-accessories--bottles--insulated",
+      "subcategoryId": "bottles-accessories--bottles",
+      "categoryId": "bottles-accessories",
+      "name": "Insulated",
+      "sortOrder": 1
+    },
+    {
+      "subSubcategoryId": "bottles-accessories--bottles--cartoon",
+      "subcategoryId": "bottles-accessories--bottles",
+      "categoryId": "bottles-accessories",
+      "name": "Cartoon",
+      "sortOrder": 2
+    },
+    {
+      "subSubcategoryId": "bottles-accessories--bottles--heat-resistant",
+      "subcategoryId": "bottles-accessories--bottles",
+      "categoryId": "bottles-accessories",
+      "name": "Heat Resistant",
+      "sortOrder": 3
+    },
+    {
+      "subSubcategoryId": "bottles-accessories--bottles--my-bottle",
+      "subcategoryId": "bottles-accessories--bottles",
+      "categoryId": "bottles-accessories",
+      "name": "My Bottle",
+      "sortOrder": 4
+    },
+    {
+      "subSubcategoryId": "bottles-accessories--bottles--double-layer",
+      "subcategoryId": "bottles-accessories--bottles",
+      "categoryId": "bottles-accessories",
+      "name": "Double Layer",
+      "sortOrder": 5
+    },
+    {
+      "subSubcategoryId": "bottles-accessories--bottles--stainless",
+      "subcategoryId": "bottles-accessories--bottles",
+      "categoryId": "bottles-accessories",
+      "name": "Stainless",
+      "sortOrder": 6
+    },
+    {
+      "subSubcategoryId": "bottles-accessories--brush--thin",
+      "subcategoryId": "bottles-accessories--brush",
+      "categoryId": "bottles-accessories",
+      "name": "Thin",
+      "sortOrder": 1
+    },
+    {
+      "subSubcategoryId": "storage--organiser--home",
+      "subcategoryId": "storage--organiser",
+      "categoryId": "storage",
+      "name": "Home",
+      "sortOrder": 1
+    },
+    {
+      "subSubcategoryId": "writing-materials-accessories--pens--gel",
+      "subcategoryId": "writing-materials-accessories--pens",
+      "categoryId": "writing-materials-accessories",
+      "name": "Gel",
+      "sortOrder": 1
+    },
+    {
+      "subSubcategoryId": "writing-materials-accessories--pens--ball-point",
+      "subcategoryId": "writing-materials-accessories--pens",
+      "categoryId": "writing-materials-accessories",
+      "name": "Ball Point",
+      "sortOrder": 2
+    },
+    {
+      "subSubcategoryId": "home-accessories--kitchen--baking",
+      "subcategoryId": "home-accessories--kitchen",
+      "categoryId": "home-accessories",
+      "name": "Baking",
+      "sortOrder": 1
+    },
+    {
+      "subSubcategoryId": "supplies--shop--rack",
+      "subcategoryId": "supplies--shop",
+      "categoryId": "supplies",
+      "name": "Rack",
+      "sortOrder": 1
+    },
+    {
+      "subSubcategoryId": "home-accessories--home--laundry",
+      "subcategoryId": "home-accessories--home",
+      "categoryId": "home-accessories",
+      "name": "Laundry",
+      "sortOrder": 1
+    }
+  ]
+}
+

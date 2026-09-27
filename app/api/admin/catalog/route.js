@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { adminDb, requireRole } from "@/lib/admin";
 import { serializeDoc } from "@/lib/productData";
+import { categoryLabels, loadHierarchy } from "@/lib/categoryHierarchy";
 
 export const dynamic = "force-dynamic";
 
@@ -10,11 +11,11 @@ export async function GET(request) {
 
   const store = adminDb();
   const isAdmin = ["owner", "admin"].includes(access.user.role);
-  const [productsSnap, ordersSnap, movementsSnap, categoriesSnap, discountsSnap, settingsSnap, usersSnap, auditSnap, salesSnap, expensesSnap] = await Promise.all([
+  const [productsSnap, ordersSnap, movementsSnap, hierarchy, discountsSnap, settingsSnap, usersSnap, auditSnap, salesSnap, expensesSnap] = await Promise.all([
     store.collection("products").get(),
     store.collection("orders").get(),
     store.collection("stock_movements").orderBy("createdAt", "desc").limit(100).get(),
-    store.collection("categories").get(),
+    loadHierarchy(store),
     isAdmin ? store.collection("discount_rules").get() : Promise.resolve({ docs: [] }),
     isAdmin ? store.collection("settings").get() : Promise.resolve({ docs: [] }),
     isAdmin ? store.collection("users").get() : Promise.resolve({ docs: [] }),
@@ -23,11 +24,11 @@ export async function GET(request) {
     isAdmin ? store.collection("expenses").orderBy("createdAt", "desc").limit(500).get() : Promise.resolve({ docs: [] }),
   ]);
 
-  const fullProducts = productsSnap.docs.map(serializeDoc).sort((a, b) => a.name.localeCompare(b.name));
+  const fullProducts = productsSnap.docs.map(serializeDoc).map((product) => ({ ...product, ...categoryLabels(product, hierarchy) })).sort((a, b) => a.name.localeCompare(b.name));
   const products = isAdmin ? fullProducts : fullProducts.map(({ costPrice, wholesalePackPrice, ...product }) => product);
   const orders = ordersSnap.docs.map(serializeDoc).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
   const movements = movementsSnap.docs.map(serializeDoc);
-  const categories = categoriesSnap.docs.map(serializeDoc).sort((a, b) => Number(a.sortOrder || 0) - Number(b.sortOrder || 0));
+  const { categories, subcategories, subSubcategories } = hierarchy;
   const discounts = discountsSnap.docs.map(serializeDoc).sort((a, b) => Number(b.priority || 0) - Number(a.priority || 0));
   const settings = Object.fromEntries(settingsSnap.docs.map((doc) => [doc.id, serializeDoc(doc)]));
   const users = usersSnap.docs.map(serializeDoc).map(({ email = "", displayName = "", role = "", active = true, id }) => ({ id, email, displayName, role, active }));
@@ -53,5 +54,6 @@ export async function GET(request) {
     metrics.netProfit = metrics.profit - metrics.expenses;
   }
 
-  return NextResponse.json({ products, orders, movements, categories, discounts, settings, users, audit, sales, expenses, metrics, permissions: { isAdmin } });
+  return NextResponse.json({ products, orders, movements, categories, subcategories, subSubcategories, discounts, settings, users, audit, sales, expenses, metrics, permissions: { isAdmin } });
 }
+

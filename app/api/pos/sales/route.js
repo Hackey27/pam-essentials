@@ -61,7 +61,7 @@ export async function POST(request) {
         if (!snap.exists) throw new Error("A selected product no longer exists.");
         const product = snap.data();
         const quantity = item.quantity;
-        if (!availableForSale(product, context.activeCategoryIds)) throw new Error(`${product.name} is not available for sale.`);
+        if (!availableForSale(product, context)) throw new Error(`${product.name} is not available for sale.`);
         if (Number(product.stock) < quantity) throw new Error(`Only ${product.stock} × ${product.name} remain.`);
 
         const lineTotal = Number(product.price) * quantity;
@@ -136,3 +136,4 @@ export async function POST(request) {
     return NextResponse.json({ error: error.message || "Checkout failed." }, { status: 409 });
   }
 }
+
