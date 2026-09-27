@@ -3,7 +3,7 @@
 Updated: 2026-09-27
 Repository: https://github.com/Hackey27/pam-essentials
 Primary branch: `main`
-Current status: customer orders implementation deployed and checked; presentation and release is next.
+Current status: storefront, customer flows and presentation are live; corrected Firestore rules are deployed and verified. Owner-supplied media and contact details remain pending.
 
 ## Working protocol
 
@@ -29,8 +29,8 @@ Current status: customer orders implementation deployed and checked; presentatio
 
 ## Current work in progress
 
-- Catalogue metadata import, browsing, product detail, Quick View and variant-aware cart are live. Customer orders code was pushed in commit `8e4fa4c8d07a20df00443abbf2f2550a2521a49b`; its production build passed and the new customer entry point and checkout prompts were observed live.
-- The user will supply accurate product photos and the hero flyer later. Continue using labelled placeholders until then. Existing Admin category order and initialized child order remain authoritative.
+- Catalogue metadata import, browsing, product detail, Quick View, variant-aware cart, customer orders and presentation are live. The production Firestore rules now restrict direct product and sale reads to active Owner/Admin profiles.
+- The user will supply accurate product photos, hero flyer and footer details later. Continue using labelled placeholders until then. Existing Admin category order and initialized child order remain authoritative.
 
 ## Key constraints and requirements
 
@@ -66,7 +66,7 @@ Current status: customer orders implementation deployed and checked; presentatio
 - The repository and supplied workbook contain no hero flyer or product/variant image assets. The user will provide them later; continue with clearly marked placeholders.
 - The workbook has no sort-number columns. Existing Admin category order is authoritative; child initial order follows workbook appearance within each parent. Admin can change all three levels later.
 - The Admin Import catalogue endpoint already ran successfully and safely refreshed 264 product details and the child hierarchy. Live stock, prices, cost and audits remain intact.
-- The earlier chat reported that publishing versioned Firestore rules required an authenticated Firebase account. Current deployed rules have not been verified here.
+- Corrected Firestore rules were deployed on 2026-09-27 and the anonymous product read was denied. The live role matrix beyond anonymous was tested in the emulator, not with production staff identities.
 - The payment provider for online `Pay Now` has not been selected.
 - Public storefront count was 235 priced products on 2026-09-26; role behavior should be rechecked when relevant to a requested change.
 
@@ -188,4 +188,13 @@ Current status: customer orders implementation deployed and checked; presentatio
 - Files changed: `firestore.rules`, `firebase.json`, `tests/firestoreRules.test.mjs`, `package.json`, `README.md`, and this file. Local Java and emulator archives are temporary and are not part of the repository.
 - Production rules deployment is a critical open step: Firebase CLI reports no authorized account in this environment, and pushing `firestore.rules` to GitHub does not activate it in Firebase. Until the corrected rules are deployed, the existing direct-read exposure may remain live. No production records or rules were changed in this chunk.
 - Release status: commit `3b1580673484e9afad632a9ac4a85c8c30c80617` was pushed to `main`. `npm test` (eight checks), `npm run test:auth-emulator`, `npm run test:firestore-emulator` and `npm run build` all passed. The emulators were stopped after testing. Cloud Run builds do not publish Firestore rules; the live-rule deployment remains open. At the checkpoint, reread this file and `main` before the next chunk. Secure Firebase CLI access and deploy/verify the corrected rules, then continue launch operations review. Flyer, product photos, footer email/social details and payment provider still await owner input.
+
+## Production rules deployment checkpoint (2026-09-27)
+
+- Began by rereading this file and confirming GitHub `main` at `b5209a7c700cb7eb930988cc3cf09a85703b0e81`. Prepared and completed the Firebase CLI login using the owner's Google account, then confirmed `pam-essentials-2d7fb` appears in the accessible Firebase projects. No credential or authorization code is stored in this file or the repository commit.
+- Before deployment, a read-only anonymous Firestore REST request for the known product `BOT-HRB-795-004-WH` returned HTTP 200 with `costPrice` and `wholesalePackPrice` fields present. Values were not printed. This confirmed that the direct-read exposure was live.
+- Deployed the tested `firestore.rules` from the main snapshot with `firebase deploy --only firestore:rules --project pam-essentials-2d7fb --non-interactive`. Firebase reported successful compilation and release to Cloud Firestore. Repeating the same anonymous product read returned HTTP 403 `PERMISSION_DENIED`.
+- Immediately after release, the Cloud Run homepage and `/api/catalog/products` both returned HTTP 200; the catalogue API still contained the known product SKU. No product, order, payment or staff account was changed.
+- Files changed in this chunk: only `PROJECT_STATE.md`. The production rules release is an independent Firebase operation. Live staff-role access was not tested with production identities; emulator coverage for those roles remains the validation evidence.
+- Next: publish this checkpoint to `main`, then begin a launch operations review. The official flyer, product photos, footer email/social details and payment provider remain pending owner input.
 
