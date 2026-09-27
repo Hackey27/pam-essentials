@@ -5,7 +5,7 @@ PAM Essentials is one connected retail system with a customer storefront, a staf
 ## Stack
 - Next.js App Router: storefront at `/`, POS at `/pos`, Admin Portal at `/admin`
 - Firestore (Native mode, `(default)` database, europe-west1) via the Firebase Admin SDK (`lib/admin.js`)
-- Firebase Authentication for staff identity and role-aware access
+- Firebase Authentication for staff identity and separate optional customer accounts
 - Deployed to Cloud Run (europe-west1) from the `Dockerfile`
 
 ## Product catalogue
@@ -29,6 +29,12 @@ npm run seed:firestore
 The storefront receives ordered active categories, subcategories and sub-subcategories from the catalogue API. Selecting a category shows all products beneath it; subcategory checkboxes can be combined, while selecting a sub-subcategory shows its exact products. Admin owns hierarchy order and active state. Products with a selling price remain visible when stock reaches zero, with an Out of Stock tag.
 
 Admin can mark a product as a New Arrival or assign it to Back to School, Promotion or PAM Deals. Targeted active discount rules drive the On Sale filter; the standard global quantity discount does not label every product as on sale. Set the Cloud Run environment variable `STORE_PUBLIC=true` only at the public launch to enable anonymous product click counting and popularity-based ordering. Until then, the five curated popular searches remain unchanged. Paid orders and completed walk-in POS sales increment purchase counts; raw click and purchase totals are not returned in the public catalogue API.
+
+## Customer orders
+
+Customers can check out as guests or create an account at `/account`. Staff sign-in remains at `/login`. A customer account stores its wishlist and can view only orders attached to that account. Earlier guest orders can be linked with their reference and checkout phone number. The public order status endpoint requires customer authentication; the reference and phone number alone no longer reveal an order.
+
+The global seeded 5% rule applies when the cart contains at least three units across products, subject to the active Admin rule. Storefront, order creation and POS use the same rule and keep server-side prices authoritative. Self-arranged delivery records the shop collection address; shop-arranged delivery requires a destination. Both fields appear in order details and linked POS receipts. Online payment remains unavailable until a provider is configured.
 
 ## Server-authoritative operations
 

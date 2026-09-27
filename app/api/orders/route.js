@@ -1,32 +1,30 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { NextResponse } from "next/server";
 import { adminDb } from "@/lib/admin";
+import { customerIdentity, optionalCustomerIdentity } from "@/lib/customerAuth";
 import { availableForSale, catalogueContext, resolveDiscount } from "@/lib/commerce";
+import { deliveryMethods, SHOP_ADDRESS } from "@/lib/shop";
+
+export const dynamic = "force-dynamic";
 
 export async function GET(request) {
+  const account = await customerIdentity(request);
+  if (account.error) return NextResponse.json({ error: account.error }, { status: account.status });
   const url = new URL(request.url);
   const orderId = String(url.searchParams.get("reference") || "").trim().toUpperCase();
-  const phone = String(url.searchParams.get("phone") || "").replace(/\s+/g, "").trim();
-  if (!orderId || !phone) return NextResponse.json({ error: "Order reference and phone number are required." }, { status: 400 });
-  const snap = await adminDb().collection("orders").doc(orderId).get();
-  if (!snap.exists || String(snap.data().phone || "").replace(/\s+/g, "") !== phone) {
-    return NextResponse.json({ error: "No order matched those details." }, { status: 404 });
-  }
-  const order = snap.data();
-  return NextResponse.json({
-    order: {
-      orderId,
-      status: order.status,
-      paymentStatus: order.paymentStatus,
-      deliveryMethod: order.deliveryMethod,
-      total: Number(order.total || 0),
-      pickupCode: order.pickupCode || null,
-      updatedAt: order.updatedAt?.toDate?.()?.toISOString?.() || null,
-    },
-  });
+  const store = adminDb();
+  const snaps = orderId ? [await store.collection("orders").doc(orderId).get()] : (await store.collection("orders").where("customerUid", "==", account.uid).get()).docs;
+  const orders = snaps.filter((snap) => snap.exists && snap.data().customerUid === account.uid).map((snap) => {
+    const order = snap.data();
+    return { orderId: snap.id, status: order.status, paymentStatus: order.paymentStatus, deliveryMethod: order.deliveryMethod, originAddress: order.originAddress || "", deliveryAddress: order.deliveryAddress || "", total: Number(order.total || 0), pickupCode: order.pickupCode || null, items: (order.items || []).map(({ name, quantity, sku, colour, size }) => ({ name, quantity, sku, colour, size })), createdAt: order.createdAt?.toDate?.()?.toISOString?.() || null, updatedAt: order.updatedAt?.toDate?.()?.toISOString?.() || null };
+  }).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  if (orderId) return orders[0] ? NextResponse.json({ order: orders[0] }) : NextResponse.json({ error: "This order is not linked to your account." }, { status: 404 });
+  return NextResponse.json({ orders });
 }
 
 export async function POST(request) {
+  const account = await optionalCustomerIdentity(request);
+  if (account.error) return NextResponse.json({ error: account.error }, { status: account.status });
   const body = await request.json().catch(() => ({}));
   const requested = Array.isArray(body.items) ? body.items : [];
   const customer = String(body.customer || "").trim();
@@ -34,6 +32,9 @@ export async function POST(request) {
   if (!requested.length || !customer || !phone) {
     return NextResponse.json({ error: "Name, phone number and order items are required." }, { status: 400 });
   }
+  const deliveryMethod = String(body.deliveryMethod || "pickup");
+  const deliveryAddress = String(body.deliveryAddress || body.landmark || "").trim().slice(0, 500);
+  if (!deliveryMethods.includes(deliveryMethod) || (deliveryMethod === "delivery-shop" && !deliveryAddress)) return NextResponse.json({ error: "Choose a valid fulfilment method and delivery address." }, { status: 400 });
 
   const store = adminDb();
   const context = await catalogueContext(store);
@@ -49,6 +50,7 @@ export async function POST(request) {
   }
 
   const normalizedItems = [...quantities].map(([id, quantity]) => ({ id, quantity }));
+  const cartQuantity = normalizedItems.reduce((sum, item) => sum + item.quantity, 0);
   const productRefs = normalizedItems.map(({ id }) => store.collection("products").doc(encodeURIComponent(id)));
   const productSnaps = await store.getAll(...productRefs);
   const items = [];
@@ -66,7 +68,7 @@ export async function POST(request) {
       return NextResponse.json({ error: `Only ${product.stock} × ${product.name} remain.` }, { status: 409 });
     }
     const lineTotal = Number(product.price) * quantity;
-    const applied = resolveDiscount(product, quantity, context.rules);
+    const applied = resolveDiscount(product, quantity, context.rules, new Date(), cartQuantity);
     subtotal += lineTotal;
     discount += applied.amount;
     items.push({
@@ -90,13 +92,16 @@ export async function POST(request) {
     orderId,
     customer,
     phone,
+    customerUid: account.uid,
     items,
     subtotal: Math.round(subtotal * 100) / 100,
     discount: Math.round(discount * 100) / 100,
     total,
     channel: body.channel === "whatsapp" ? "whatsapp" : "website",
-    deliveryMethod: body.deliveryMethod || "pickup",
-    landmark: String(body.landmark || "").trim(),
+    deliveryMethod,
+    originAddress: SHOP_ADDRESS,
+    deliveryAddress: deliveryMethod === "pickup" ? "" : deliveryAddress,
+    landmark: deliveryMethod === "pickup" ? "" : deliveryAddress,
     paymentStatus: "pending",
     status: "pending",
     statusHistory: [{ status: "pending", at: new Date(), by: "customer" }],

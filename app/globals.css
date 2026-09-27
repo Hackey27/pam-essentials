@@ -192,6 +192,29 @@ input, select { min-height: 44px; border: 1px solid var(--line); border-radius: 
 .product-page-main .breadcrumb { margin-bottom: 1.5rem; }
 .product-utilities { display: flex; flex-wrap: wrap; gap: 1rem; justify-content: flex-end; padding: .8rem 0; }
 .product-utilities button:disabled { opacity: .5; cursor: not-allowed; text-decoration: none; }
+.product-utilities a { color: var(--navy); text-decoration: underline; }
+.discount-nudge, .discount-applied, .pickup-address { margin: .75rem 0; border-radius: 8px; padding: .7rem .8rem; font-size: .82rem; }
+.discount-nudge { color: var(--navy); background: var(--soft-blue); }
+.discount-applied { color: #075d38; background: #e8f7ed; font-weight: 900; }
+.pickup-address { color: var(--navy); background: var(--soft-blue); }
+.customer-account { min-height: 100vh; background: var(--canvas); }
+.account-main { max-width: 900px; margin: 0 auto; padding: 3rem 5vw 5rem; }
+.account-main h1 { margin-bottom: .5rem; }
+.account-main > p { color: var(--muted); }
+.account-panel { display: grid; gap: 1rem; margin-top: 1.5rem; padding: 1.5rem; }
+.account-panel h2, .account-panel p { margin: 0; }
+.account-panel label { display: grid; gap: .4rem; font-weight: 800; }
+.account-tabs { display: flex; gap: .5rem; }
+.account-tabs button { border: 1px solid var(--line); border-radius: 8px; padding: .6rem 1rem; color: var(--navy); background: white; cursor: pointer; }
+.account-tabs button.active { color: white; background: var(--navy); }
+.account-heading { display: flex; justify-content: space-between; gap: 1rem; margin-top: 1.5rem; }
+.account-heading button, .wishlist-list button { border: 0; color: var(--navy); background: transparent; cursor: pointer; text-decoration: underline; }
+.account-orders { display: grid; gap: .75rem; }
+.account-orders article { display: grid; gap: .4rem; border: 1px solid var(--line); border-radius: 8px; padding: .8rem; }
+.account-orders article > div { display: flex; align-items: center; justify-content: space-between; }
+.claim-form { display: grid; gap: .7rem; border-top: 1px solid var(--line); padding-top: 1rem; }
+.wishlist-list { display: grid; gap: .6rem; }
+.wishlist-list > div { display: flex; justify-content: space-between; gap: 1rem; border-bottom: 1px solid var(--line); padding: .5rem 0; }
 .detail-section, .related-products { margin-top: 2rem; border-top: 1px solid var(--line); padding-top: 1.5rem; }
 .detail-section h2 { margin: 1.3rem 0 .5rem; }
 .detail-section dl { display: grid; grid-template-columns: max-content 1fr; gap: .5rem 1.5rem; }

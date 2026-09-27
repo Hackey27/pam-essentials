@@ -2,6 +2,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { NextResponse } from "next/server";
 import { adminDb, requireRole } from "@/lib/admin";
 import { availableForSale, catalogueContext, resolveDiscount } from "@/lib/commerce";
+import { SHOP_ADDRESS } from "@/lib/shop";
 
 export async function POST(request) {
   const access = await requireRole(request, ["owner", "admin", "supervisor", "cashier"]);
@@ -47,9 +48,14 @@ export async function POST(request) {
       if (!shiftSnap.exists || shiftSnap.data().status !== "open" || shiftSnap.data().staffId !== access.user.uid) throw new Error("This till shift is no longer open.");
 
       const normalizedItems = [...quantities].map(([id, quantity]) => ({ id, quantity }));
+      const cartQuantity = normalizedItems.reduce((sum, item) => sum + item.quantity, 0);
       const salesChannel = ["walk-in", "website", "whatsapp"].includes(body.salesChannel) ? body.salesChannel : "walk-in";
+      const orderReference = String(body.orderReference || "").trim().slice(0, 100) || null;
       const productRefs = normalizedItems.map(({ id }) => store.collection("products").doc(encodeURIComponent(id)));
       const productSnaps = await tx.getAll(...productRefs);
+      const linkedOrderSnap = orderReference ? await tx.get(store.collection("orders").doc(orderReference)) : null;
+      if (orderReference && !linkedOrderSnap.exists) throw new Error("The linked order no longer exists.");
+      const linkedOrder = linkedOrderSnap?.data();
       const lines = [];
       let subtotal = 0;
       let discount = 0;
@@ -66,7 +72,7 @@ export async function POST(request) {
         if (Number(product.stock) < quantity) throw new Error(`Only ${product.stock} × ${product.name} remain.`);
 
         const lineTotal = Number(product.price) * quantity;
-        const applied = resolveDiscount(product, quantity, context.rules);
+        const applied = resolveDiscount(product, quantity, context.rules, new Date(), cartQuantity);
         const netLineTotal = Math.round((lineTotal - applied.amount) * 100) / 100;
         const lineCost = Math.round(Number(product.costPrice || 0) * quantity * 100) / 100;
         subtotal += lineTotal;
@@ -109,7 +115,6 @@ export async function POST(request) {
       const receiptId = `PAM-${Date.now().toString(36).toUpperCase()}`;
       const total = Math.round((subtotal - discount) * 100) / 100;
       const paymentMethod = ["cash", "mobile-money", "card"].includes(body.paymentMethod) ? body.paymentMethod : "cash";
-      const orderReference = String(body.orderReference || "").trim().slice(0, 100) || null;
       const tendered = paymentMethod === "cash" ? Number(body.amountPaid) : total;
       if (!Number.isFinite(tendered) || tendered < total) throw new Error("Amount paid cannot be less than the sale total.");
       const change = paymentMethod === "cash" ? Math.round((tendered - total) * 100) / 100 : 0;
@@ -127,6 +132,7 @@ export async function POST(request) {
         change,
         salesChannel,
         orderReference,
+        fulfilmentSnapshot: { deliveryMethod: linkedOrder?.deliveryMethod || "pickup", originAddress: linkedOrder?.originAddress || SHOP_ADDRESS, deliveryAddress: linkedOrder?.deliveryAddress || linkedOrder?.landmark || "" },
         taxSnapshot: { enabled: false },
         staffId: access.user.uid,
         staffEmail: access.user.email,

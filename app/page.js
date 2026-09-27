@@ -5,6 +5,8 @@ import { resolveDiscount } from "@/lib/commerce";
 import { curatedSearches, hasCollection, inCollection, isBestSeller, isNewArrival, isOnSale, isPromotion, matchesSearch } from "@/lib/catalogueBrowse.mjs";
 import ProductOptions, { variantPrice } from "@/components/ProductOptions";
 import { addToCart, readCart, saveCart } from "@/lib/storeCart";
+import { useAuth } from "@/components/AuthProvider";
+import { SHOP_ADDRESS } from "@/lib/shop";
 
 const money = new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS" });
 
@@ -14,6 +16,7 @@ function ProductArt({ name, category }) {
 }
 
 export default function Storefront() {
+  const { user, role } = useAuth();
   const [products, setProducts] = useState([]);
   const [categoryList, setCategoryList] = useState([]);
   const [subcategoryList, setSubcategoryList] = useState([]);
@@ -43,12 +46,9 @@ export default function Storefront() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [checkout, setCheckout] = useState(false);
-  const [order, setOrder] = useState({ customer: "", phone: "", deliveryMethod: "pickup", landmark: "" });
+  const [order, setOrder] = useState({ customer: "", phone: "", deliveryMethod: "pickup", deliveryAddress: "" });
   const [confirmation, setConfirmation] = useState(null);
   const [placingOrder, setPlacingOrder] = useState(false);
-  const [trackOpen, setTrackOpen] = useState(false);
-  const [track, setTrack] = useState({ reference: "", phone: "" });
-  const [trackedOrder, setTrackedOrder] = useState(null);
   const [cookieVisible, setCookieVisible] = useState(false);
   const clickSession = useRef({ id: "", seen: new Set() });
 
@@ -105,8 +105,10 @@ export default function Storefront() {
 
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
   const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const discount = cart.reduce((sum, item) => sum + resolveDiscount(item, item.quantity, discountRules).amount, 0);
+  const discount = cart.reduce((sum, item) => sum + resolveDiscount(item, item.quantity, discountRules, new Date(), cartCount).amount, 0);
   const total = subtotal - discount;
+  const quantityRule = discountRules.find((rule) => rule.scopeType === "GLOBAL" && rule.discountType === "PERCENT" && Number(rule.value) === 5 && Number(rule.minQty) === 3);
+  const quantityDiscountApplied = quantityRule && cart.some((item) => resolveDiscount(item, item.quantity, discountRules, new Date(), cartCount).rule?.ruleId === quantityRule.ruleId);
 
   function browse(mode) {
     setBrowseMode(mode);
@@ -202,7 +204,8 @@ export default function Storefront() {
   async function createOrder(channel = "website") {
     setPlacingOrder(true); setError("");
     try {
-      const response = await fetch("/api/orders", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...order, channel, items: cart.map(({ id, quantity }) => ({ id, quantity })) }) });
+      const token = user && !role ? await user.getIdToken() : "";
+      const response = await fetch("/api/orders", { method: "POST", headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ ...order, channel, items: cart.map(({ id, quantity }) => ({ id, quantity })) }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "The order could not be created.");
       return data;
@@ -217,31 +220,23 @@ export default function Storefront() {
   }
 
   async function orderOnWhatsApp() {
-    if (!order.customer || !order.phone || (order.deliveryMethod !== "pickup" && !order.landmark)) {
+    if (!order.customer || !order.phone || (order.deliveryMethod === "delivery-shop" && !order.deliveryAddress)) {
       setError("Complete the checkout details before ordering on WhatsApp."); return;
     }
     const whatsappWindow = window.open("", "_blank");
     const data = await createOrder("whatsapp");
     if (!data) { whatsappWindow?.close(); return; }
     const lines = cart.map((item, index) => `${index + 1}. ${item.name}\n${[item.colour && `Colour: ${item.colour}`, item.size && `Size: ${item.size}`].filter(Boolean).join("\n")}${item.colour || item.size ? "\n" : ""}SKU: ${item.id}\nQty: ${item.quantity}\nPrice: ${money.format(item.price)}\nLine total: ${money.format(item.price * item.quantity)}`).join("\n\n");
-    const message = `Hello PAM Essentials & More 👋\n\nI'd like to place this order (${data.orderId}):\n${lines}\n\nSubtotal: ${money.format(subtotal)}\nDiscount: ${money.format(discount)}\nTotal: ${money.format(data.total)}\n\nName: ${order.customer}\nPhone: ${order.phone}\nDelivery/Pickup: ${order.deliveryMethod}${order.landmark ? `\nLocation: ${order.landmark}` : ""}`;
+    const message = `Hello PAM Essentials & More 👋\n\nI'd like to place this order (${data.orderId}):\n${lines}\n\nSubtotal: ${money.format(subtotal)}\nDiscount: ${money.format(discount)}\nTotal: ${money.format(data.total)}\n\nName: ${order.customer}\nPhone: ${order.phone}\nDelivery/Pickup: ${order.deliveryMethod}\nShop collection address: ${SHOP_ADDRESS}${order.deliveryAddress ? `\nDelivery destination: ${order.deliveryAddress}` : ""}`;
     const whatsappUrl = `https://wa.me/233207015198?text=${encodeURIComponent(message)}`;
     if (whatsappWindow) whatsappWindow.location.href = whatsappUrl;
     else window.location.href = whatsappUrl;
     setConfirmation(data); setCart([]); saveCart([]); setCheckout(false);
   }
 
-  async function trackOrder(event) {
-    event.preventDefault(); setError(""); setTrackedOrder(null);
-    const response = await fetch(`/api/orders?reference=${encodeURIComponent(track.reference)}&phone=${encodeURIComponent(track.phone)}`);
-    const data = await response.json();
-    if (!response.ok) return setError(data.error || "The order could not be found.");
-    setTrackedOrder(data.order);
-  }
-
   return (
     <div className="store-shell">
-      <div className="utility-bar"><span>PAM Essentials & More · Ghana</span><div><button onClick={() => setTrackOpen(true)}>Track Order</button><a href="/login">Sign In</a></div></div>
+      <div className="utility-bar"><span>PAM Essentials & More · Ghana</span><div><a href="/account#orders">Track Order</a><a href="/account">{user && !role ? "My Account" : "Sign In"}</a></div></div>
       <header className="store-header">
         <div className="header-main">
           <a className="brand" href="/" aria-label="PAM Essentials home"><span className="brand-mark" aria-hidden="true">P</span><span>PAM Essentials</span></a>
@@ -331,9 +326,8 @@ export default function Storefront() {
       {quickProduct && <div className="modal-backdrop" role="presentation" onMouseDown={() => setQuickProduct(null)}><div className="modal quick-view-modal" role="dialog" aria-modal="true" aria-label={`Quick View ${quickProduct.name}`} onMouseDown={(event) => event.stopPropagation()}><ProductOptions key={quickProduct.id} initialProduct={quickProduct} products={products} compact onClose={() => setQuickProduct(null)} onAdd={add} /></div></div>}
       {addedProduct && <div className="modal-backdrop" role="presentation"><div className="modal" role="dialog" aria-modal="true" aria-label="Added to cart"><h2>Added to cart</h2><p>{addedProduct.quantity} × {addedProduct.name}</p><p>SKU: {addedProduct.id}{addedProduct.colour && ` · ${addedProduct.colour}`}{addedProduct.size && ` · ${addedProduct.size}`}</p><div className="added-actions"><button className="button secondary" onClick={() => { setAddedProduct(null); document.getElementById("catalogue")?.scrollIntoView({ behavior: "smooth" }); }}>Continue shopping</button><button className="button primary" onClick={() => { setAddedProduct(null); setCartOpen(true); }}>View cart</button></div></div></div>}
 
-      {cartOpen && <div className="drawer-backdrop" onMouseDown={() => setCartOpen(false)}><aside className="cart-drawer" onMouseDown={(event) => event.stopPropagation()}><div className="drawer-title"><div><p className="eyebrow">Your order</p><h2>Shopping cart</h2></div><button className="icon-button" onClick={() => setCartOpen(false)}>×</button></div>{error && <p className="notice error-notice">{error}</p>}{!cart.length ? <div className="empty-state"><h3>Your cart is empty</h3><p>Add a product to get started.</p></div> : <><div className="cart-lines">{cart.map((item) => <div className="cart-line" key={item.id}><ProductArt name={item.name} category={item.category} /><div><h3>{item.name}</h3><p>{[item.colour, item.size, `SKU: ${item.id}`].filter(Boolean).join(" · ")}</p><p>{money.format(item.price)}</p><div className="stepper"><button onClick={() => updateQuantity(item.id, item.quantity - 1)}>−</button><span>{item.quantity}</span><button onClick={() => updateQuantity(item.id, item.quantity + 1)}>+</button></div></div><b>{money.format(item.price * item.quantity - resolveDiscount(item, item.quantity, discountRules).amount)}</b></div>)}</div><div className="cart-total"><span>Subtotal</span><strong>{money.format(subtotal)}</strong></div>{discount > 0 && <div className="cart-total discount-total"><span>Discount</span><strong>−{money.format(discount)}</strong></div>}<div className="cart-total grand-total"><span>Total</span><strong>{money.format(total)}</strong></div>{!checkout ? <button className="button accent full" onClick={() => setCheckout(true)}>Continue to checkout</button> : <form className="checkout-form" onSubmit={placeOrder}><label>Full name<input required value={order.customer} onChange={(e) => setOrder({ ...order, customer: e.target.value })} /></label><label>Mobile number<input required type="tel" value={order.phone} onChange={(e) => setOrder({ ...order, phone: e.target.value })} /></label><label>Fulfilment<select value={order.deliveryMethod} onChange={(e) => setOrder({ ...order, deliveryMethod: e.target.value })}><option value="pickup">Pickup</option><option value="delivery-self">Delivery – self initiated</option><option value="delivery-shop">Delivery – arranged by shop</option></select></label>{order.deliveryMethod !== "pickup" && <label>Location or landmark<input required value={order.landmark} onChange={(e) => setOrder({ ...order, landmark: e.target.value })} /></label>}<button className="button accent full" type="submit" disabled={placingOrder}>{placingOrder ? "Creating order…" : `Pay on pickup/delivery · ${money.format(total)}`}</button><button className="button whatsapp full" type="button" disabled={placingOrder} onClick={orderOnWhatsApp}>Order on WhatsApp</button><button className="button secondary full" type="button" disabled title="Payment provider has not been selected yet">Pay now · coming soon</button></form>}</>}</aside></div>}
-      {confirmation && <div className="modal-backdrop"><div className="modal"><span className="success-mark">✓</span><h2>Order received</h2><p>Keep this reference for pickup or delivery.</p><strong className="order-reference">{confirmation.orderId}</strong><button className="button primary full" onClick={() => { setConfirmation(null); setCartOpen(false); }}>Continue shopping</button></div></div>}
-      {trackOpen && <div className="modal-backdrop"><form className="modal admin-form" onSubmit={trackOrder}><div className="drawer-title"><div><p className="eyebrow">Order status</p><h2>Track order</h2></div><button type="button" className="icon-button" onClick={() => { setTrackOpen(false); setTrackedOrder(null); setError(""); }}>×</button></div>{error && <p className="notice error-notice">{error}</p>}<label>Order reference<input required placeholder="ORD-…" value={track.reference} onChange={(event) => setTrack({ ...track, reference: event.target.value })} /></label><label>Phone number<input required type="tel" value={track.phone} onChange={(event) => setTrack({ ...track, phone: event.target.value })} /></label><button className="button primary full">Find order</button>{trackedOrder && <div className="tracked-order"><span className="badge warning">{trackedOrder.status}</span><h3>{trackedOrder.orderId}</h3><p>{trackedOrder.paymentStatus} · {trackedOrder.deliveryMethod}</p><strong>{money.format(trackedOrder.total)}</strong>{trackedOrder.pickupCode && <p className="pickup-code">Pickup code {trackedOrder.pickupCode}</p>}</div>}</form></div>}
+      {cartOpen && <div className="drawer-backdrop" onMouseDown={() => setCartOpen(false)}><aside className="cart-drawer" onMouseDown={(event) => event.stopPropagation()}><div className="drawer-title"><div><p className="eyebrow">Your order</p><h2>Shopping cart</h2></div><button className="icon-button" onClick={() => setCartOpen(false)}>×</button></div>{error && <p className="notice error-notice">{error}</p>}{!cart.length ? <div className="empty-state"><h3>Your cart is empty</h3><p>Add a product to get started.</p></div> : <><div className="cart-lines">{cart.map((item) => <div className="cart-line" key={item.id}><ProductArt name={item.name} category={item.category} /><div><h3>{item.name}</h3><p>{[item.colour, item.size, `SKU: ${item.id}`].filter(Boolean).join(" · ")}</p><p>{money.format(item.price)}</p><div className="stepper"><button onClick={() => updateQuantity(item.id, item.quantity - 1)}>−</button><span>{item.quantity}</span><button onClick={() => updateQuantity(item.id, item.quantity + 1)}>+</button></div></div><b>{money.format(item.price * item.quantity - resolveDiscount(item, item.quantity, discountRules, new Date(), cartCount).amount)}</b></div>)}</div>{quantityRule && cartCount > 0 && cartCount < 3 && <p className="discount-nudge" role="status">Add {3 - cartCount} more to qualify for 5% off</p>}{quantityDiscountApplied && <p className="discount-applied" role="status">5% quantity discount applied</p>}<div className="cart-total"><span>Subtotal</span><strong>{money.format(subtotal)}</strong></div>{discount > 0 && <div className="cart-total discount-total"><span>Discount</span><strong>−{money.format(discount)}</strong></div>}<div className="cart-total grand-total"><span>Total</span><strong>{money.format(total)}</strong></div>{!checkout ? <button className="button accent full" onClick={() => setCheckout(true)}>Continue to checkout</button> : <form className="checkout-form" onSubmit={placeOrder}><label>Full name<input required value={order.customer} onChange={(e) => setOrder({ ...order, customer: e.target.value })} /></label><label>Mobile number<input required type="tel" value={order.phone} onChange={(e) => setOrder({ ...order, phone: e.target.value })} /></label><label>Fulfilment<select value={order.deliveryMethod} onChange={(e) => setOrder({ ...order, deliveryMethod: e.target.value })}><option value="pickup">Pickup</option><option value="delivery-self">Delivery – self initiated</option><option value="delivery-shop">Delivery – arranged by shop</option></select></label>{order.deliveryMethod === "delivery-self" && <p className="pickup-address">Your courier collects from: <b>{SHOP_ADDRESS}</b></p>}{order.deliveryMethod !== "pickup" && <label>Delivery destination or landmark<input required={order.deliveryMethod === "delivery-shop"} value={order.deliveryAddress} onChange={(e) => setOrder({ ...order, deliveryAddress: e.target.value })} /></label>}<button className="button accent full" type="submit" disabled={placingOrder}>{placingOrder ? "Creating order…" : `Pay on pickup/delivery · ${money.format(total)}`}</button><button className="button whatsapp full" type="button" disabled={placingOrder} onClick={orderOnWhatsApp}>Order on WhatsApp</button><button className="button secondary full" type="button" disabled title="Payment provider has not been selected yet">Pay now · coming soon</button></form>}</>}</aside></div>}
+      {confirmation && <div className="modal-backdrop"><div className="modal"><span className="success-mark">✓</span><h2>Order received</h2><p>Keep this reference for pickup or delivery.</p><strong className="order-reference">{confirmation.orderId}</strong><p>{user && !role ? "Track this order in your account." : "Create a customer account and link this guest order to track it."}</p><a className="button secondary full" href="/account#orders">Track my order</a><button className="button primary full" onClick={() => { setConfirmation(null); setCartOpen(false); }}>Continue shopping</button></div></div>}
       <a className="whatsapp-fab" href="https://wa.me/" target="_blank" rel="noreferrer" aria-label="Chat with PAM Essentials on WhatsApp">WhatsApp</a>
       {cookieVisible && <div className="cookie-banner"><p><b>Privacy notice</b> We use essential browser storage for your cart, staff sign-in and offline till sync.</p><button className="button accent" onClick={() => { localStorage.setItem("pam-cookie-notice", "accepted"); setCookieVisible(false); }}>Okay</button></div>}
     </div>

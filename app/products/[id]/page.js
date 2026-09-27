@@ -50,7 +50,7 @@ export default function ProductPage() {
       {product && <>
         <nav className="breadcrumb"><a href="/">Home</a> / {product.category} / {product.name}</nav>
         <ProductOptions key={product.id} initialProduct={product} products={variants} onAdd={add} />
-        <div className="product-utilities"><button type="button" onClick={share}>Share</button>{shared && <span>Link copied</span>}<button type="button" disabled title="Customer accounts are coming soon">Add to wishlist</button><button type="button" disabled title="Product comparison is coming soon">Add to compare</button></div>
+        <div className="product-utilities"><button type="button" onClick={share}>Share</button>{shared && <span>Link copied</span>}<a href={`/account?wishlist=${encodeURIComponent(product.id)}`}>Add to wishlist</a><button type="button" disabled title="Product comparison is coming soon">Add to compare</button></div>
         <section className="detail-section"><h2>Description</h2><p>{product.description || product.name}</p><h2>Product details</h2><dl><dt>SKU</dt><dd>{product.id}</dd>{product.productGroupId && <><dt>Product ID</dt><dd>{product.productGroupId}</dd><dt>Variant ID</dt><dd>{product.id}</dd></>}{product.size && <><dt>Size</dt><dd>{product.size}</dd></>}{product.colour && <><dt>Colour</dt><dd>{product.colour}</dd></>}</dl><h2>Delivery &amp; pickup</h2><p>🚚 Delivery available &nbsp; 🏪 Pickup available</p></section>
         {related.length > 0 && <section className="related-products"><h2>You may also like…</h2><div className="related-grid">{related.map((item) => <a href={`/products/${encodeURIComponent(item.id)}`} key={item.id}><ProductImage product={item} /><b>{item.name}</b></a>)}</div></section>}
       </>}

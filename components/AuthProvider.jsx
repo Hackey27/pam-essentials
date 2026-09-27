@@ -14,10 +14,10 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     return onAuthStateChanged(auth, (u) => {
       setUser(u);
+      setRole(null);
       if (!u) {
-        setRole(null);
         setLoading(false);
-      }
+      } else setLoading(true);
     });
   }, []);
 
@@ -47,3 +47,4 @@ export function AuthProvider({ children }) {
 
 export const useAuth = () => useContext(AuthContext);
 export const signOut = () => fbSignOut(auth);
+
