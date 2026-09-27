@@ -1,9 +1,9 @@
 # PAM Essentials project state
 
-Updated: 2026-09-26
+Updated: 2026-09-27
 Repository: https://github.com/Hackey27/pam-essentials
 Primary branch: `main`
-Current status: homepage navigation and search update complete and validated on the live Cloud Run storefront.
+Current status: discovery checkpoint for the expanded catalogue and storefront request; no application or catalogue data has been changed yet.
 
 ## Working protocol
 
@@ -25,10 +25,12 @@ Current status: homepage navigation and search update complete and validated on 
 - Homepage chunk 2 verified Cloud Build `05b87c4c` for commit `c7ba610` and Cloud Build `09a7cbe4` for correction commit `ba64b47`; both succeeded. The Cloud Run service was healthy.
 - Chunk 2 placed the logo and main navigation on one desktop row, wrapped all six navigation links on mobile, and matched singular/plural popular search terms to catalogue products. The local production build passed.
 - Live storefront checks at 1440px and 390px confirmed the header layout. The public catalogue showed 235 priced products. Popular searches returned: water bottles 11, lunch boxes 2, pens 44, pencils 19, school supplies 81. New Arrivals, Promotions, and Deals opened their catalogue views.
+- Expanded-catalogue discovery on 2026-09-27 read the user-supplied `Data.xlsx` as data. It has 264 SKUs and 18 columns, including subcategory, optional sub-subcategory, product group, size, colour, and keywords. Compared with the repository workbook, it has the same SKUs, quantities, and prices, plus 13 renamed products and 6 recategorised products. There are 25 rows in 8 `PRODUCT_ID` groups. The 29 zero-stock rows are exactly the 29 zero-price rows; no priced row has zero stock in the supplied sheet.
 
 ## Current work in progress
 
-- No homepage change is in progress. Await the next requested product change.
+- Discovery chunk complete. The next chunk will update the repository catalogue source and build an idempotent metadata sync for existing Firestore products, then validate the generated data and Admin/POS/public projections.
+- Awaiting answers about unpriced zero-stock visibility, the hero flyer asset, and category/subcategory sort numbers.
 
 ## Key constraints and requirements
 
@@ -42,7 +44,7 @@ Current status: homepage navigation and search update complete and validated on 
 ## Decisions already made
 
 - The repository's `main` branch is the delivery branch. The user authorized direct commits to `main`.
-- The top-bar Sign In link uses the existing `/login` route, which is staff access; customer browsing remains account-free. A customer account flow was not requested.
+- The top-bar Sign In link currently uses the existing `/login` staff route. The new request calls for optional customer accounts and account-based order tracking; design these as a separate customer path while preserving staff role checks and guest checkout.
 - Use the existing Next.js/Firebase/Firestore/Cloud Run architecture unless a requested change justifies revisiting it.
 - Keep unpriced products manageable in Admin while excluding them from customer and cashier sales surfaces.
 - Do not enable online `Pay Now` without a selected and configured payment provider.
@@ -54,18 +56,32 @@ Current status: homepage navigation and search update complete and validated on 
 - `app/page.js` — homepage header, navigation, search, popular terms, and catalogue browsing modes.
 - `app/globals.css` — header, navigation, search, and responsive layout styles.
 - `lib/productData.js` — expose product creation time to support New Arrivals.
+- This discovery chunk will change only `PROJECT_STATE.md`; the supplied workbook has not yet been copied into the repository.
 
 ## Open issues, risks, and questions
 
 - A temporary repository snapshot was downloaded for local validation. Local builds and live browser/deployment checks passed for this homepage change.
-- `/login` currently identifies itself as staff access. If customer accounts are wanted, they need a separate requirement and implementation.
+- Customer account creation and tracking are now requested; the customer path must remain separate from staff role checks.
+- The previous rule hides unpriced products from the storefront, while the new request asks to show zero-stock products. All 29 zero-stock rows in the supplied workbook also have zero price. Await the user's visibility decision before changing that rule.
+- The repository and supplied workbook contain no hero flyer or product/variant image assets. Request the flyer and accurate product imagery, or use clearly marked placeholders if the user approves.
+- The workbook has no category or subcategory sort-number columns. Existing Admin category `sortOrder` exists; await the user's sorting preference for subcategories.
+- The existing seed endpoints skip existing Firestore documents. A controlled metadata sync and an authenticated execution path are required for the changes to appear live; do not overwrite live stock, prices, or audits.
 - The earlier chat reported that publishing versioned Firestore rules required an authenticated Firebase account. Current deployed rules have not been verified here.
 - The payment provider for online `Pay Now` has not been selected.
 - Public storefront count was 235 priced products on 2026-09-26; role behavior should be rechecked when relevant to a requested change.
 
+## Work chunks for the expanded request
+
+1. Discovery (six steps): read state and branch; inspect workbook; compare old source; audit variant/category data; trace app imports and orders; record conflicts and roadmap.
+2. Catalogue data (six steps): verify workbook structure; replace the repository source; extend generation for hierarchy, variants and tags; add safe metadata sync for existing records; expose fields to Admin/POS/storefront; validate and deploy.
+3. Catalogue browsing (six steps): build ordered category tree; add checkbox filters and breadcrumbs; add availability/offers/collection filters; label new/low/out-of-stock items; add click and purchase signals without changing current curated searches; validate desktop/mobile.
+4. Product and cart (six steps): add product route; implement quick view; link size/colour variants by `PRODUCT_ID`; maintain exact SKU, price and stock through cart/order/POS; add related products and share controls; validate variant combinations and stock boundaries.
+5. Customer orders (six steps): add optional customer accounts and wishlist gate; protect account-based tracking while preserving guest checkout; format WhatsApp cart orders; implement delivery/pickup address and receipt details; show discount eligibility messaging from Admin rules; validate order security and totals.
+6. Presentation and release (six steps): place the supplied flyer at the requested transparency; complete hero buttons, PAM Deals and benefits; build footer pages and active links; validate content and contact details; build and deploy; inspect Cloud Run and update this file.
+
 ## Next recommended steps
 
-1. Receive the next requested change, then reread this file and confirm the current `main` head.
-2. Define a five-to-seven-step chunk for that change.
-3. Inspect, implement, build, and validate the chunk.
-4. Commit to `main`, verify Cloud Build and the live service, and update this file before the checkpoint.
+1. Reread this file and the current `main` head at the next chunk.
+2. Resolve the zero-stock/unpriced display rule, flyer asset, and sort order from the pending user answers when available.
+3. Complete catalogue-data chunk steps without overwriting live operational quantities or prices.
+4. Update this file and pause at its validation checkpoint.
