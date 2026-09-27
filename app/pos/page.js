@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { EmailAuthProvider, reauthenticateWithCredential } from "firebase/auth";
 import RequireRole from "@/components/RequireRole";
 import { signOut, useAuth } from "@/components/AuthProvider";
+import PosDashboard from "@/components/PosDashboard";
 import { priceCart } from "@/lib/commerce";
 import { SHOP_ADDRESS } from "@/lib/shop";
 
@@ -15,7 +17,16 @@ function Till() {
   const [discountRules, setDiscountRules] = useState([]);
   const [dealBundles, setDealBundles] = useState([]);
   const [orders, setOrders] = useState([]);
-  const [view, setView] = useState("sale");
+  const [view, setView] = useState("dashboard");
+  const [shiftLoaded, setShiftLoaded] = useState(false);
+  const [locked, setLocked] = useState(false);
+  const [entryOpen, setEntryOpen] = useState(false);
+  const [staffEmail, setStaffEmail] = useState(user?.email || "");
+  const [staffPassword, setStaffPassword] = useState("");
+  const [confirmEndShift, setConfirmEndShift] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [clock, setClock] = useState(new Date());
+  const shiftAction = useRef(false);
   const [orderQuery, setOrderQuery] = useState("");
   const [orderStatus, setOrderStatus] = useState("all");
   const [query, setQuery] = useState("");
@@ -74,6 +85,37 @@ function Till() {
       if (!response.ok) throw new Error(data.error);
       setShift(data.shift || null);
     } catch (err) { setError(err.message || "Shift status could not be loaded."); }
+    finally { setShiftLoaded(true); }
+  }
+
+  useEffect(() => {
+    if (!shift || locked) return;
+    let timer;
+    const arm = () => { clearTimeout(timer); timer = setTimeout(() => { setLocked(true); setEntryOpen(false); setView("dashboard"); }, 600000); };
+    const events = ["pointerdown", "keydown", "touchstart"];
+    events.forEach((event) => window.addEventListener(event, arm));
+    arm();
+    return () => { clearTimeout(timer); events.forEach((event) => window.removeEventListener(event, arm)); };
+  }, [shift, locked]);
+
+  useEffect(() => { const timer = setInterval(() => setClock(new Date()), 30000); return () => clearInterval(timer); }, []);
+
+  async function startOrResume(event) {
+    event.preventDefault();
+    if (shiftAction.current) return;
+    shiftAction.current = true; setBusy(true); setError("");
+    try {
+      if (staffEmail.trim().toLowerCase() !== String(user?.email || "").toLowerCase()) throw new Error("Sign in with the account currently assigned to this till.");
+      await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, staffPassword));
+      if (!shift) {
+        const response = await request("/api/pos/shifts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "open", deviceId }) });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Shift could not be started.");
+        setShift(data.shift);
+      }
+      setLocked(false); setEntryOpen(false); setStaffPassword(""); setView("dashboard");
+    } catch (err) { setError(err.message || "Staff verification failed."); }
+    finally { shiftAction.current = false; setBusy(false); }
   }
 
   async function flushQueue() {
@@ -104,6 +146,7 @@ function Till() {
 
   useEffect(() => {
     if (!user) return;
+    setStaffEmail(user.email || "");
     let storedDevice = localStorage.getItem("pam-pos-device");
     if (!storedDevice) { storedDevice = `PAM-${crypto.randomUUID().slice(0, 8).toUpperCase()}`; localStorage.setItem("pam-pos-device", storedDevice); }
     setDeviceId(storedDevice);
@@ -205,28 +248,36 @@ function Till() {
   }
 
   async function toggleShift() {
-    if (shift && JSON.parse(localStorage.getItem("pam-pos-queue") || "[]").length) {
+    if (!shift || shiftAction.current) return;
+    if (JSON.parse(localStorage.getItem("pam-pos-queue") || "[]").length) {
       setError("Sync queued offline sales before closing this shift."); return;
     }
+    shiftAction.current = true;
     setBusy(true); setError("");
     try {
-      const response = await request("/api/pos/shifts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(shift ? { action: "close", shiftId: shift.shiftId } : { action: "open", deviceId }) });
+      const response = await request("/api/pos/shifts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "close", shiftId: shift.shiftId }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
-      setShift(shift ? null : data.shift);
-      if (shift) setReceipt({ receiptId: "Shift closed", total: data.shift.summary?.salesTotal || 0, shiftSummary: data.shift.summary });
+      setShift(null); setConfirmEndShift(false); setEntryOpen(false);
+      setReceipt({ receiptId: "Shift closed", total: data.shift.summary?.salesTotal || 0, shiftSummary: data.shift.summary });
     } catch (err) { setError(err.message || "Shift could not be updated."); }
-    finally { setBusy(false); }
+    finally { shiftAction.current = false; setBusy(false); }
   }
 
+  if (!shiftLoaded) return <div className="pos-entry"><p>Loading shift status…</p></div>;
+  if (!shift || locked) return <div className="pos-entry"><div className="pos-entry-card"><button className="pos-entry-logo" onClick={() => setEntryOpen(true)} aria-label="Open staff shift sign in">P</button><h1>PAM Essentials &amp; More</h1><p>Sales &amp; inventory</p><p>{shift ? "Shift paused after inactivity" : "Start a shift to process sales"}</p>{entryOpen ? <form onSubmit={startOrResume}><label>Staff email<input required type="email" autoComplete="username" value={staffEmail} onChange={(event) => setStaffEmail(event.target.value)} /></label><label>Password<input required type="password" autoComplete="current-password" value={staffPassword} onChange={(event) => setStaffPassword(event.target.value)} /></label><button className="button primary full" disabled={busy || !deviceId}>{busy ? "Verifying…" : shift ? "Resume Shift" : "Start Shift"}</button></form> : <button className="button primary" onClick={() => setEntryOpen(true)}>{shift ? "Resume Shift / Sign In" : "Staff Sign In"}</button>}{receipt?.shiftSummary && <div className="pos-shift-summary"><b>Last shift</b><span>{receipt.shiftSummary.transactions} transactions · {money.format(receipt.shiftSummary.salesTotal)}</span>{Object.entries(receipt.shiftSummary.paymentMix || {}).map(([method, value]) => <span key={method}>{method.replaceAll("-", " ")}: {money.format(value)}</span>)}</div>}{error && <p className="notice error-notice" role="alert">{error}</p>}<button className="text-button" onClick={signOut}>Use another staff account</button></div></div>;
+
   return <div className="pos-shell">
-    <header className="pos-header"><div><a href="/" className="admin-brand">PAM <span>Essentials & More</span></a><p>{user?.email} · {role}</p></div><div className="pos-view-tabs"><button className={view === "sale" ? "active" : ""} onClick={() => setView("sale")}>New sale</button><button className={view === "orders" ? "active" : ""} onClick={() => setView("orders")}>Orders {orders.filter((order) => !["completed", "cancelled"].includes(order.status)).length > 0 && <b>{orders.filter((order) => !["completed", "cancelled"].includes(order.status)).length}</b>}</button></div><div className="pos-actions"><button className={shift ? "shift-button open" : "shift-button"} onClick={toggleShift} disabled={busy}>{shift ? "Close shift" : "Open shift"}</button><span className={online ? "connection online" : "connection offline"}>{syncing ? "Syncing sales…" : online ? "Online" : "Offline"}</span><button className="icon-button" onClick={() => { loadProducts(); loadOrders(); loadShift(); }}>↻</button><button className="icon-button" onClick={signOut}>↪</button></div></header>
+    <aside className={"pos-sidebar " + (sidebarOpen ? "open" : "")}><div className="pos-sidebar-brand"><a href="/" className="admin-brand">PAM <span>Essentials &amp; More</span></a><small>Sales &amp; inventory</small></div><nav aria-label="POS navigation">{[["dashboard", "Dashboard"], ["sale", "New Sale"], ["orders", "Orders"], ...(["owner", "admin", "supervisor"].includes(role) ? [["inventory", "Inventory"]] : []), ...(["owner", "admin"].includes(role) ? [["expenses", "Expenses"], ["admin", "Admin"]] : [])].map(([id, label]) => <button key={id} className={view === id ? "active" : ""} onClick={() => { if (id === "admin") window.location.href = "/admin"; else setView(id); setSidebarOpen(false); }}>{label}</button>)}</nav></aside>
+    <header className="pos-header"><div className="pos-header-title"><button className="pos-menu-button" aria-label="Toggle POS navigation" onClick={() => setSidebarOpen((open) => !open)}>☰</button><div><h2>{({ dashboard: "Dashboard", sale: "New Sale", orders: "Orders", inventory: "Inventory", expenses: "Expenses" })[view]}</h2><p>{view === "dashboard" ? "Current sales and stock health" : view === "sale" ? "Find products and complete a sale" : "Sales & inventory"}</p></div></div><div className="pos-actions"><span className={online ? "connection online" : "connection offline"}>{syncing ? "Syncing sales…" : online ? "Online" : "Offline"}</span><span className="pos-staff">{user?.email} · {role?.toUpperCase()}<small>Shift started {shift.startedAt ? new Date(shift.startedAt).toLocaleTimeString("en-GH", { hour: "numeric", minute: "2-digit" }) : "—"}</small></span><time>{clock.toLocaleString("en-GH", { dateStyle: "short", timeStyle: "short" })}</time><button className="button secondary" onClick={() => { loadProducts(); loadOrders(); loadShift(); }}>Refresh</button><button className="shift-button open" onClick={() => setConfirmEndShift(true)} disabled={busy}>End Shift</button></div></header>
     {!online && <div className="offline-banner">Working offline. Cash sales will be queued on this device and synced when the connection returns.</div>}
-    {view === "sale" ? <main className="pos-main">
+    {error && <div className="pos-global-error notice error-notice" role="alert">{error}</div>}
+    {view === "dashboard" ? <PosDashboard user={user} role={role} onNewSale={() => setView("sale")} onScan={() => { setView("sale"); setTimeout(() => document.querySelector(".pos-search")?.focus(), 0); }} onOrders={() => setView("orders")} onInventory={() => setView("inventory")} onExpense={() => { window.location.href = "/admin?newExpense=1"; }} /> : view === "inventory" ? <main className="pos-simple-view"><h1>Inventory</h1><p>Current priced products and stock status.</p><div className="data-table-wrap"><table className="data-table"><thead><tr><th>Product</th><th>SKU</th><th>Stock</th><th>Status</th></tr></thead><tbody>{products.map((product) => <tr key={product.id}><td>{product.name}</td><td>{product.id}</td><td>{product.stock}</td><td><span className={product.stock <= 0 ? "badge danger" : product.stock < Number(product.lowStockLevel ?? 8) ? "badge warning" : "badge success"}>{product.stock <= 0 ? "Out of stock" : product.stock < Number(product.lowStockLevel ?? 8) ? "Low stock" : "In stock"}</span></td></tr>)}</tbody></table></div></main> : view === "expenses" ? <main className="pos-simple-view"><h1>Expenses</h1><p>Record and review expenses in the Admin Portal.</p><a className="button primary" href="/admin?newExpense=1">Add expense</a></main> : view === "sale" ? <main className="pos-main">
       <section className="pos-catalogue"><div className="pos-title"><div><p className="eyebrow">Point of sale · {shift ? shift.shiftId : "No open shift"}</p><h1>New sale</h1></div>{["owner", "admin"].includes(role) && <a className="button secondary" href="/admin">Admin Portal</a>}</div><input className="pos-search" autoFocus placeholder="Search product name, SKU or scan barcode" value={query} onChange={(event) => setQuery(event.target.value)} /><div className="category-pills">{categories.map((item) => <button key={item} className={category === item ? "active" : ""} onClick={() => setCategory(item)}>{item}</button>)}</div>{error && <p className="notice error-notice">{error}</p>}<div className="pos-grid">{visible.map((product) => <button key={product.id} className="pos-product" onClick={() => add(product)} disabled={product.stock <= 0}><span className="product-monogram">{product.name.slice(0, 2).toUpperCase()}</span><b>{product.name}</b><small>{product.id}</small><div><strong>{money.format(product.price)}</strong><span className={product.stock <= product.lowStockLevel ? "low" : ""}>{product.stock} left</span></div></button>)}</div></section>
       <aside className="till-cart"><div className="drawer-title"><div><p className="eyebrow">Current basket</p><h2>{cart.reduce((sum, item) => sum + item.quantity, 0)} items</h2></div><button className="text-button" onClick={() => { setCart([]); setOrderReference(""); setOrderChannel("walk-in"); }}>Clear</button></div>{orderReference && <div className="linked-order"><span>Linked order</span><b>{orderReference}</b><button onClick={() => { setOrderReference(""); setOrderChannel("walk-in"); }}>Detach</button></div>}<div className="till-lines">{cart.length ? cart.map((item) => <div className="till-line" key={item.id}><div><b>{item.name}</b><small>{item.id} · {[item.colour, item.size].filter(Boolean).join(" / ")} · {money.format(item.price)} each</small></div><div className="stepper"><button onClick={() => change(item.id, -1)}>−</button><span>{item.quantity}</span><button onClick={() => change(item.id, 1)}>+</button></div><strong>{money.format(pricing.lines.find((line) => line.id === item.id)?.lineTotal || 0)}</strong></div>) : <div className="empty-state"><span className="status-icon">+</span><h3>No items yet</h3><p>Select products to begin a sale.</p></div>}</div><div className="till-summary"><div><span>Subtotal</span><strong>{money.format(subtotal)}</strong></div><div><span>Discount</span><strong>−{money.format(discount)}</strong></div><div className="grand-total"><span>Total</span><strong>{money.format(total)}</strong></div><div className="payment-methods"><button className={paymentMethod === "cash" ? "active" : ""} onClick={() => setPaymentMethod("cash")}>Cash</button><button className={paymentMethod === "mobile-money" ? "active" : ""} onClick={() => setPaymentMethod("mobile-money")} disabled={!online}>Mobile money</button><button className={paymentMethod === "card" ? "active" : ""} onClick={() => setPaymentMethod("card")} disabled={!online}>Card</button></div>{paymentMethod === "cash" && <label className="amount-paid">Amount paid<input type="number" min={total} step="0.01" placeholder={total.toFixed(2)} value={amountPaid} onChange={(event) => setAmountPaid(event.target.value)} /></label>}{paymentMethod === "cash" && changeDue > 0 && <div className="change-due"><span>Change due</span><strong>{money.format(changeDue)}</strong></div>}<button className="button accent full" onClick={checkout} disabled={!cart.length || busy}>{busy ? "Completing sale…" : online ? `Complete ${paymentMethod.replace("-", " ")} sale` : "Queue cash sale"}</button></div></aside>
     </main> : <main className="pos-orders"><div className="pos-title"><div><p className="eyebrow">All channels</p><h1>Orders</h1></div>{["owner", "admin", "supervisor"].includes(role) && <a className="button secondary" href="/admin">Admin Portal</a>}</div><div className="table-tools"><input placeholder="Search client, phone, reference or time" value={orderQuery} onChange={(event) => setOrderQuery(event.target.value)} /><select value={orderStatus} onChange={(event) => setOrderStatus(event.target.value)}><option value="all">All orders</option><option value="pending-payment">Pending payment</option><option value="pending">Pending</option><option value="processing">Processing</option><option value="ready">Ready</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option></select><span>{visibleOrders.length} orders</span></div>{error && <p className="notice error-notice">{error}</p>}<div className="order-card-grid">{visibleOrders.map((order) => <article className="panel pos-order" key={order.orderId}><div className="panel-title"><div><b>{order.orderId}</b><p>{new Date(order.createdAt).toLocaleString("en-GH")}</p></div><span className={order.status === "completed" ? "badge success" : order.status === "cancelled" ? "badge danger" : "badge warning"}>{order.status}</span></div><h3>{order.customer}</h3><p>{order.phone} · {order.deliveryMethod}</p>{order.landmark && <p>{order.landmark}</p>}<div className="order-items">{(order.items || []).map((item) => <span key={item.productId}>{item.quantity} × {item.name} · {item.sku || item.productId}{item.colour && ` · ${item.colour}`}{item.size && ` / ${item.size}`}</span>)}</div><div className="order-total"><span>{order.paymentStatus === "paid" ? "Paid" : "Pending payment"}</span><strong>{money.format(order.total || 0)}</strong></div><div className="order-actions"><button className="button primary" disabled={busy || ["completed", "cancelled"].includes(order.status)} onClick={() => openOrderAtTill(order)}>Open at till</button><select disabled={busy} value={order.status} onChange={(event) => updateOrder(order.orderId, event.target.value)}>{["pending", "confirmed", "paid", "processing", "ready", "completed", "cancelled"].map((status) => <option key={status}>{status}</option>)}</select></div>{order.pickupCode && <strong className="pickup-code">Code {order.pickupCode}</strong>}</article>)}</div></main>}
     {receipt && <div className="modal-backdrop receipt-backdrop"><div className="modal receipt-modal"><div className="receipt-print"><p className="receipt-brand">PAM Essentials & More</p><span className="success-mark">✓</span><h2>{receipt.shiftSummary ? "Shift closed" : receipt.queued ? "Sale queued" : "Payment complete"}</h2><p>{receipt.shiftSummary ? `${receipt.shiftSummary.transactions} transactions recorded.` : receipt.queued ? "This sale will sync when the device reconnects." : "The sale was recorded and stock was updated."}</p><strong className="order-reference">{receipt.receiptId}</strong>{receipt.orderReference && <p>Order {receipt.orderReference}</p>}{receipt.deliveryMethod && <p>{receipt.deliveryMethod}</p>}{receipt.originAddress && <p>Shop collection: {receipt.originAddress}</p>}{receipt.deliveryAddress && <p>Delivery destination: {receipt.deliveryAddress}</p>}{receipt.items?.length > 0 && <div className="receipt-lines">{receipt.items.map((item) => <div key={item.id}><span>{item.quantity} × {item.name} · {item.id}{item.colour && ` · ${item.colour}`}{item.size && ` / ${item.size}`}</span><b>{money.format(item.price * item.quantity)}</b></div>)}</div>}{receipt.discount > 0 && <div className="receipt-row"><span>Discount</span><b>−{money.format(receipt.discount)}</b></div>}<div className="receipt-row total"><span>Total</span><b>{money.format(receipt.total || total)}</b></div>{!receipt.shiftSummary && <><div className="receipt-row"><span>{String(receipt.paymentMethod || "cash").replace("-", " ")}</span><b>{money.format(receipt.amountPaid || receipt.total || 0)}</b></div><div className="receipt-row"><span>Change</span><b>{money.format(receipt.change || 0)}</b></div></>}{receipt.shiftSummary?.paymentMix && <div className="receipt-lines">{Object.entries(receipt.shiftSummary.paymentMix).map(([method, value]) => <div key={method}><span>{method.replace("-", " ")}</span><b>{money.format(value)}</b></div>)}</div>}<p className="receipt-thanks">Thank you for shopping with us.</p></div><div className="receipt-actions">{!receipt.queued && <button className="button secondary" onClick={() => window.print()}>Print receipt</button>}<button className="button primary" onClick={() => setReceipt(null)}>{receipt.shiftSummary ? "Done" : "New sale"}</button></div></div></div>}
+    {confirmEndShift && <div className="modal-backdrop"><div className="modal" role="dialog" aria-modal="true" aria-label="Confirm end shift"><h2>End this shift?</h2><p>Sales and payment totals will be recorded. This action cannot be undone.</p><div className="editor-actions"><button className="button secondary" onClick={() => setConfirmEndShift(false)} disabled={busy}>Keep shift open</button><button className="button primary" onClick={toggleShift} disabled={busy}>{busy ? "Ending shift…" : "Confirm End Shift"}</button></div></div></div>}
   </div>;
 }
 

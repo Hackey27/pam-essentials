@@ -8,7 +8,7 @@ export async function GET(request) {
   const access = await requireRole(request, ["owner", "admin", "supervisor", "cashier"]);
   if (access.error) return NextResponse.json({ error: access.error }, { status: access.status });
   const snapshot = await adminDb().collection("shifts").where("staffId", "==", access.user.uid).get();
-  const shift = snapshot.docs.map(serializeDoc).find((item) => item.status === "open") || null;
+  const shift = snapshot.docs.map((doc) => ({ ...serializeDoc(doc), startedAt: doc.data().startedAt?.toDate?.()?.toISOString?.() || null })).find((item) => item.status === "open") || null;
   return NextResponse.json({ shift });
 }
 
@@ -20,7 +20,7 @@ export async function POST(request) {
   if (body.action === "open") {
     const existing = await store.collection("shifts").where("staffId", "==", access.user.uid).get();
     const open = existing.docs.find((doc) => doc.data().status === "open");
-    if (open) return NextResponse.json({ shift: serializeDoc(open), existing: true });
+    if (open) return NextResponse.json({ shift: { ...serializeDoc(open), startedAt: open.data().startedAt?.toDate?.()?.toISOString?.() || null }, existing: true });
     const shiftId = `SHIFT-${Date.now().toString(36).toUpperCase()}`;
     const value = {
       shiftId,
@@ -47,8 +47,15 @@ export async function POST(request) {
       salesTotal: sales.reduce((sum, sale) => sum + Number(sale.total || 0), 0),
       paymentMix: sales.reduce((mix, sale) => ({ ...mix, [sale.paymentMethod || "other"]: (mix[sale.paymentMethod || "other"] || 0) + Number(sale.total || 0) }), {}),
     };
-    await ref.update({ status: "closed", endedAt: FieldValue.serverTimestamp(), summary });
-    return NextResponse.json({ shift: { ...serializeDoc(snap), status: "closed", summary } });
+    try {
+      await store.runTransaction(async (tx) => {
+        const latest = await tx.get(ref);
+        if (!latest.exists || latest.data().status !== "open" || latest.data().staffId !== access.user.uid) throw new Error("This shift has already ended.");
+        tx.update(ref, { status: "closed", endedAt: FieldValue.serverTimestamp(), summary });
+      });
+    } catch (error) { return NextResponse.json({ error: error.message || "Shift could not be ended." }, { status: 409 }); }
+    return NextResponse.json({ shift: { ...serializeDoc(snap), status: "closed", endedAt: new Date().toISOString(), summary } });
   }
   return NextResponse.json({ error: "Choose open or close shift." }, { status: 400 });
 }
+

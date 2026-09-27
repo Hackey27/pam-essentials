@@ -95,6 +95,12 @@ function AdminPortal() {
   }
 
   useEffect(() => { load(); }, [user]);
+  useEffect(() => {
+    if (!isAdmin || new URLSearchParams(window.location.search).get("newExpense") !== "1") return;
+    setSection("Analytics");
+    openEditor("expense");
+    window.history.replaceState(null, "", "/admin");
+  }, [isAdmin]);
 
   async function mutate(url, payload, successMessage) {
     setSaving(true); setError(""); setNotice("");
