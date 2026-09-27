@@ -17,3 +17,10 @@ test("admin deactivation and specific rule priority are honored", () => {
   assert.equal(resolveDiscount(product, 1, [bulk, specific], new Date(), 3).amount, 2);
 });
 
+test("scheduled rules switch at the configured minute", () => {
+  const timed = { ...bulk, minQty: 1, startDate: "2026-09-27T10:30:00.000Z", endDate: "2026-09-27T12:15:00.000Z" };
+  assert.equal(resolveDiscount(product, 1, [timed], new Date("2026-09-27T10:29:00.000Z")).amount, 0);
+  assert.equal(resolveDiscount(product, 1, [timed], new Date("2026-09-27T10:30:00.000Z")).amount, 1);
+  assert.equal(resolveDiscount(product, 1, [timed], new Date("2026-09-27T12:16:00.000Z")).amount, 0);
+});
+

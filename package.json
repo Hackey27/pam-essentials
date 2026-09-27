@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "test": "node --test tests/discount.test.mjs tests/whatsappOrder.test.mjs && node --import ./tests/fixtures/register-loader.mjs --test tests/customerFlows.test.mjs tests/categoryCollections.test.mjs",
+    "test": "node --test tests/discount.test.mjs tests/whatsappOrder.test.mjs tests/cartPricing.test.mjs && node --import ./tests/fixtures/register-loader.mjs --test tests/customerFlows.test.mjs tests/categoryCollections.test.mjs",
     "test:auth-emulator": "node --import ./tests/fixtures/register-loader.mjs --test tests/authEmulator.test.mjs",
     "test:firestore-emulator": "node --test tests/firestoreRules.test.mjs",
     "test:customer-emulator": "node --import ./tests/fixtures/register-real-loader.mjs --test tests/customerEmulator.test.mjs",

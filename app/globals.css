@@ -552,4 +552,15 @@ body > div > main h1 { color: var(--navy); }
   .receipt-actions, .success-mark { display: none !important; }
   .receipt-print { padding: 6mm; }
 }
+.product-card-image { position: relative; }
+.promo-ribbon { position: absolute; top: 10px; right: -4px; z-index: 1; padding: 4px 10px; border-radius: 4px 0 0 4px; background: #c9303a; color: white; font-size: .7rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; box-shadow: 0 3px 8px #841a2740; }
+.deal-product-picker { max-height: 260px; overflow-y: auto; border: 1px solid #dce6ee; border-radius: 12px; padding: 8px; }
+.deal-product-picker label { display: flex; align-items: center; gap: 10px; padding: 7px; border-bottom: 1px solid #eaf0f4; }
+.deal-product-picker label:last-child { border-bottom: 0; }
+.deal-product-picker label span { flex: 1; }
+.deal-product-picker label small { display: block; color: #5c7080; }
+.deal-bundle-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 16px; margin: 20px 0; }
+.deal-bundle-grid .panel { padding: 18px; }
+.deal-bundle-grid .panel p { margin: 10px 0; }
+.deal-bundle-grid .panel strong { color: #0a4568; font-size: 1.2rem; }
 

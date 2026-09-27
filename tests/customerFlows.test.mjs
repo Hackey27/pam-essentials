@@ -97,3 +97,16 @@ test("checkout rejects unpriced, out-of-stock and inactive-category products", a
   assert.equal((await place("PAM-WB001-PNK-500")).status, 409);
 });
 
+test("customer checkout applies an active PAM Deal to exact variants", async () => {
+  const store = setup();
+  await store.collection("settings").doc("PAM_DEALS_ACTIVE").create({ value: true });
+  await store.collection("deal_bundles").doc("DEAL-BOTTLES").create({ dealId: "DEAL-BOTTLES", name: "Bottle pair", productIds: ["PAM-WB001-PNK-500", "PAM-WB001-GRN-750"], finalPrice: 65, active: true });
+  const created = await json(await createOrder(request("/api/orders", null, { customer: "Ada", phone: "0207015198", items: [{ id: "PAM-WB001-PNK-500", quantity: 1 }, { id: "PAM-WB001-GRN-750", quantity: 1 }] })));
+  assert.equal(created.status, 200);
+  assert.deepEqual([created.body.subtotal, created.body.discount, created.body.total], [80, 15, 65]);
+  const saved = store.inspect("orders", created.body.orderId);
+  assert.deepEqual(saved.items.map((item) => item.sku), ["PAM-WB001-PNK-500", "PAM-WB001-GRN-750"]);
+  assert.equal(saved.items.reduce((sum, item) => sum + item.lineTotal, 0), 65);
+  assert.ok(saved.items.some((item) => item.dealBundleSnapshot?.dealIds.includes("DEAL-BOTTLES")));
+});
+

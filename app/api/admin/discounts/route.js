@@ -24,6 +24,13 @@ export async function POST(request) {
   }
 
   const store = adminDb();
+  if (scopeId) {
+    const target = await store.collection(scopeType === "CATEGORY" ? "categories" : "products").doc(scopeType === "CATEGORY" ? scopeId : encodeURIComponent(scopeId)).get();
+    if (!target.exists) return NextResponse.json({ error: "Choose an existing category or product for this rule." }, { status: 400 });
+  }
+  const minQty = Number(body.minQty || 1);
+  const priority = Number(body.priority || 0);
+  if (!Number.isInteger(minQty) || minQty < 1 || !Number.isInteger(priority)) return NextResponse.json({ error: "Minimum quantity and priority must be whole numbers." }, { status: 400 });
   const ref = store.collection("discount_rules").doc(ruleId);
   const existing = await ref.get();
   if (body.create && existing.exists) return NextResponse.json({ error: "That rule ID already exists." }, { status: 409 });
@@ -33,13 +40,14 @@ export async function POST(request) {
     name,
     scopeType,
     scopeId,
+    kind: body.kind === "promotion" ? "promotion" : "discount",
     discountType,
     value: valueNumber,
-    minQty: Math.max(1, Math.floor(Number(body.minQty || 1))),
+    minQty,
     startDate,
     endDate,
     active: body.active !== false,
-    priority: Math.floor(Number(body.priority || 0)),
+    priority,
     updatedAt: FieldValue.serverTimestamp(),
   };
   const batch = store.batch();
@@ -49,3 +57,4 @@ export async function POST(request) {
   await batch.commit();
   return NextResponse.json({ ok: true, ruleId });
 }
+

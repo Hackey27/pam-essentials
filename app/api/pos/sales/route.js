@@ -1,7 +1,7 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { NextResponse } from "next/server";
 import { adminDb, requireRole } from "@/lib/admin";
-import { availableForSale, catalogueContext, resolveDiscount } from "@/lib/commerce";
+import { availableForSale, catalogueContext, priceCart } from "@/lib/commerce";
 import { SHOP_ADDRESS } from "@/lib/shop";
 
 export async function POST(request) {
@@ -48,7 +48,6 @@ export async function POST(request) {
       if (!shiftSnap.exists || shiftSnap.data().status !== "open" || shiftSnap.data().staffId !== access.user.uid) throw new Error("This till shift is no longer open.");
 
       const normalizedItems = [...quantities].map(([id, quantity]) => ({ id, quantity }));
-      const cartQuantity = normalizedItems.reduce((sum, item) => sum + item.quantity, 0);
       const salesChannel = ["walk-in", "website", "whatsapp"].includes(body.salesChannel) ? body.salesChannel : "walk-in";
       const orderReference = String(body.orderReference || "").trim().slice(0, 100) || null;
       const productRefs = normalizedItems.map(({ id }) => store.collection("products").doc(encodeURIComponent(id)));
@@ -56,27 +55,26 @@ export async function POST(request) {
       const linkedOrderSnap = orderReference ? await tx.get(store.collection("orders").doc(orderReference)) : null;
       if (orderReference && !linkedOrderSnap.exists) throw new Error("The linked order no longer exists.");
       const linkedOrder = linkedOrderSnap?.data();
+      for (let index = 0; index < normalizedItems.length; index += 1) {
+        const snap = productSnaps[index];
+        const quantity = normalizedItems[index].quantity;
+        if (!snap.exists) throw new Error("A selected product no longer exists.");
+        if (!availableForSale(snap.data(), context)) throw new Error(`${snap.data().name} is not available for sale.`);
+        if (Number(snap.data().stock) < quantity) throw new Error(`Only ${snap.data().stock} × ${snap.data().name} remain.`);
+      }
+      const pricing = priceCart(productSnaps.map((snap, index) => ({ id: normalizedItems[index].id, categoryId: snap.data().categoryId, price: Number(snap.data().price), quantity: normalizedItems[index].quantity })), context.rules, context.deals);
       const lines = [];
-      let subtotal = 0;
-      let discount = 0;
       let cost = 0;
 
       for (let index = 0; index < normalizedItems.length; index += 1) {
         const item = normalizedItems[index];
         const productRef = productRefs[index];
         const snap = productSnaps[index];
-        if (!snap.exists) throw new Error("A selected product no longer exists.");
         const product = snap.data();
         const quantity = item.quantity;
-        if (!availableForSale(product, context)) throw new Error(`${product.name} is not available for sale.`);
-        if (Number(product.stock) < quantity) throw new Error(`Only ${product.stock} × ${product.name} remain.`);
-
-        const lineTotal = Number(product.price) * quantity;
-        const applied = resolveDiscount(product, quantity, context.rules, new Date(), cartQuantity);
-        const netLineTotal = Math.round((lineTotal - applied.amount) * 100) / 100;
+        const priced = pricing.lines[index];
+        const netLineTotal = priced.lineTotal;
         const lineCost = Math.round(Number(product.costPrice || 0) * quantity * 100) / 100;
-        subtotal += lineTotal;
-        discount += applied.amount;
         cost += lineCost;
         lines.push({
           productId: product.id,
@@ -93,7 +91,8 @@ export async function POST(request) {
           lineCost,
           lineProfit: Math.round((netLineTotal - lineCost) * 100) / 100,
           categorySnapshot: { id: product.categoryId, name: product.category },
-          discountRuleSnapshot: applied.rule ? { ruleId: applied.rule.ruleId, name: applied.rule.name, amount: applied.amount } : null,
+          discountRuleSnapshot: priced.rule ? { ruleId: priced.rule.ruleId, name: priced.rule.name, amount: priced.ruleDiscountCents / 100 } : null,
+          dealBundleSnapshot: priced.dealIds.length ? { dealIds: priced.dealIds, amount: priced.dealDiscountCents / 100 } : null,
         });
         tx.update(productRef, { stock: Number(product.stock) - quantity, ...(salesChannel === "walk-in" ? { purchaseCount: FieldValue.increment(quantity) } : {}), updatedAt: FieldValue.serverTimestamp() });
         tx.create(store.collection("stock_movements").doc(), {
@@ -113,7 +112,7 @@ export async function POST(request) {
       }
 
       const receiptId = `PAM-${Date.now().toString(36).toUpperCase()}`;
-      const total = Math.round((subtotal - discount) * 100) / 100;
+      const total = pricing.total;
       const paymentMethod = ["cash", "mobile-money", "card"].includes(body.paymentMethod) ? body.paymentMethod : "cash";
       const tendered = paymentMethod === "cash" ? Number(body.amountPaid) : total;
       if (!Number.isFinite(tendered) || tendered < total) throw new Error("Amount paid cannot be less than the sale total.");
@@ -122,8 +121,8 @@ export async function POST(request) {
         receiptId,
         clientTransactionId: transactionId,
         items: lines,
-        subtotal: Math.round(subtotal * 100) / 100,
-        discount: Math.round(discount * 100) / 100,
+        subtotal: pricing.subtotal,
+        discount: pricing.discount,
         total,
         cost,
         profit: total - cost,

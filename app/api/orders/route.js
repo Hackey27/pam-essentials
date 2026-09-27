@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { NextResponse } from "next/server";
 import { adminDb } from "@/lib/admin";
 import { customerIdentity, optionalCustomerIdentity } from "@/lib/customerAuth";
-import { availableForSale, catalogueContext, resolveDiscount } from "@/lib/commerce";
+import { availableForSale, catalogueContext, priceCart } from "@/lib/commerce";
 import { deliveryMethods, SHOP_ADDRESS } from "@/lib/shop";
 
 export const dynamic = "force-dynamic";
@@ -53,27 +53,22 @@ export async function POST(request) {
   }
 
   const normalizedItems = [...quantities].map(([id, quantity]) => ({ id, quantity }));
-  const cartQuantity = normalizedItems.reduce((sum, item) => sum + item.quantity, 0);
   const productRefs = normalizedItems.map(({ id }) => store.collection("products").doc(encodeURIComponent(id)));
   const productSnaps = await store.getAll(...productRefs);
   const items = [];
-  let subtotal = 0;
-  let discount = 0;
+  for (let index = 0; index < normalizedItems.length; index += 1) {
+    const snap = productSnaps[index];
+    const quantity = normalizedItems[index].quantity;
+    if (!snap.exists || !availableForSale(snap.data(), context)) return NextResponse.json({ error: "A selected product is no longer available." }, { status: 409 });
+    if (Number(snap.data().stock) < quantity) return NextResponse.json({ error: `Only ${snap.data().stock} × ${snap.data().name} remain.` }, { status: 409 });
+  }
+  const pricing = priceCart(productSnaps.map((snap, index) => ({ id: normalizedItems[index].id, categoryId: snap.data().categoryId, price: Number(snap.data().price), quantity: normalizedItems[index].quantity })), context.rules, context.deals);
   for (let index = 0; index < normalizedItems.length; index += 1) {
     const item = normalizedItems[index];
     const snap = productSnaps[index];
-    if (!snap.exists || !availableForSale(snap.data(), context)) {
-      return NextResponse.json({ error: "A selected product is no longer available." }, { status: 409 });
-    }
     const product = snap.data();
     const quantity = item.quantity;
-    if (Number(product.stock) < quantity) {
-      return NextResponse.json({ error: `Only ${product.stock} × ${product.name} remain.` }, { status: 409 });
-    }
-    const lineTotal = Number(product.price) * quantity;
-    const applied = resolveDiscount(product, quantity, context.rules, new Date(), cartQuantity);
-    subtotal += lineTotal;
-    discount += applied.amount;
+    const priced = pricing.lines[index];
     items.push({
       productId: product.id,
       productGroupId: product.productGroupId || "",
@@ -84,21 +79,22 @@ export async function POST(request) {
       name: product.name,
       quantity,
       unitPrice: Number(product.price),
-      lineTotal: Math.round((lineTotal - applied.amount) * 100) / 100,
+      lineTotal: priced.lineTotal,
       categorySnapshot: { id: product.categoryId, name: product.category },
-      discountRuleSnapshot: applied.rule ? { ruleId: applied.rule.ruleId, name: applied.rule.name, amount: applied.amount } : null,
+      discountRuleSnapshot: priced.rule ? { ruleId: priced.rule.ruleId, name: priced.rule.name, amount: priced.ruleDiscountCents / 100 } : null,
+      dealBundleSnapshot: priced.dealIds.length ? { dealIds: priced.dealIds, amount: priced.dealDiscountCents / 100 } : null,
     });
   }
   const orderId = `ORD-${Date.now().toString(36).toUpperCase()}-${randomBytes(5).toString("hex").toUpperCase()}`;
-  const total = Math.round((subtotal - discount) * 100) / 100;
+  const total = pricing.total;
   const orderSnapshot = {
     orderId,
     customer,
     phone,
     customerUid: account.uid,
     items,
-    subtotal: Math.round(subtotal * 100) / 100,
-    discount: Math.round(discount * 100) / 100,
+    subtotal: pricing.subtotal,
+    discount: pricing.discount,
     total,
     channel: body.channel === "whatsapp" ? "whatsapp" : "website",
     deliveryMethod,
