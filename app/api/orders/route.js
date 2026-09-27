@@ -71,6 +71,11 @@ export async function POST(request) {
     discount += applied.amount;
     items.push({
       productId: product.id,
+      productGroupId: product.productGroupId || "",
+      variantId: product.productGroupId ? product.id : "",
+      sku: product.id,
+      colour: product.colour || "",
+      size: product.size || "",
       name: product.name,
       quantity,
       unitPrice: Number(product.price),

@@ -161,6 +161,47 @@ input, select { min-height: 44px; border: 1px solid var(--line); border-radius: 
 .cookie-banner { position: fixed; right: 1rem; bottom: 1rem; z-index: 26; display: flex; max-width: 620px; align-items: center; gap: 1rem; border: 1px solid var(--line); border-radius: 12px; padding: .8rem; background: white; box-shadow: var(--shadow); }
 .cookie-banner p { margin: 0; color: var(--muted); font-size: .78rem; }
 
+/* Product details and variant choices */
+.product-card-image { display: block; }
+.product-copy .button + .button { margin-top: .45rem; }
+.quick-view-modal { width: min(960px, 100%); max-height: calc(100vh - 2rem); overflow-y: auto; padding: 1rem; text-align: left; }
+.product-options { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: clamp(1rem, 4vw, 3rem); align-items: start; }
+.product-options .product-detail-image { display: grid; width: 100%; min-height: 360px; aspect-ratio: 1; object-fit: contain; place-content: center; border-radius: 14px; background: var(--soft-blue); }
+.product-option-body { display: grid; gap: .7rem; }
+.product-option-body h2 { margin: 0; font-size: clamp(1.4rem, 3vw, 2.2rem); line-height: 1.2; }
+.product-option-body .sku { margin: 0; }
+.product-option-top { display: flex; justify-content: flex-end; }
+.detail-price { margin: 0; color: var(--navy); font-size: 1.5rem; font-weight: 900; }
+.stock-label { margin: 0; color: var(--green); font-weight: 800; }
+.stock-label.out { color: #a33737; }
+.variant-controls { display: grid; gap: .8rem; margin: .4rem 0; }
+.variant-controls fieldset { border: 0; border-top: 1px solid var(--line); margin: 0; padding: .8rem 0 0; }
+.variant-controls legend, .selection-summary b { font-weight: 900; }
+.selection-summary { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; border-radius: 9px; padding: .75rem; background: var(--soft-blue); }
+.selection-summary button, .product-utilities button { border: 0; color: var(--navy); background: transparent; cursor: pointer; text-decoration: underline; }
+.variant-choice-list { display: flex; flex-wrap: wrap; gap: .5rem; margin: .55rem 0; }
+.variant-choice { display: grid; gap: .2rem; border: 1px solid var(--line); border-radius: 8px; padding: .5rem .7rem; color: var(--navy); background: white; cursor: pointer; }
+.variant-choice.selected { border-color: var(--navy); background: var(--soft-blue); font-weight: 900; }
+.variant-choice:disabled { opacity: .45; cursor: not-allowed; }
+.variant-choice small { font-size: .6rem; }
+.quantity-control { display: flex; align-items: center; justify-content: space-between; font-weight: 800; }
+.detail-link { color: var(--navy); font-weight: 900; }
+.added-actions { display: flex; justify-content: center; gap: .7rem; margin-top: 1rem; }
+.product-page-header { display: flex; align-items: center; justify-content: space-between; padding: 1rem 5vw; border-bottom: 1px solid var(--line); }
+.product-page-main { max-width: 1180px; margin: 0 auto; padding: 2rem 5vw 5rem; }
+.product-page-main .breadcrumb { margin-bottom: 1.5rem; }
+.product-utilities { display: flex; flex-wrap: wrap; gap: 1rem; justify-content: flex-end; padding: .8rem 0; }
+.detail-section, .related-products { margin-top: 2rem; border-top: 1px solid var(--line); padding-top: 1.5rem; }
+.detail-section h2 { margin: 1.3rem 0 .5rem; }
+.detail-section dl { display: grid; grid-template-columns: max-content 1fr; gap: .5rem 1.5rem; }
+.detail-section dt { color: var(--muted); }
+.detail-section dd { margin: 0; }
+.related-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
+.related-grid a { display: grid; gap: .6rem; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; padding-bottom: .7rem; }
+.related-grid a b { padding: 0 .7rem; }
+.related-grid .product-art, .related-grid .product-photo { min-height: 130px; }
+@media (max-width: 700px) { .product-options { grid-template-columns: 1fr; } .product-options .product-detail-image { min-height: 250px; max-height: 300px; } .related-grid { grid-template-columns: repeat(2, 1fr); } .quick-view-modal { max-height: calc(100vh - 1rem); } }
+
 /* Admin */
 .admin-shell { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; background: var(--canvas); }
 .admin-sidebar { position: sticky; top: 0; display: flex; height: 100vh; flex-direction: column; padding: 1.5rem 1rem; color: white; background: var(--navy); }

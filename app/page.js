@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { resolveDiscount } from "@/lib/commerce";
 import { curatedSearches, hasCollection, inCollection, isBestSeller, isNewArrival, isOnSale, isPromotion, matchesSearch } from "@/lib/catalogueBrowse.mjs";
+import ProductOptions, { variantPrice } from "@/components/ProductOptions";
+import { addToCart, readCart, saveCart } from "@/lib/storeCart";
 
 const money = new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS" });
 
@@ -35,6 +37,8 @@ export default function Storefront() {
   const [priceMin, setPriceMin] = useState(0);
   const [priceMax, setPriceMax] = useState(Infinity);
   const [cart, setCart] = useState([]);
+  const [quickProduct, setQuickProduct] = useState(null);
+  const [addedProduct, setAddedProduct] = useState(null);
   const [cartOpen, setCartOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -50,12 +54,13 @@ export default function Storefront() {
 
   useEffect(() => {
     fetch("/api/catalog/products")
-      .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error); setProducts(data.products || []); setCategoryList(data.categories || []); setSubcategoryList(data.subcategories || []); setSubSubcategoryList(data.subSubcategories || []); setDiscountRules(data.discountRules || []); setPopularProducts(data.popularProducts || []); setPublicLaunch(data.publicLaunch === true); const highest = Math.ceil(Math.max(0, ...(data.products || []).map((product) => Number(product.price || 0)))); setPriceMax(highest || Infinity); })
+      .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error); setProducts(data.products || []); setCategoryList(data.categories || []); setSubcategoryList(data.subcategories || []); setSubSubcategoryList(data.subSubcategories || []); setDiscountRules(data.discountRules || []); setPopularProducts(data.popularProducts || []); setPublicLaunch(data.publicLaunch === true); const highest = Math.ceil(Math.max(0, ...(data.products || []).map((product) => Number(product.price || 0)))); setPriceMax(highest || Infinity); const current = readCart(); const refreshed = current.map((line) => { const product = (data.products || []).find((item) => item.id === line.id); return product && product.stock > 0 ? { ...product, quantity: Math.min(Number(line.quantity), Number(product.stock)) } : null; }).filter(Boolean); saveCart(refreshed); setCart(refreshed); })
       .catch((err) => setError(err.message || "The catalogue is unavailable."))
       .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => { setCookieVisible(localStorage.getItem("pam-cookie-notice") !== "accepted"); }, []);
+  useEffect(() => { setCart(readCart()); if (new URLSearchParams(window.location.search).has("cart")) setCartOpen(true); }, []);
 
   const categories = useMemo(() => {
     const ordered = categoryList.map((item) => item.name);
@@ -169,8 +174,10 @@ export default function Storefront() {
   }
 
   function recordClick(product) {
-    if (!publicLaunch || clickSession.current.seen.has(product.id)) return;
-    if (!clickSession.current.id) clickSession.current.id = crypto.randomUUID();
+    if (!publicLaunch || clickSession.current.seen.has(product.id) || sessionStorage.getItem(`pam-click-${product.id}`)) return;
+    if (!clickSession.current.id) clickSession.current.id = sessionStorage.getItem("pam-visitor-id") || crypto.randomUUID();
+    sessionStorage.setItem("pam-visitor-id", clickSession.current.id);
+    sessionStorage.setItem(`pam-click-${product.id}`, "1");
     clickSession.current.seen.add(product.id);
     fetch("/api/catalog/engagement", {
       method: "POST",
@@ -180,17 +187,16 @@ export default function Storefront() {
     }).catch(() => {});
   }
 
-  function add(product) {
+  function add(product, quantity = 1) {
     recordClick(product);
-    setCart((current) => {
-      const found = current.find((item) => item.id === product.id);
-      return found ? current.map((item) => item.id === product.id ? { ...item, quantity: Math.min(item.stock, item.quantity + 1) } : item) : [...current, { ...product, quantity: 1 }];
-    });
-    setCartOpen(true);
+    const next = addToCart(readCart(), product, quantity);
+    saveCart(next); setCart(next);
+    setQuickProduct(null);
+    setAddedProduct({ ...product, quantity });
   }
 
   function updateQuantity(id, quantity) {
-    setCart((current) => current.map((item) => item.id === id ? { ...item, quantity: Math.min(item.stock, Math.max(0, quantity)) } : item).filter((item) => item.quantity > 0));
+    setCart((current) => { const next = current.map((item) => item.id === id ? { ...item, quantity: Math.min(item.stock, Math.max(0, quantity)) } : item).filter((item) => item.quantity > 0); saveCart(next); return next; });
   }
 
   async function createOrder(channel = "website") {
@@ -207,7 +213,7 @@ export default function Storefront() {
   async function placeOrder(event) {
     event.preventDefault();
     const data = await createOrder("website");
-    if (data) { setConfirmation(data); setCart([]); setCheckout(false); }
+    if (data) { setConfirmation(data); setCart([]); saveCart([]); setCheckout(false); }
   }
 
   async function orderOnWhatsApp() {
@@ -217,12 +223,12 @@ export default function Storefront() {
     const whatsappWindow = window.open("", "_blank");
     const data = await createOrder("whatsapp");
     if (!data) { whatsappWindow?.close(); return; }
-    const lines = cart.map((item) => `${item.quantity} × ${item.name}`).join("\n");
-    const message = `PAM Essentials order ${data.orderId}\n${order.customer} · ${order.phone}\n${lines}\nTotal: ${money.format(data.total)}\nFulfilment: ${order.deliveryMethod}${order.landmark ? ` · ${order.landmark}` : ""}`;
-    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+    const lines = cart.map((item, index) => `${index + 1}. ${item.name}\n${[item.colour && `Colour: ${item.colour}`, item.size && `Size: ${item.size}`].filter(Boolean).join("\n")}${item.colour || item.size ? "\n" : ""}SKU: ${item.id}\nQty: ${item.quantity}\nPrice: ${money.format(item.price)}\nLine total: ${money.format(item.price * item.quantity)}`).join("\n\n");
+    const message = `Hello PAM Essentials & More 👋\n\nI'd like to place this order (${data.orderId}):\n${lines}\n\nSubtotal: ${money.format(subtotal)}\nDiscount: ${money.format(discount)}\nTotal: ${money.format(data.total)}\n\nName: ${order.customer}\nPhone: ${order.phone}\nDelivery/Pickup: ${order.deliveryMethod}${order.landmark ? `\nLocation: ${order.landmark}` : ""}`;
+    const whatsappUrl = `https://wa.me/233207015198?text=${encodeURIComponent(message)}`;
     if (whatsappWindow) whatsappWindow.location.href = whatsappUrl;
     else window.location.href = whatsappUrl;
-    setConfirmation(data); setCart([]); setCheckout(false);
+    setConfirmation(data); setCart([]); saveCart([]); setCheckout(false);
   }
 
   async function trackOrder(event) {
@@ -304,14 +310,28 @@ export default function Storefront() {
           {loading && <div className="empty-state"><div className="spinner" /><p>Loading the catalogue…</p></div>}
           {error && !products.length && <div className="empty-state error-panel"><h3>Catalogue unavailable</h3><p>{error}</p></div>}
           {!loading && !error && !visible.length && <div className="empty-state"><h3>No matching products</h3><p>Try another search, category or collection.</p></div>}
-          <div className="product-grid">{pagedProducts.map((product) => <article className="product-card" key={product.id}>{product.imageUrl ? <img className="product-photo" src={product.imageUrl} alt={product.name} /> : <ProductArt name={product.name} category={product.category} />}<div className="product-copy"><div className="product-badges"><span className={product.stock > 0 ? "badge success" : "badge danger"}>{product.stock > 0 ? "In stock" : "Out of stock"}</span>{product.stock > 0 && product.stock < Number(product.lowStockLevel ?? 8) && <span className="badge warning">Low stock</span>}{isNewArrival(product) && <span className="badge neutral">New</span>}{publicLaunch && isBestSeller(product) && <span className="badge neutral">Best seller</span>}{isOnSale(product, discountRules) && <span className="badge warning">On sale</span>}</div><p className="sku">{product.id}</p><h3>{product.name}</h3>{product.description && <p className="product-description">{product.description}</p>}<p className="price">{money.format(product.price)}</p>{product.stock > 0 ? <button className="button primary full" onClick={() => add(product)}>Add to cart</button> : <a className="button secondary full" href={`https://wa.me/233207015198?text=${encodeURIComponent(`Hello PAM Essentials & More, please notify me when ${product.name} (${product.id}) is available.`)}`} target="_blank" rel="noreferrer">Notify me when available</a>}</div></article>)}</div>
+          <div className="product-grid">{pagedProducts.map((product) => {
+            const variants = product.productGroupId ? products.filter((item) => item.productGroupId === product.productGroupId) : [product];
+            const hasVariants = variants.length > 1;
+            return <article className="product-card" key={product.id}>
+              <a href={`/products/${encodeURIComponent(product.id)}`} className="product-card-image">{product.imageUrl ? <img className="product-photo" src={product.imageUrl} alt={product.name} /> : <ProductArt name={product.name} category={product.category} />}</a>
+              <div className="product-copy"><div className="product-badges"><span className={product.stock > 0 ? "badge success" : "badge danger"}>{product.stock > 0 ? "In stock" : "Out of stock"}</span>{product.stock > 0 && product.stock < Number(product.lowStockLevel ?? 8) && <span className="badge warning">Low stock</span>}{isNewArrival(product) && <span className="badge neutral">New</span>}{publicLaunch && isBestSeller(product) && <span className="badge neutral">Best seller</span>}{isOnSale(product, discountRules) && <span className="badge warning">On sale</span>}</div>
+              <p className="sku">{product.id}</p><h3><a href={`/products/${encodeURIComponent(product.id)}`}>{product.name}</a></h3>{product.description && <p className="product-description">{product.description}</p>}
+              <p className="price">{hasVariants ? variantPrice(variants) : money.format(product.price)}</p>{hasVariants && <small>{variants.length} variants available</small>}
+              <button type="button" className="button primary full" onClick={() => { recordClick(product); setQuickProduct(product); }}>{hasVariants ? "View options" : "Quick View"}</button>
+              {!hasVariants && product.stock > 0 && <button type="button" className="button secondary full" onClick={() => add(product)}>Add to cart</button>}
+            </div></article>;
+          })}</div>
           {visible.length > pageSize && <div className="pagination"><button disabled={page === 1} onClick={() => setPage((current) => current - 1)}>Previous</button><span>Page {page} of {pageCount}</span><button disabled={page === pageCount} onClick={() => setPage((current) => current + 1)}>Next</button></div>}
         </main>
       </section>
 
       <footer className="store-footer" id="delivery"><b>PAM Essentials & More</b><span>Pickup and delivery available</span><span>Prices shown in Ghana Cedis</span></footer>
 
-      {cartOpen && <div className="drawer-backdrop" onMouseDown={() => setCartOpen(false)}><aside className="cart-drawer" onMouseDown={(event) => event.stopPropagation()}><div className="drawer-title"><div><p className="eyebrow">Your order</p><h2>Shopping cart</h2></div><button className="icon-button" onClick={() => setCartOpen(false)}>×</button></div>{error && <p className="notice error-notice">{error}</p>}{!cart.length ? <div className="empty-state"><h3>Your cart is empty</h3><p>Add a product to get started.</p></div> : <><div className="cart-lines">{cart.map((item) => <div className="cart-line" key={item.id}><ProductArt name={item.name} category={item.category} /><div><h3>{item.name}</h3><p>{money.format(item.price)}</p><div className="stepper"><button onClick={() => updateQuantity(item.id, item.quantity - 1)}>−</button><span>{item.quantity}</span><button onClick={() => updateQuantity(item.id, item.quantity + 1)}>+</button></div></div><b>{money.format(item.price * item.quantity - resolveDiscount(item, item.quantity, discountRules).amount)}</b></div>)}</div><div className="cart-total"><span>Subtotal</span><strong>{money.format(subtotal)}</strong></div>{discount > 0 && <div className="cart-total discount-total"><span>Discount</span><strong>−{money.format(discount)}</strong></div>}<div className="cart-total grand-total"><span>Total</span><strong>{money.format(total)}</strong></div>{!checkout ? <button className="button accent full" onClick={() => setCheckout(true)}>Continue to checkout</button> : <form className="checkout-form" onSubmit={placeOrder}><label>Full name<input required value={order.customer} onChange={(e) => setOrder({ ...order, customer: e.target.value })} /></label><label>Mobile number<input required type="tel" value={order.phone} onChange={(e) => setOrder({ ...order, phone: e.target.value })} /></label><label>Fulfilment<select value={order.deliveryMethod} onChange={(e) => setOrder({ ...order, deliveryMethod: e.target.value })}><option value="pickup">Pickup</option><option value="delivery-self">Delivery – self initiated</option><option value="delivery-shop">Delivery – arranged by shop</option></select></label>{order.deliveryMethod !== "pickup" && <label>Location or landmark<input required value={order.landmark} onChange={(e) => setOrder({ ...order, landmark: e.target.value })} /></label>}<button className="button accent full" type="submit" disabled={placingOrder}>{placingOrder ? "Creating order…" : `Pay on pickup/delivery · ${money.format(total)}`}</button><button className="button whatsapp full" type="button" disabled={placingOrder} onClick={orderOnWhatsApp}>Order on WhatsApp</button><button className="button secondary full" type="button" disabled title="Payment provider has not been selected yet">Pay now · coming soon</button></form>}</>}</aside></div>}
+      {quickProduct && <div className="modal-backdrop" role="presentation" onMouseDown={() => setQuickProduct(null)}><div className="modal quick-view-modal" role="dialog" aria-modal="true" aria-label={`Quick View ${quickProduct.name}`} onMouseDown={(event) => event.stopPropagation()}><ProductOptions key={quickProduct.id} initialProduct={quickProduct} products={products} compact onClose={() => setQuickProduct(null)} onAdd={add} /></div></div>}
+      {addedProduct && <div className="modal-backdrop" role="presentation"><div className="modal" role="dialog" aria-modal="true" aria-label="Added to cart"><h2>Added to cart</h2><p>{addedProduct.quantity} × {addedProduct.name}</p><p>SKU: {addedProduct.id}{addedProduct.colour && ` · ${addedProduct.colour}`}{addedProduct.size && ` · ${addedProduct.size}`}</p><div className="added-actions"><button className="button secondary" onClick={() => { setAddedProduct(null); document.getElementById("catalogue")?.scrollIntoView({ behavior: "smooth" }); }}>Continue shopping</button><button className="button primary" onClick={() => { setAddedProduct(null); setCartOpen(true); }}>View cart</button></div></div></div>}
+
+      {cartOpen && <div className="drawer-backdrop" onMouseDown={() => setCartOpen(false)}><aside className="cart-drawer" onMouseDown={(event) => event.stopPropagation()}><div className="drawer-title"><div><p className="eyebrow">Your order</p><h2>Shopping cart</h2></div><button className="icon-button" onClick={() => setCartOpen(false)}>×</button></div>{error && <p className="notice error-notice">{error}</p>}{!cart.length ? <div className="empty-state"><h3>Your cart is empty</h3><p>Add a product to get started.</p></div> : <><div className="cart-lines">{cart.map((item) => <div className="cart-line" key={item.id}><ProductArt name={item.name} category={item.category} /><div><h3>{item.name}</h3><p>{[item.colour, item.size, `SKU: ${item.id}`].filter(Boolean).join(" · ")}</p><p>{money.format(item.price)}</p><div className="stepper"><button onClick={() => updateQuantity(item.id, item.quantity - 1)}>−</button><span>{item.quantity}</span><button onClick={() => updateQuantity(item.id, item.quantity + 1)}>+</button></div></div><b>{money.format(item.price * item.quantity - resolveDiscount(item, item.quantity, discountRules).amount)}</b></div>)}</div><div className="cart-total"><span>Subtotal</span><strong>{money.format(subtotal)}</strong></div>{discount > 0 && <div className="cart-total discount-total"><span>Discount</span><strong>−{money.format(discount)}</strong></div>}<div className="cart-total grand-total"><span>Total</span><strong>{money.format(total)}</strong></div>{!checkout ? <button className="button accent full" onClick={() => setCheckout(true)}>Continue to checkout</button> : <form className="checkout-form" onSubmit={placeOrder}><label>Full name<input required value={order.customer} onChange={(e) => setOrder({ ...order, customer: e.target.value })} /></label><label>Mobile number<input required type="tel" value={order.phone} onChange={(e) => setOrder({ ...order, phone: e.target.value })} /></label><label>Fulfilment<select value={order.deliveryMethod} onChange={(e) => setOrder({ ...order, deliveryMethod: e.target.value })}><option value="pickup">Pickup</option><option value="delivery-self">Delivery – self initiated</option><option value="delivery-shop">Delivery – arranged by shop</option></select></label>{order.deliveryMethod !== "pickup" && <label>Location or landmark<input required value={order.landmark} onChange={(e) => setOrder({ ...order, landmark: e.target.value })} /></label>}<button className="button accent full" type="submit" disabled={placingOrder}>{placingOrder ? "Creating order…" : `Pay on pickup/delivery · ${money.format(total)}`}</button><button className="button whatsapp full" type="button" disabled={placingOrder} onClick={orderOnWhatsApp}>Order on WhatsApp</button><button className="button secondary full" type="button" disabled title="Payment provider has not been selected yet">Pay now · coming soon</button></form>}</>}</aside></div>}
       {confirmation && <div className="modal-backdrop"><div className="modal"><span className="success-mark">✓</span><h2>Order received</h2><p>Keep this reference for pickup or delivery.</p><strong className="order-reference">{confirmation.orderId}</strong><button className="button primary full" onClick={() => { setConfirmation(null); setCartOpen(false); }}>Continue shopping</button></div></div>}
       {trackOpen && <div className="modal-backdrop"><form className="modal admin-form" onSubmit={trackOrder}><div className="drawer-title"><div><p className="eyebrow">Order status</p><h2>Track order</h2></div><button type="button" className="icon-button" onClick={() => { setTrackOpen(false); setTrackedOrder(null); setError(""); }}>×</button></div>{error && <p className="notice error-notice">{error}</p>}<label>Order reference<input required placeholder="ORD-…" value={track.reference} onChange={(event) => setTrack({ ...track, reference: event.target.value })} /></label><label>Phone number<input required type="tel" value={track.phone} onChange={(event) => setTrack({ ...track, phone: event.target.value })} /></label><button className="button primary full">Find order</button>{trackedOrder && <div className="tracked-order"><span className="badge warning">{trackedOrder.status}</span><h3>{trackedOrder.orderId}</h3><p>{trackedOrder.paymentStatus} · {trackedOrder.deliveryMethod}</p><strong>{money.format(trackedOrder.total)}</strong>{trackedOrder.pickupCode && <p className="pickup-code">Pickup code {trackedOrder.pickupCode}</p>}</div>}</form></div>}
       <a className="whatsapp-fab" href="https://wa.me/" target="_blank" rel="noreferrer" aria-label="Chat with PAM Essentials on WhatsApp">WhatsApp</a>
