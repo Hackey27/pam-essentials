@@ -9,7 +9,7 @@ export async function POST(request) {
   const body = await request.json().catch(() => ({}));
   const reference = String(body.reference || "").trim().toUpperCase();
   const phone = String(body.phone || "").replace(/\s+/g, "").trim();
-  if (!/^ORD-[A-Z0-9]+$/.test(reference) || !phone) return NextResponse.json({ error: "Enter a valid order reference and phone number." }, { status: 400 });
+  if (!/^ORD-[A-Z0-9]+(?:-[A-Z0-9]+)?$/.test(reference) || !phone) return NextResponse.json({ error: "Enter a valid order reference and phone number." }, { status: 400 });
   const store = adminDb();
   try {
     await store.runTransaction(async (tx) => {

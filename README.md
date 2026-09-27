@@ -36,6 +36,8 @@ Customers can check out as guests or create an account at `/account`. Staff sign
 
 The global seeded 5% rule applies when the cart contains at least three units across products, subject to the active Admin rule. Storefront, order creation and POS use the same rule and keep server-side prices authoritative. Self-arranged delivery records the shop collection address; shop-arranged delivery requires a destination. Both fields appear in order details and linked POS receipts. Online payment remains unavailable until a provider is configured.
 
+Website order creation returns the saved SKU, variant, price, subtotal, discount and total snapshot. The WhatsApp draft uses that server response so its message agrees with the recorded order even if catalogue prices or discount rules changed while the cart was open. Order references include a random suffix; the account claim flow accepts both these and earlier references. The storefront blocks concurrent checkout submissions from the same page.
+
 ## Storefront presentation
 
 The hero uses an abstract placeholder until the owner supplies the official flyer. Set `HERO_FLYER_URL` to an HTTPS image URL in Admin Settings to display that image at 55% transparency. Product photos remain individually editable in Admin.

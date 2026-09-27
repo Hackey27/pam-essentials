@@ -7,6 +7,7 @@ import ProductOptions, { variantPrice } from "@/components/ProductOptions";
 import { addToCart, readCart, saveCart } from "@/lib/storeCart";
 import { useAuth } from "@/components/AuthProvider";
 import { SHOP_ADDRESS } from "@/lib/shop";
+import { whatsappOrderMessage } from "@/lib/whatsappOrder.mjs";
 
 const money = new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS" });
 
@@ -53,6 +54,7 @@ export default function Storefront() {
   const [placingOrder, setPlacingOrder] = useState(false);
   const [cookieVisible, setCookieVisible] = useState(false);
   const clickSession = useRef({ id: "", seen: new Set() });
+  const orderRequest = useRef(false);
 
   useEffect(() => {
     fetch("/api/catalog/products")
@@ -207,6 +209,8 @@ export default function Storefront() {
   }
 
   async function createOrder(channel = "website") {
+    if (orderRequest.current) return null;
+    orderRequest.current = true;
     setPlacingOrder(true); setError("");
     try {
       const token = user && !role ? await user.getIdToken() : "";
@@ -215,7 +219,7 @@ export default function Storefront() {
       if (!response.ok) throw new Error(data.error || "The order could not be created.");
       return data;
     } catch (err) { setError(err.message || "The order could not be created."); return null; }
-    finally { setPlacingOrder(false); }
+    finally { orderRequest.current = false; setPlacingOrder(false); }
   }
 
   async function placeOrder(event) {
@@ -231,8 +235,7 @@ export default function Storefront() {
     const whatsappWindow = window.open("", "_blank");
     const data = await createOrder("whatsapp");
     if (!data) { whatsappWindow?.close(); return; }
-    const lines = cart.map((item, index) => `${index + 1}. ${item.name}\n${[item.colour && `Colour: ${item.colour}`, item.size && `Size: ${item.size}`].filter(Boolean).join("\n")}${item.colour || item.size ? "\n" : ""}SKU: ${item.id}\nQty: ${item.quantity}\nPrice: ${money.format(item.price)}\nLine total: ${money.format(item.price * item.quantity)}`).join("\n\n");
-    const message = `Hello PAM Essentials & More 👋\n\nI'd like to place this order (${data.orderId}):\n${lines}\n\nSubtotal: ${money.format(subtotal)}\nDiscount: ${money.format(discount)}\nTotal: ${money.format(data.total)}\n\nName: ${order.customer}\nPhone: ${order.phone}\nDelivery/Pickup: ${order.deliveryMethod}\nShop collection address: ${SHOP_ADDRESS}${order.deliveryAddress ? `\nDelivery destination: ${order.deliveryAddress}` : ""}`;
+    const message = whatsappOrderMessage(data, order.customer, order.phone);
     const whatsappUrl = `https://wa.me/233207015198?text=${encodeURIComponent(message)}`;
     if (whatsappWindow) whatsappWindow.location.href = whatsappUrl;
     else window.location.href = whatsappUrl;
