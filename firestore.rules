@@ -25,9 +25,6 @@ service cloud.firestore {
     function isAdmin() {
       return activeStaff() && (role() == 'owner' || role() == 'admin');
     }
-    function isOwner() {
-      return activeStaff() && role() == 'owner';
-    }
     function isStaff() {
       return isCashier() || isSupervisor() || isAdmin();
     }
@@ -38,11 +35,9 @@ service cloud.firestore {
     }
 
     match /products/{id} {
-      allow read: if isStaff() ||
-        (resource.data.active == true &&
-         resource.data.archived == false &&
-         resource.data.sellable == true &&
-         resource.data.price > 0);
+      // Product documents include internal cost fields. Public, POS and
+      // supervisor views receive field-limited data from server APIs.
+      allow read: if isAdmin();
       allow write: if false;
     }
 
@@ -53,7 +48,8 @@ service cloud.firestore {
 
     // Sales, order writes, stock changes and audit entries are server-authoritative.
     match /sales/{id} {
-      allow read: if isStaff();
+      // Sales contain cost and profit snapshots.
+      allow read: if isAdmin();
       allow write: if false;
     }
     match /orders/{id} {
@@ -90,3 +86,4 @@ service cloud.firestore {
     }
   }
 }
+
