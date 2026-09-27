@@ -191,6 +191,7 @@ input, select { min-height: 44px; border: 1px solid var(--line); border-radius: 
 .product-page-main { max-width: 1180px; margin: 0 auto; padding: 2rem 5vw 5rem; }
 .product-page-main .breadcrumb { margin-bottom: 1.5rem; }
 .product-utilities { display: flex; flex-wrap: wrap; gap: 1rem; justify-content: flex-end; padding: .8rem 0; }
+.product-utilities button:disabled { opacity: .5; cursor: not-allowed; text-decoration: none; }
 .detail-section, .related-products { margin-top: 2rem; border-top: 1px solid var(--line); padding-top: 1.5rem; }
 .detail-section h2 { margin: 1.3rem 0 .5rem; }
 .detail-section dl { display: grid; grid-template-columns: max-content 1fr; gap: .5rem 1.5rem; }

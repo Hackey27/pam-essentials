@@ -3,7 +3,7 @@
 Updated: 2026-09-27
 Repository: https://github.com/Hackey27/pam-essentials
 Primary branch: `main`
-Current status: catalogue browsing hierarchy and filters deployed and verified; product detail and cart chunk is next.
+Current status: product detail and cart chunk deployed and checked; customer orders is next.
 
 ## Working protocol
 
@@ -29,7 +29,7 @@ Current status: catalogue browsing hierarchy and filters deployed and verified; 
 
 ## Current work in progress
 
-- Catalogue metadata import and the catalogue browsing chunk are live. The next chunk covers product pages, Quick View, variant selection and exact cart lines.
+- Catalogue metadata import and browsing are live. Product pages, Quick View, variant selection and exact cart lines were pushed in commit `9c9ea65157ec0761f468762a488b8ee32c01400f` and checked on the live storefront.
 - Awaiting the hero flyer asset. The user resolved sorting: preserve the current Admin category order and initialize child order from workbook appearance within each parent.
 
 ## Key constraints and requirements
@@ -136,4 +136,12 @@ Current status: catalogue browsing hierarchy and filters deployed and verified; 
 - Curated popular searches remain unchanged until `STORE_PUBLIC=true` is set at the public launch. Once enabled, add-to-cart clicks are counted once per page session and qualified products can appear beside the curated terms. Walk-in POS sales and paid website orders increment purchase counts. The public API returns the Best seller flag and ranked products, not raw engagement totals. This chunk did not enable the launch flag; its Cloud Run value has not been read directly.
 - Files changed: `app/page.js`, `app/globals.css`, `app/admin/page.js`, `app/api/admin/products/route.js`, `app/api/admin/orders/route.js`, `app/api/catalog/products/route.js`, `app/api/catalog/engagement/route.js`, `app/api/pos/sales/route.js`, `lib/productData.js`, `lib/catalogueBrowse.mjs`, `README.md`, and this file. Local production build and focused browse helper checks passed.
 - Next: pause at this checkpoint. The product/cart chunk must add product pages, Quick View, variant image/size/colour selection, exact SKU cart/order lines and related products. A separate later presentation chunk must add the Admin-wide PAM Deals activation control and complete the requested hero/footer work.
+
+## Product and cart checkpoint (2026-09-27)
+
+- Commit `9c9ea65157ec0761f468762a488b8ee32c01400f` added a full product page at `/products/[id]`, Quick View from the listing, and a reusable variant selector. Each SKU remains a separate listing, while the selector groups the eight current variant families by `productGroupId`. Size and colour choices update the selected SKU, price, stock state, WhatsApp draft and image source. Unavailable priced choices are disabled. Accurate variant photos are still absent; the UI uses labelled placeholders until images are supplied in Admin.
+- The customer cart now persists across product-page navigation in browser storage and refreshes each line against the public catalogue before checkout. Add-to-cart opens a confirmation with Continue shopping and View cart. Cart lines show chosen SKU, colour and size. Server-created website orders and POS sales store product group, exact variant ID (currently the SKU), SKU, colour and size alongside the existing product ID and repriced totals. POS order/receipt text exposes the SKU. The WhatsApp cart message includes item detail, subtotal, discount, total and fulfilment fields.
+- The live Cloud Run storefront served the new product controls after the push. Search for Heat resistant water bottle returned six separate SKU listings with the shared price range. Quick View changed from `BOT-HRB-595-003-BK` at GH₵28.47 to `BOT-HRB-795-004-GN` at GH₵31.46 when 795ml was selected, then to `BOT-HRB-795-004-WH` when Mousse White was selected. The add confirmation and cart displayed that exact white 795ml SKU. A full product page loaded its selector, details, delivery/pickup section and related products. No real order, WhatsApp message, payment or POS sale was submitted during testing.
+- Local production builds passed before deployment and after the follow-up correction. The correction disables wishlist and comparison controls until their customer-facing flows exist; it also ranks related products from the same subcategory first. The existing `/login` is staff authentication and must not be used for customer accounts.
+- Next chunk: customer orders. Add optional customer accounts, wishlist gate and account-based tracking; keep guest checkout; complete delivery/pickup details on orders and receipts; add Admin-rule discount eligibility messages; verify order security and totals. Then pause at its own checkpoint. Presentation and release follows, with flyer asset still outstanding.
 
