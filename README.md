@@ -83,5 +83,7 @@ For an additional identity-service check, start the official Authentication emul
 
 To check the Firestore rules, install Java 21 locally and start `npx firebase-tools@15.31.0 emulators:start --only auth,firestore --project demo-pam-essentials`. Set `FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099` and `FIRESTORE_EMULATOR_HOST=127.0.0.1:8081` in another terminal, then run `npm run test:firestore-emulator`. The test seeds only the local emulator and checks anonymous, customer, cashier, supervisor and owner reads and direct-write denials. Emulator success does not prove production rules are deployed.
 
+With both emulators running, set `GOOGLE_CLOUD_PROJECT=demo-pam-essentials` as well and run `npm run test:customer-emulator`. This uses the real Admin SDK and route handlers against the local Firestore and Auth emulators for guest checkout, exact variant totals, order claiming, wishlist isolation and unavailable stock. The test skips unless all three environment variables match the expected local demo configuration; it does not write to the production project.
+
 The local environment needs Application Default Credentials to access Firestore-backed API routes. Client authentication uses the Firebase project `pam-essentials-2d7fb`.
 

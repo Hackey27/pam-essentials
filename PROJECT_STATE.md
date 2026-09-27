@@ -208,3 +208,12 @@ Current status: storefront, customer flows and presentation are live; corrected 
 - Release check and test runner change was pushed to `main` as `cea5e9260c5911b3d8d6b969f4e4593c9f0ab08e`; its Cloud Build succeeded. The ignore-rule follow-up was pushed as `9b39a65e9735d31015aa450792cc0de52d690422`, and its Cloud Build succeeded. Cloud Run reported the latest created and ready revision as `pam-essentials-00049-krm`. After that build, `npm run check:release` passed against the live service with 235 public products and direct Firestore read denial. This state-only checkpoint commit will itself trigger a build; verify its success separately if needed.
 - Next: pause at this validation checkpoint. A later chunk can exercise hosted customer flow in a disposable project without touching production orders.
 
+## Combined customer emulator checkpoint (2026-09-27)
+
+- Began by rereading this file and `AGENTS.md` and confirming GitHub `main` at `90e5caaa845ab11e6f2d434f9ceb6c43eaaee0d2`. The owner authorized moving on after the previous chunk. The production storefront and Firebase rules were not changed by this test work.
+- Started the official Firebase Auth and Firestore emulators under `demo-pam-essentials` with a local Java 21 runtime. Added a loader that resolves the real application modules without replacing `lib/admin.js` with the earlier in-memory double.
+- The new combined test used the actual Admin SDK against emulated Firestore and actual Firebase Auth tokens. It created a guest order with two exact variants, verified GH₵115 subtotal, GH₵5.75 discount and GH₵109.25 total, claimed the order into one customer account, denied the second customer, checked wishlist isolation and rejected an out-of-stock variant. It passed, as did `npm test` and `npm run build`. The emulators were stopped after testing.
+- Files changed: `tests/fixtures/register-real-loader.mjs`, `tests/fixtures/real-route-loader.mjs`, `tests/customerEmulator.test.mjs`, `package.json`, `README.md`, and this file. No application runtime behavior, production order or production account changed.
+- Remaining validation limit: this is an actual local Firebase service integration, but it does not exercise hosted Firebase/Cloud Run together under a disposable cloud project. Owner-supplied media, footer details and payment provider remain pending.
+- Next: publish this test-only chunk to `main`, verify Cloud Build and live release check, then pause at the checkpoint.
+
