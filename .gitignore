@@ -6,3 +6,8 @@ out/
 *.log
 .DS_Store
 service-account*.json
+configstore/
+.firebase-emulators/
+.temurin21/
+.firebase.test.json
+
