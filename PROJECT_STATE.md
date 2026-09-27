@@ -3,7 +3,7 @@
 Updated: 2026-09-27
 Repository: https://github.com/Hackey27/pam-essentials
 Primary branch: `main`
-Current status: product detail and cart chunk deployed and checked; customer orders is next.
+Current status: customer orders implementation deployed and checked; presentation and release is next.
 
 ## Working protocol
 
@@ -29,8 +29,8 @@ Current status: product detail and cart chunk deployed and checked; customer ord
 
 ## Current work in progress
 
-- Catalogue metadata import and browsing are live. Product pages, Quick View, variant selection and exact cart lines were pushed in commit `9c9ea65157ec0761f468762a488b8ee32c01400f` and checked on the live storefront.
-- Awaiting the hero flyer asset. The user resolved sorting: preserve the current Admin category order and initialize child order from workbook appearance within each parent.
+- Catalogue metadata import, browsing, product detail, Quick View and variant-aware cart are live. Customer orders code was pushed in commit `8e4fa4c8d07a20df00443abbf2f2550a2521a49b`; its production build passed and the new customer entry point and checkout prompts were observed live.
+- The user will supply accurate product photos and the hero flyer later. Continue using labelled placeholders until then. Existing Admin category order and initialized child order remain authoritative.
 
 ## Key constraints and requirements
 
@@ -61,11 +61,11 @@ Current status: product detail and cart chunk deployed and checked; customer ord
 ## Open issues, risks, and questions
 
 - A temporary repository snapshot was downloaded for local validation. Local builds and live browser/deployment checks passed for this homepage change.
-- Customer account creation and tracking are now requested; the customer path must remain separate from staff role checks.
+- Customer account creation and tracking are implemented in the current chunk with a separate `/account` path; live account creation has not been exercised with a production test identity.
 - The zero-stock visibility conflict is resolved: all 29 current zero-stock rows are unpriced and stay hidden until priced. Show future priced zero-stock items with an Out of Stock tag and disabled purchase controls.
-- The repository and supplied workbook contain no hero flyer or product/variant image assets. Request the flyer and accurate product imagery, or use clearly marked placeholders if the user approves.
+- The repository and supplied workbook contain no hero flyer or product/variant image assets. The user will provide them later; continue with clearly marked placeholders.
 - The workbook has no sort-number columns. Existing Admin category order is authoritative; child initial order follows workbook appearance within each parent. Admin can change all three levels later.
-- The Admin Import catalogue endpoint now safely syncs descriptive metadata for existing products. An authenticated execution is still required for changes to appear live; live stock, prices, cost and audits must remain intact.
+- The Admin Import catalogue endpoint already ran successfully and safely refreshed 264 product details and the child hierarchy. Live stock, prices, cost and audits remain intact.
 - The earlier chat reported that publishing versioned Firestore rules required an authenticated Firebase account. Current deployed rules have not been verified here.
 - The payment provider for online `Pay Now` has not been selected.
 - Public storefront count was 235 priced products on 2026-09-26; role behavior should be rechecked when relevant to a requested change.
@@ -81,10 +81,7 @@ Current status: product detail and cart chunk deployed and checked; customer ord
 
 ## Next recommended steps
 
-1. Reread this file and the current `main` head at the next chunk.
-2. Use the confirmed unpriced-item rule and Admin-owned hierarchy sorting. Obtain the flyer asset when available.
-3. Continue with the catalogue browsing chunk using the imported hierarchy; keep Admin-owned sort and active settings authoritative.
-4. Pause at the catalogue hierarchy validation checkpoint before the browsing chunk.
+1. At the next chunk start, reread this file and `main`; continue with presentation and release, using placeholders until the owner supplies the flyer and product imagery.
 
 ## Catalogue hierarchy checkpoint (2026-09-27)
 
@@ -144,4 +141,13 @@ Current status: product detail and cart chunk deployed and checked; customer ord
 - The live Cloud Run storefront served the new product controls after the push. Search for Heat resistant water bottle returned six separate SKU listings with the shared price range. Quick View changed from `BOT-HRB-595-003-BK` at GH₵28.47 to `BOT-HRB-795-004-GN` at GH₵31.46 when 795ml was selected, then to `BOT-HRB-795-004-WH` when Mousse White was selected. The add confirmation and cart displayed that exact white 795ml SKU. A full product page loaded its selector, details, delivery/pickup section and related products. No real order, WhatsApp message, payment or POS sale was submitted during testing.
 - Local production builds passed before deployment and after the follow-up correction. The correction disables wishlist and comparison controls until their customer-facing flows exist; it also ranks related products from the same subcategory first. The existing `/login` is staff authentication and must not be used for customer accounts.
 - Next chunk: customer orders. Add optional customer accounts, wishlist gate and account-based tracking; keep guest checkout; complete delivery/pickup details on orders and receipts; add Admin-rule discount eligibility messages; verify order security and totals. Then pause at its own checkpoint. Presentation and release follows, with flyer asset still outstanding.
+
+## Customer orders checkpoint (2026-09-27)
+
+- Commit `8e4fa4c8d07a20df00443abbf2f2550a2521a49b` added a separate `/account` customer sign-in and registration page. Customer accounts can save a wishlist and view only orders attached to their Firebase UID; earlier guest orders can be claimed with their order reference and checkout phone. Guest checkout remains available. Staff `/login` and its role checks remain separate. Product-page Add to wishlist directs customers to the account page.
+- The old reference-plus-phone public order lookup was removed. `/api/orders` GET now requires a customer token and returns only that UID's orders. Customer wishlists live in server-managed `customer_accounts`, protected from direct client Firestore writes by the existing rules. Website orders still reprice and validate stock on the server. No production test customer or real order was created in this checkpoint, so registration, order claiming and a customer-authenticated response remain unverified end to end.
+- The Admin-controlled seeded global 5% rule now checks total cart units across products in the storefront, website order endpoint and POS. Other scoped rule priority remains intact. A focused two-test suite passed for the three-unit threshold, Admin deactivation and product-rule precedence. A local production build passed.
+- Checkout records the shop collection address `PAM Essentials & More, Awoshie, Accra, Ghana`; shop-arranged delivery requires a destination and self-arranged delivery displays the shop address to the customer. Order records, Admin order detail, POS sale snapshots and linked POS receipts carry fulfilment details. The WhatsApp cart draft includes the shop and destination details. No real receipt was printed.
+- Live Cloud Run checks showed Sign In and Track Order linking to `/account`. The account page recognized the existing staff session and kept it out of customer features. In the cart, two units showed “Add 1 more to qualify for 5% off”; three units showed “5% quantity discount applied” and a GH₵4.72 discount on GH₵94.38 subtotal. Self-arranged delivery showed the shop address. The cart was returned to its original one unit after testing. Direct anonymous API requests were blocked by the available browser tool, so endpoint authorization is verified by code review rather than a live 401 response.
+- A follow-up guard also rejects staff custom-claim roles from customer API routes. The owner will supply the hero flyer and accurate product photos later. Next chunk is presentation and release: complete the hero, PAM Deals activation and benefits, active footer links/pages, and responsive/live checks. Read this state and `main` before starting it.
 
