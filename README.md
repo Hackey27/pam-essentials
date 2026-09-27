@@ -69,6 +69,7 @@ firebase deploy --only firestore:rules --project pam-essentials-2d7fb
 ## Deployment
 Every push to `main` triggers Cloud Build, which builds the Docker image and deploys a new Cloud Run revision.
 Check the live site after the build finishes (about 3 to 5 minutes).
+Run `npm run check:release` after deployment. This read-only check confirms the health route, a populated public catalogue without cost fields, anonymous rejection by POS/Admin/customer endpoints, and denial of a direct anonymous Firestore product read. Set `RELEASE_URL` to check a different Cloud Run origin; the Firestore check still targets the production Firebase project.
 
 ## Local development
 ```
@@ -78,7 +79,7 @@ npm run dev
 
 Run `npm test` for focused discount/WhatsApp checks and isolated customer-route integration tests. The latter use an in-memory Firestore double and simulated customer tokens; they never connect to the production Firebase project or create live accounts and orders. They cover guest orders, variants, quantity discounts, guest-order claims, wishlist privacy, staff rejection and unavailable products.
 
-For an additional identity-service check, start the official Authentication emulator with `npx firebase-tools@15.31.0 emulators:start --only auth --project demo-pam-essentials`. In another terminal, set `FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099` and run `npm run test:auth-emulator`. This creates and deletes two disposable accounts, signs them in through the Firebase client SDK, verifies their tokens with the Admin SDK, then checks the real customer order routes against the in-memory order store. The `demo-` project ID keeps this test separate from production. Deployed Firestore rules and the hosted Firebase service still require a disposable Firebase project for a full service-level check before public launch.
+For an additional identity-service check, start the official Authentication emulator with `npx firebase-tools@15.31.0 emulators:start --only auth --project demo-pam-essentials`. In another terminal, set `FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099` and run `npm run test:auth-emulator`. This creates and deletes two disposable accounts, signs them in through the Firebase client SDK, verifies their tokens with the Admin SDK, then checks the real customer order routes against the in-memory order store. The `demo-` project ID keeps this test separate from production. A full hosted customer account and order exercise still needs a disposable Firebase project before public launch.
 
 To check the Firestore rules, install Java 21 locally and start `npx firebase-tools@15.31.0 emulators:start --only auth,firestore --project demo-pam-essentials`. Set `FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099` and `FIRESTORE_EMULATOR_HOST=127.0.0.1:8081` in another terminal, then run `npm run test:firestore-emulator`. The test seeds only the local emulator and checks anonymous, customer, cashier, supervisor and owner reads and direct-write denials. Emulator success does not prove production rules are deployed.
 

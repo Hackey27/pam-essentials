@@ -8,6 +8,7 @@
     "test": "node --test tests/discount.test.mjs tests/whatsappOrder.test.mjs && node --import ./tests/fixtures/register-loader.mjs --test tests/customerFlows.test.mjs",
     "test:auth-emulator": "node --import ./tests/fixtures/register-loader.mjs --test tests/authEmulator.test.mjs",
     "test:firestore-emulator": "node --test tests/firestoreRules.test.mjs",
+    "check:release": "node scripts/check_release.mjs",
     "start": "next start -p ${PORT:-8080}",
     "seed:firestore": "node scripts/seed_firestore.mjs"
   },

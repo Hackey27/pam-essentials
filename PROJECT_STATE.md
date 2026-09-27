@@ -198,3 +198,12 @@ Current status: storefront, customer flows and presentation are live; corrected 
 - Files changed in this chunk: only `PROJECT_STATE.md`. The production rules release is an independent Firebase operation. Live staff-role access was not tested with production identities; emulator coverage for those roles remains the validation evidence.
 - Next: publish this checkpoint to `main`, then begin a launch operations review. The official flyer, product photos, footer email/social details and payment provider remain pending owner input.
 
+## Launch operations review checkpoint (2026-09-27)
+
+- Began by rereading this file and `AGENTS.md` and confirming GitHub `main` at `1954c59254490f5f077e96cf237a192a7fdbc60e`. The Firestore rules release and anonymous denial remain the current production state.
+- Reviewed the Dockerfile, deployment notes, health route, public catalogue and protected API routes. A live read-only check found 235 public catalogue products with no cost/profit fields, HTTP 200 for health and catalogue, and HTTP 401 for anonymous POS, Admin, order-tracking and wishlist requests. No customer identity, order, POS sale or payment was created.
+- Added `scripts/check_release.mjs` and `npm run check:release` as a repeatable read-only production smoke check. It also confirms that a direct anonymous Firestore read of a public product receives HTTP 403 `PERMISSION_DENIED`. The script passed against the live service. `npm test` passed all eight focused checks. Updated `README.md` with the command and corrected its outdated rules validation note.
+- Files changed: `scripts/check_release.mjs`, `package.json`, `README.md`, and this file. Runtime storefront, POS and Admin logic were not changed. The release check uses the public Firebase Web API key already configured in `lib/firebase.js`; update both if that public config changes.
+- Open launch items: a full hosted customer account/order exercise in a disposable project; owner-supplied hero flyer, product photos, footer email and social profile URLs; and selection/configuration of an online payment provider before Pay Now can be enabled. The `STORE_PUBLIC` flag remains unset until the owner chooses public launch.
+- Next: push this operations checkpoint to `main`, verify the resulting Cloud Run build/live routes, then pause at the validation checkpoint. A later chunk can exercise hosted customer flow in a disposable project without touching production orders.
+
