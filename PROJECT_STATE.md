@@ -3,7 +3,7 @@
 Updated: 2026-09-27
 Repository: https://github.com/Hackey27/pam-essentials
 Primary branch: `main`
-Current status: authenticated catalogue metadata import completed; Admin hierarchy, storefront and POS verified.
+Current status: catalogue browsing hierarchy and filters deployed and verified; product detail and cart chunk is next.
 
 ## Working protocol
 
@@ -29,7 +29,7 @@ Current status: authenticated catalogue metadata import completed; Admin hierarc
 
 ## Current work in progress
 
-- Catalogue metadata import completed in the live Admin Portal. The next chunk is catalogue browsing and product presentation.
+- Catalogue metadata import and the catalogue browsing chunk are live. The next chunk covers product pages, Quick View, variant selection and exact cart lines.
 - Awaiting the hero flyer asset. The user resolved sorting: preserve the current Admin category order and initialize child order from workbook appearance within each parent.
 
 ## Key constraints and requirements
@@ -111,15 +111,12 @@ Current status: authenticated catalogue metadata import completed; Admin hierarc
 - The Admin Portal in the available Chrome session still redirects to the staff login form. The one-time Import catalogue action has not been run. Until it runs, the 51 subcategories, 13 sub-subcategories, 13 product renames and 6 recategorizations from the supplied workbook are not confirmed in Firestore or the live storefront/POS.
 - At the next chunk start, reread this file and check the current main head. After staff sign-in, run Import catalogue once, verify the Admin counts/order and public/POS projections, then pause at the next validation checkpoint before the browsing chunk.
 
-
-
 ## Admin import access checkpoint (2026-09-27)
 
 - The user reported signing in. The Chrome PAM tab available to this task was refreshed, and direct navigation to `/admin` redirected to `/login`; its staff email and password fields remained empty. The accessible Chrome profile therefore has no usable PAM Admin session. No import was run and no Firestore data was changed.
 - The Admin seed route and UI were reread. The action requires Owner or Admin, preserves existing operational product fields and hierarchy settings, and returns created/updated counts. Its code is deployed on `main`.
 - GitHub `main` was confirmed at `069b5a50b521fb4ea4aa7dad3c65a4facea4bd24` before this checkpoint. Cloud Build for that commit succeeded, and Cloud Run revision `pam-essentials-00028-plj` served 100% of traffic.
 - Next: sign in on the open PAM tab in the Chrome profile available to this task, then click Admin Products > Import catalogue. Verify 264 product records, 51 subcategories and 13 sub-subcategories, current category sort order, 235 priced storefront products, and POS visibility before continuing.
-
 
 ## Authenticated catalogue import checkpoint (2026-09-27)
 
@@ -129,3 +126,14 @@ Current status: authenticated catalogue metadata import completed; Admin hierarc
 - Storefront reloaded with 235 priced products. POS also exposed exactly 235 product buttons. Both displayed the same ordered nonempty active category list; Drawing Materials had no visible products after recategorisation and was absent from those product filters. The Owner POS session loaded renamed product names and preserved prices/stock.
 - Admin overview showed 264 product records and 29 needing pricing; those unpriced records remain excluded from storefront and POS. No sale, payment or stock movement was made during verification.
 - Files changed in this checkpoint: only `PROJECT_STATE.md`. Next: pause at this validation checkpoint, then implement the requested category checkbox filters, breadcrumbs and availability/offer controls in the next chunk. Continue reading this file before each chunk.
+
+## Catalogue browsing checkpoint (2026-09-27)
+
+- Commits `03bff26a22f14ad6d07a1bd1c56cbb0c7750d7b1` and `572c002bbdbf4a2a6a2173a10248f25732ef7897` added the browsable hierarchy and kept raw popularity totals out of the public product response. The first commit was observed live; the second was pushed after a passing local build and awaits separate Cloud Build confirmation.
+- The storefront shows all 14 active top-level categories in Admin order, including the empty Drawing Materials category. Customers can expand/collapse a category; clicking its main row shows every product in that category. Subcategory checkboxes filter their products and can be combined. Clicking a sub-subcategory clears parent and sibling selections and shows only that leaf. Clicking the main category again clears child filters.
+- Live checks: Writing Materials & Accessories showed 60 products, Pens showed 8, Pens > Gel showed 4, and returning to the main category restored 60. Selecting Pens and Pencils together showed 15 products, a parent breadcrumb and removable chips. The Back to School collection returned 76 products. Mobile layout dimensions were checked at 390px and desktop at 1440px. POS still loaded 235 priced products.
+- Added availability, offer and collection controls; New, Low stock, Best seller and On sale badges; and a WhatsApp notification link for future priced zero-stock items. There are currently no priced zero-stock products, so the out-of-stock customer path has no live example. Existing 29 unpriced products remain hidden. Admin can mark New Arrivals and product collection membership without changing the workbook.
+- Curated popular searches remain unchanged until `STORE_PUBLIC=true` is set at the public launch. Once enabled, add-to-cart clicks are counted once per page session and qualified products can appear beside the curated terms. Walk-in POS sales and paid website orders increment purchase counts. The public API returns the Best seller flag and ranked products, not raw engagement totals. This chunk did not enable the launch flag; its Cloud Run value has not been read directly.
+- Files changed: `app/page.js`, `app/globals.css`, `app/admin/page.js`, `app/api/admin/products/route.js`, `app/api/admin/orders/route.js`, `app/api/catalog/products/route.js`, `app/api/catalog/engagement/route.js`, `app/api/pos/sales/route.js`, `lib/productData.js`, `lib/catalogueBrowse.mjs`, `README.md`, and this file. Local production build and focused browse helper checks passed.
+- Next: pause at this checkpoint. The product/cart chunk must add product pages, Quick View, variant image/size/colour selection, exact SKU cart/order lines and related products. A separate later presentation chunk must add the Admin-wide PAM Deals activation control and complete the requested hero/footer work.
+

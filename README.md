@@ -10,19 +10,25 @@ PAM Essentials is one connected retail system with a customer storefront, a staf
 
 ## Product catalogue
 
-`Data.xlsx` is the source for `data/products.json`. Regenerate the seed after an intentional spreadsheet update with:
+`Data.xlsx` in the public repository is the original seed. The newer private 18-column workbook supplies descriptive hierarchy, variant and keyword fields. Generate only public-safe metadata from that workbook with:
 
 ```bash
-python scripts/generate_seed_data.py
+python scripts/generate_seed_data.py /path/to/private/Data.xlsx
 ```
 
-The Admin Portal imports the generated catalogue through the owner-only `/api/admin/seed` endpoint. The import is additive and does not overwrite existing products or settings. Every spreadsheet product is retained in Admin. Products without a positive selling price are marked non-sellable and are excluded from both the storefront and POS.
+This writes `data/product_metadata.json` and `data/category_hierarchy.json`. Keep the private workbook and any regenerated full product seed containing cost, wholesale pricing or stock out of public commits. The protected Admin **Import catalogue** action syncs descriptive product fields and creates missing hierarchy records. It preserves existing prices, costs, stock, images, product availability, and Admin sort and active settings. Products without a positive selling price remain in Admin and are excluded from the storefront and POS.
 
-For an authenticated deployment/operator environment, the same additive import can be run with Application Default Credentials:
+For an authenticated deployment/operator environment, the original base seed can still create missing products with Application Default Credentials; it does not sync the newer descriptive hierarchy:
 
 ```bash
 npm run seed:firestore
 ```
+
+## Storefront browsing
+
+The storefront receives ordered active categories, subcategories and sub-subcategories from the catalogue API. Selecting a category shows all products beneath it; subcategory checkboxes can be combined, while selecting a sub-subcategory shows its exact products. Admin owns hierarchy order and active state. Products with a selling price remain visible when stock reaches zero, with an Out of Stock tag.
+
+Admin can mark a product as a New Arrival or assign it to Back to School, Promotion or PAM Deals. Targeted active discount rules drive the On Sale filter; the standard global quantity discount does not label every product as on sale. Set the Cloud Run environment variable `STORE_PUBLIC=true` only at the public launch to enable anonymous product click counting and popularity-based ordering. Until then, the five curated popular searches remain unchanged. Paid orders and completed walk-in POS sales increment purchase counts; raw click and purchase totals are not returned in the public catalogue API.
 
 ## Server-authoritative operations
 
@@ -53,3 +59,4 @@ npm run dev
 ```
 
 The local environment needs Application Default Credentials to access Firestore-backed API routes. Client authentication uses the Firebase project `pam-essentials-2d7fb`.
+
