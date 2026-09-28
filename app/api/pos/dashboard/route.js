@@ -1,6 +1,7 @@
 import { Timestamp } from "firebase-admin/firestore";
 import { NextResponse } from "next/server";
 import { adminDb, requireRole } from "@/lib/admin";
+import { receiptSnapshot } from "@/lib/receiptData.mjs";
 
 export const dynamic = "force-dynamic";
 
@@ -62,7 +63,7 @@ export async function GET(request) {
   const summary = { sales: sum(sales, "total"), expenses: sum(expenses, "amount"), products: new Set(sales.flatMap((sale) => (sale.items || []).map((item) => item.productId))).size, orders: ordersSnap.size, channels: channels.size, lowStock: priced.filter((product) => Number(product.stock) > 0 && Number(product.stock) < Number(product.lowStockLevel ?? 8)).length, outOfStock: priced.filter((product) => Number(product.stock) <= 0).length, transactions: sales.length };
   const previous = { sales: sum(previousSalesSnap.docs.map((doc) => doc.data()), "total"), expenses: sum(previousExpensesSnap.docs.map((doc) => doc.data()), "amount"), orders: previousOrdersSnap.size, transactions: previousSalesSnap.size };
   if (isAdmin) { summary.grossProfit = sum(sales, "profit"); summary.netProfit = summary.grossProfit - summary.expenses; previous.grossProfit = sum(previousSalesSnap.docs.map((doc) => doc.data()), "profit"); previous.netProfit = previous.grossProfit - previous.expenses; }
-  const transactions = sales.sort((a, b) => String(iso(b.createdAt)).localeCompare(String(iso(a.createdAt)))).map((sale) => ({ receiptId: sale.receiptId, total: Number(sale.total || 0), discount: Number(sale.discount || 0), paymentMethod: sale.paymentMethod, salesChannel: sale.salesChannel, staffEmail: sale.staffEmail, createdAt: iso(sale.createdAt), items: (sale.items || []).map((item) => ({ name: item.name, sku: item.sku, colour: item.colour, size: item.size, quantity: item.quantity, lineTotal: item.lineTotal })) }));
+  const transactions = sales.sort((a, b) => String(iso(b.createdAt)).localeCompare(String(iso(a.createdAt)))).map((sale) => receiptSnapshot({ ...sale, createdAt: iso(sale.createdAt) }));
   const history = new Map();
   for (const sale of sales) { const date = iso(sale.createdAt)?.slice(0, 10); if (!date) continue; const row = history.get(date) || { date, transactions: 0, sales: 0, expenses: 0 }; row.transactions += 1; row.sales += Number(sale.total || 0); history.set(date, row); }
   for (const expense of expenses) { const date = iso(expense.createdAt)?.slice(0, 10); if (!date) continue; const row = history.get(date) || { date, transactions: 0, sales: 0, expenses: 0 }; row.expenses += Number(expense.amount || 0); history.set(date, row); }

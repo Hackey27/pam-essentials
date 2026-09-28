@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { adminDb, requireRole } from "@/lib/admin";
 import { availableForSale, catalogueContext, priceCart } from "@/lib/commerce";
 import { SHOP_ADDRESS } from "@/lib/shop";
+import { receiptSnapshot } from "@/lib/receiptData.mjs";
 
 export async function POST(request) {
   const access = await requireRole(request, ["owner", "admin", "supervisor", "cashier"]);
@@ -41,7 +42,7 @@ export async function POST(request) {
       const existing = await tx.get(saleRef);
       if (existing.exists) {
         const sale = existing.data();
-        return { receiptId: sale.receiptId, total: sale.total, paymentMethod: sale.paymentMethod, amountPaid: sale.amountPaid, change: sale.change, duplicate: true };
+        return { ...receiptSnapshot({ ...sale, createdAt: sale.createdAt?.toDate?.()?.toISOString?.() || null }), duplicate: true };
       }
       const shiftRef = store.collection("shifts").doc(shiftId);
       const shiftSnap = await tx.get(shiftRef);
@@ -56,6 +57,11 @@ export async function POST(request) {
       const productRefs = normalizedItems.map(({ id }) => store.collection("products").doc(encodeURIComponent(id)));
       const productSnaps = await tx.getAll(...productRefs);
       const linkedOrderSnap = orderReference ? await tx.get(store.collection("orders").doc(orderReference)) : null;
+      const receiptDay = new Date().toISOString().slice(2, 10).replaceAll("-", "");
+      const sequenceRef = store.collection("receipt_sequences").doc(receiptDay);
+      const sequenceSnap = await tx.get(sequenceRef);
+      const receiptNumber = Number(sequenceSnap.data()?.lastNumber || 0) + 1;
+      const receiptId = `PAM-${receiptDay}-${String(receiptNumber).padStart(4, "0")}`;
       if (salesChannel === "website" && orderReference && !linkedOrderSnap.exists) throw new Error("The linked website order no longer exists.");
       const linkedOrder = linkedOrderSnap?.data();
       for (let index = 0; index < normalizedItems.length; index += 1) {
@@ -114,14 +120,14 @@ export async function POST(request) {
         });
       }
 
-      const receiptId = `PAM-${Date.now().toString(36).toUpperCase()}`;
       const total = pricing.total;
       const paymentMethod = ["cash", "mobile-money", "card", "bank-transfer"].includes(body.paymentMethod) ? body.paymentMethod : "cash";
       if (paymentMethod !== "cash" && body.transactionVerified !== true) throw new Error("Confirm the payment provider notification before completing this sale.");
       const tendered = Number(body.amountPaid);
       if (!Number.isFinite(tendered) || tendered < total) throw new Error("Amount paid cannot be less than the sale total.");
       const change = Math.round((tendered - total) * 100) / 100;
-      tx.create(saleRef, {
+      tx.set(sequenceRef, { lastNumber: receiptNumber, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+      const saleData = {
         receiptId,
         clientTransactionId: transactionId,
         items: lines,
@@ -144,9 +150,10 @@ export async function POST(request) {
         shiftId,
         deviceId,
         createdAt: FieldValue.serverTimestamp(),
-      });
+      };
+      tx.create(saleRef, saleData);
       if (shiftSnap.data().aggregationVersion === 1) tx.update(shiftRef, { transactionCount: FieldValue.increment(1), salesTotal: FieldValue.increment(total), [`paymentMix.${paymentMethod}`]: FieldValue.increment(total) });
-      return { receiptId, total, paymentMethod, amountPaid: tendered, change, duplicate: false };
+      return { ...receiptSnapshot({ ...saleData, createdAt: new Date().toISOString() }), duplicate: false };
     });
     return NextResponse.json(result);
   } catch (error) {
