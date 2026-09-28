@@ -22,7 +22,7 @@ test("POS sale requires verified manual payment and stays idempotent", { skip: !
     const account = await createUserWithEmailAndPassword(auth, `sale-${prefix}@example.test`, `Test-${randomUUID()}-Aa1`);
     uid = account.user.uid;
     const token = await account.user.getIdToken();
-    await store.collection("users").doc(uid).set({ role: "cashier", active: true });
+    await store.collection("users").doc(uid).set({ role: "cashier", displayName: "Ama Cashier", active: true });
     await store.collection("categories").doc(`sale-cat-${prefix}`).set({ name: "Bottles", active: true, sortOrder: 1 });
     const id = `PAM-SALE-${prefix}`;
     await store.collection("products").doc(encodeURIComponent(id)).set({ id, name: "Test bottle", categoryId: `sale-cat-${prefix}`, category: "Bottles", productGroupId: "WB001", colour: "Pink", size: "500ml", price: 35, stock: 3, active: true, archived: false });
@@ -37,6 +37,7 @@ test("POS sale requires verified manual payment and stays idempotent", { skip: !
     assert.equal(saved.body.total, 35);
     assert.match(saved.body.receiptId, /^PAM-\d{6}-\d{4,}$/);
     assert.equal(saved.body.items[0].variantId, id);
+    assert.equal(saved.body.staffName, "Ama Cashier");
     assert.equal("cost" in saved.body, false);
     const repeated = await call({ ...payload, transactionVerified: true });
     assert.equal(repeated.status, 200);
@@ -45,6 +46,7 @@ test("POS sale requires verified manual payment and stays idempotent", { skip: !
     assert.equal(sale.items[0].variantId, id);
     assert.equal(sale.customerName, "Test customer");
     assert.equal(sale.customerPhone, "0207015198");
+    assert.equal(sale.staffName, "Ama Cashier");
     assert.equal((await store.collection("products").doc(encodeURIComponent(id)).get()).data().stock, 2);
     const receiptsResponse = await listReceipts(new Request("http://localhost:8080/api/pos/receipts", { headers: { authorization: `Bearer ${token}` } }));
     assert.equal(receiptsResponse.status, 200);
@@ -64,4 +66,3 @@ test("POS sale requires verified manual payment and stays idempotent", { skip: !
     await deleteApp(app);
   }
 });
-

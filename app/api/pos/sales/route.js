@@ -146,6 +146,7 @@ export async function POST(request) {
         fulfilmentSnapshot: { deliveryMethod: linkedOrder?.deliveryMethod || "pickup", originAddress: linkedOrder?.originAddress || SHOP_ADDRESS, deliveryAddress: linkedOrder?.deliveryAddress || linkedOrder?.landmark || "" },
         taxSnapshot: { enabled: false },
         staffId: access.user.uid,
+        staffName: access.user.displayName,
         staffEmail: access.user.email,
         shiftId,
         deviceId,
@@ -160,4 +161,3 @@ export async function POST(request) {
     return NextResponse.json({ error: error.message || "Checkout failed." }, { status: 409 });
   }
 }
-
