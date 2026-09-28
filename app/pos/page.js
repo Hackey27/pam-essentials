@@ -171,6 +171,9 @@ function Till() {
     return () => { window.removeEventListener("online", update); window.removeEventListener("offline", update); };
   }, [user]);
 
+  const pricing = priceCart(cart, discountRules, dealBundles);
+  const { subtotal, discount, total } = pricing;
+
   useEffect(() => {
     if (view !== "sale" || !cart.length || !online) return;
     let cancelled = false;
@@ -208,8 +211,6 @@ function Till() {
     const state = orderStatus === "all" || order.status === orderStatus || (orderStatus === "pending-payment" && order.paymentStatus !== "paid");
     return matches && state;
   }), [orders, orderQuery, orderStatus]);
-  const pricing = priceCart(cart, discountRules, dealBundles);
-  const { subtotal, discount, total } = pricing;
   const tendered = amountPaid.trim() === "" ? NaN : Number(amountPaid);
   const changeDue = Number.isFinite(tendered) ? Math.max(0, tendered - total) : 0;
   const referenceReady = !["website", "whatsapp"].includes(orderChannel) || Boolean(orderReference.trim() || (customerName.trim() && customerPhone.trim()));
