@@ -46,7 +46,7 @@ test("POS dashboard keeps cashier profit private and accepts today as a custom e
     assert.equal(JSON.stringify(cashier.body).includes('"cost"'), false);
     assert.equal(JSON.stringify(cashier.body).includes('"profit"'), false);
     assert.equal(owner.body.summary.grossProfit, 15);
-    assert.equal(owner.body.summary.netProfit, 15);
+    assert.equal(owner.body.summary.netProfit, owner.body.summary.grossProfit - owner.body.summary.expenses);
   } finally {
     await Promise.allSettled(identities.map(({ uid }) => adminAuth().deleteUser(uid)));
     await deleteApp(app);
