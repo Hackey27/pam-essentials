@@ -476,7 +476,7 @@ input, select { min-height: 44px; border: 1px solid var(--line); border-radius: 
 .receipt-actions { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; border-top: 1px solid var(--line); padding: 1rem 1.7rem; background: #f8fafc; }
 
 /* Login */
-body > div > main:not(.catalogue-main):not(.admin-main):not(.pos-main) { max-width: 520px; margin: 7vh auto; padding: 2rem; }
+body > div > main:not(.catalogue-main):not(.admin-main):not(.pos-main):not(.product-page-main) { max-width: 520px; margin: 7vh auto; padding: 2rem; }
 body > div > main h1 { color: var(--navy); }
 
 @media (max-width: 1180px) {
