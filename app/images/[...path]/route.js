@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { Storage } from "@google-cloud/storage";
 import sharp from "sharp";
 import { isProductImagePath } from "@/lib/productImages.mjs";
+import { isHeroImagePath } from "@/lib/heroImages.mjs";
 
 export const runtime = "nodejs";
 const storage = new Storage();
@@ -19,7 +20,7 @@ function requestOptions(searchParams) {
 export async function GET(request, { params }) {
   const path = (await params).path.join("/");
   const options = requestOptions(new URL(request.url).searchParams);
-  if (!isProductImagePath(path) || !options) return NextResponse.json({ error: "Invalid image request." }, { status: 400 });
+  if (!(isProductImagePath(path) || isHeroImagePath(path)) || !options) return NextResponse.json({ error: "Invalid image request." }, { status: 400 });
   try {
     const object = storage.bucket(bucketName).file(path);
     const [metadata] = await object.getMetadata();

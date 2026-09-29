@@ -47,7 +47,7 @@ function ProductPreview({ product, source, onOpenGallery }) {
   </button>;
 }
 
-export default function ProductOptions({ initialProduct, products, onAdd, compact = false, onClose, onSelectionChange, previewSource, onOpenGallery, footer }) {
+export default function ProductOptions({ initialProduct, products, onAdd, compact = false, onClose, onSelectionChange, previewSource, onOpenGallery, onNavigateDetail, footer }) {
   const [selectedId, setSelectedId] = useState(initialProduct.id);
   const [quantity, setQuantity] = useState(1);
   const selected = products.find((item) => item.id === selectedId) || initialProduct;
@@ -84,7 +84,7 @@ export default function ProductOptions({ initialProduct, products, onAdd, compac
       <label className="quantity-control">Quantity <span className="stepper"><button type="button" onClick={() => setQuantity(Math.max(1, quantity - 1))} aria-label="Decrease quantity">−</button><span>{quantity}</span><button type="button" onClick={() => setQuantity(Math.min(selected.stock, quantity + 1))} aria-label="Increase quantity" disabled={quantity >= selected.stock}>+</button></span></label>
       <button type="button" className="button primary full" disabled={selected.stock <= 0} onClick={() => onAdd(selected, quantity)}>{selected.stock > 0 ? "Add to cart" : "Out of Stock"}</button>
       {selected.stock <= 0 ? <a className="button secondary full" target="_blank" rel="noreferrer" href={`https://wa.me/233207015198?text=${encodeURIComponent(`Please notify me when ${selected.name} (${selected.id}) is available.`)}`}>Notify me when available</a> : <a className="button whatsapp full" target="_blank" rel="noreferrer" href={`https://wa.me/233207015198?text=${encodeURIComponent(whatsappText)}`}><WhatsAppIcon size={18} /> Order via WhatsApp</a>}
-      {compact && <a href={`/products/${encodeURIComponent(selected.id)}?quick=${encodeURIComponent(initialProduct.id)}`} className="detail-link">View full product details →</a>}
+      {compact && <a href={`/products/${encodeURIComponent(selected.id)}?quick=${encodeURIComponent(initialProduct.id)}`} className="detail-link" onClick={onNavigateDetail}>View full product details →</a>}
       {footer}
     </div>
   </div>;
