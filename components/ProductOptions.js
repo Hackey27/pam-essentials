@@ -47,7 +47,7 @@ function ProductPreview({ product, source, onOpenGallery }) {
   </button>;
 }
 
-export default function ProductOptions({ initialProduct, products, onAdd, compact = false, onClose, onSelectionChange, previewSource, onOpenGallery }) {
+export default function ProductOptions({ initialProduct, products, onAdd, compact = false, onClose, onSelectionChange, previewSource, onOpenGallery, footer }) {
   const [selectedId, setSelectedId] = useState(initialProduct.id);
   const [quantity, setQuantity] = useState(1);
   const selected = products.find((item) => item.id === selectedId) || initialProduct;
@@ -73,7 +73,7 @@ export default function ProductOptions({ initialProduct, products, onAdd, compac
     <div className="product-option-body">
       <div className="product-option-top">{compact && <button type="button" className="icon-button" onClick={onClose} aria-label="Close Quick View">×</button>}</div>
       <h2>{selected.name}</h2><p className="detail-price">{money.format(selected.price)}</p>
-      <p className={selected.stock > 0 ? "stock-label" : "stock-label out"}>{selected.stock > 0 ? `✓ In stock${selected.stock < Number(selected.lowStockLevel ?? 8) ? " · Low stock" : ""}` : "Out of Stock"}</p>
+      <p className={selected.stock <= 0 ? "stock-label out" : selected.stock < Number(selected.lowStockLevel ?? 8) ? "stock-label low" : "stock-label"}>{selected.stock > 0 ? `✓ In stock${selected.stock < Number(selected.lowStockLevel ?? 8) ? " · Low stock" : ""}` : "Out of Stock"}</p>
       <p className="sku">SKU: {selected.id}</p>
       {selected.randomColours && <p className="colour-note">Random colours unless you indicate a choice in checkout notes.</p>}
       {hasVariants && <div className="variant-controls">
@@ -85,6 +85,7 @@ export default function ProductOptions({ initialProduct, products, onAdd, compac
       <button type="button" className="button primary full" disabled={selected.stock <= 0} onClick={() => onAdd(selected, quantity)}>{selected.stock > 0 ? "Add to cart" : "Out of Stock"}</button>
       {selected.stock <= 0 ? <a className="button secondary full" target="_blank" rel="noreferrer" href={`https://wa.me/233207015198?text=${encodeURIComponent(`Please notify me when ${selected.name} (${selected.id}) is available.`)}`}>Notify me when available</a> : <a className="button whatsapp full" target="_blank" rel="noreferrer" href={`https://wa.me/233207015198?text=${encodeURIComponent(whatsappText)}`}><WhatsAppIcon size={18} /> Order via WhatsApp</a>}
       {compact && <a href={`/products/${encodeURIComponent(selected.id)}?quick=${encodeURIComponent(initialProduct.id)}`} className="detail-link">View full product details →</a>}
+      {footer}
     </div>
   </div>;
 }

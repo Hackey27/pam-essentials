@@ -39,14 +39,14 @@ export default function Storefront() {
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
-  const [mobileHeaderCompact, setMobileHeaderCompact] = useState(false);
+  const [mobileTabsHidden, setMobileTabsHidden] = useState(false);
   const [category, setCategory] = useState("All categories");
   const [sort, setSort] = useState("featured");
   const [browseMode, setBrowseMode] = useState("products");
   const [pageSize, setPageSize] = useState(20);
   const [page, setPage] = useState(1);
-  const [priceMin, setPriceMin] = useState(0);
-  const [priceMax, setPriceMax] = useState(Infinity);
+  const [priceMin, setPriceMin] = useState("");
+  const [priceMax, setPriceMax] = useState("");
   const [cart, setCart] = useState([]);
   const [quickProduct, setQuickProduct] = useState(null);
   const [addedProduct, setAddedProduct] = useState(null);
@@ -62,18 +62,35 @@ export default function Storefront() {
   const clickSession = useRef({ id: "", seen: new Set() });
   const orderRequest = useRef(false);
   const searchRef = useRef(null);
+  const cartReturn = useRef("");
 
   useEffect(() => {
     fetch("/api/catalog/products")
-      .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error); setProducts(data.products || []); setCategoryList(data.categories || []); setSubcategoryList(data.subcategories || []); setSubSubcategoryList(data.subSubcategories || []); setDiscountRules(data.discountRules || []); setDealBundles(data.dealBundles || []); setPopularProducts(data.popularProducts || []); setPublicLaunch(data.publicLaunch === true); setDealsActive(data.dealsActive === true); setFlyerUrl(data.flyerUrl || ""); const params = new URLSearchParams(window.location.search); const mode = params.get("browse"); if (["new", "promotions"].includes(mode) || mode === "deals" && data.dealsActive === true) { setBrowseMode(mode); setSort(mode === "new" ? "latest" : mode === "deals" ? "price-low" : "featured"); } const quickId = params.get("quick"); if (quickId) setQuickProduct((data.products || []).find((item) => item.id === quickId) || null); const highest = Math.ceil(Math.max(0, ...(data.products || []).map((product) => Number(product.price || 0)))); setPriceMax(highest || Infinity); const current = readCart(); const refreshed = current.map((line) => { const product = (data.products || []).find((item) => item.id === line.id); return product && product.stock > 0 ? { ...product, quantity: Math.min(Number(line.quantity), Number(product.stock)) } : null; }).filter(Boolean); saveCart(refreshed); setCart(refreshed); })
+      .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error); setProducts(data.products || []); setCategoryList(data.categories || []); setSubcategoryList(data.subcategories || []); setSubSubcategoryList(data.subSubcategories || []); setDiscountRules(data.discountRules || []); setDealBundles(data.dealBundles || []); setPopularProducts(data.popularProducts || []); setPublicLaunch(data.publicLaunch === true); setDealsActive(data.dealsActive === true); setFlyerUrl(data.flyerUrl || ""); const params = new URLSearchParams(window.location.search); const mode = params.get("browse"); if (["new", "promotions"].includes(mode) || mode === "deals" && data.dealsActive === true) { setBrowseMode(mode); setSort(mode === "new" ? "latest" : mode === "deals" ? "price-low" : "featured"); } const quickId = params.get("quick"); if (quickId) setQuickProduct((data.products || []).find((item) => item.id === quickId) || null); const current = readCart(); const refreshed = current.map((line) => { const product = (data.products || []).find((item) => item.id === line.id); return product && product.stock > 0 ? { ...product, quantity: Math.min(Number(line.quantity), Number(product.stock)) } : null; }).filter(Boolean); saveCart(refreshed); setCart(refreshed); })
       .catch((err) => setError(err.message || "The catalogue is unavailable."))
       .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => { setCookieVisible(localStorage.getItem("pam-cookie-notice") !== "accepted"); }, []);
-  useEffect(() => { setCart(readCart()); if (new URLSearchParams(window.location.search).has("cart")) setCartOpen(true); }, []);
+  useEffect(() => { setCart(readCart()); const params = new URLSearchParams(window.location.search); if (params.has("cart")) setCartOpen(true); const source = params.get("returnTo"); if (source?.startsWith("/products/") && !source.startsWith("//")) cartReturn.current = source; }, []);
   useEffect(() => { const close = (event) => { if (!searchRef.current?.contains(event.target)) setSearchOpen(false); }; document.addEventListener("pointerdown", close); return () => document.removeEventListener("pointerdown", close); }, []);
-  useEffect(() => { const update = () => setMobileHeaderCompact(window.scrollY > 100); update(); window.addEventListener("scroll", update, { passive: true }); return () => window.removeEventListener("scroll", update); }, []);
+  useEffect(() => {
+    let lastY = window.scrollY, travel = 0, frame = 0;
+    const update = () => {
+      frame = 0;
+      if (window.innerWidth > 767 || window.scrollY < 90) { setMobileTabsHidden(false); travel = 0; lastY = window.scrollY; return; }
+      const delta = window.scrollY - lastY;
+      if (Math.sign(delta) !== Math.sign(travel)) travel = 0;
+      travel = Math.max(-60, Math.min(60, travel + delta));
+      if (travel > 18) { setMobileTabsHidden(true); travel = 0; }
+      if (travel < -12) { setMobileTabsHidden(false); travel = 0; }
+      lastY = window.scrollY;
+    };
+    const queue = () => { if (!frame) frame = requestAnimationFrame(update); };
+    window.addEventListener("scroll", queue, { passive: true });
+    window.addEventListener("resize", queue);
+    return () => { window.removeEventListener("scroll", queue); window.removeEventListener("resize", queue); cancelAnimationFrame(frame); };
+  }, []);
 
   const categories = useMemo(() => {
     const ordered = categoryList.map((item) => item.name);
@@ -99,7 +116,7 @@ export default function Storefront() {
       (category === "All categories" || product.category === category) &&
       (!selectedSubcategories.length && !selectedSubSubcategories.length ||
         selectedSubcategories.includes(product.subcategoryId) || selectedSubSubcategories.includes(product.subSubcategoryId)) &&
-      product.price >= priceMin && product.price <= priceMax &&
+      (priceMin === "" || product.price >= Number(priceMin)) && (priceMax === "" || product.price <= Number(priceMax)) &&
       (availability === "all" || (availability === "in" ? product.stock > 0 : product.stock <= 0)) &&
       (offer === "all" || (offer === "sale" ? isOnSale(product, discountRules) : isPromotion(product, discountRules))) &&
       inCollection(product, collection, discountRules) &&
@@ -145,7 +162,28 @@ export default function Storefront() {
     setSelectedSubcategories([]);
     setSelectedSubSubcategories([]);
     setQuery(term);
+    setSearchOpen(false);
+    searchRef.current?.querySelector("input")?.blur();
     document.getElementById("catalogue")?.scrollIntoView({ behavior: "smooth" });
+  }
+
+  function submitSearch() {
+    setSearchOpen(false);
+    searchRef.current?.querySelector("input")?.blur();
+    setPage(1);
+    document.getElementById("catalogue")?.scrollIntoView({ behavior: "smooth" });
+  }
+
+  function closeCart() {
+    setCartOpen(false);
+    setCheckout(false);
+    if (cartReturn.current) window.location.replace(cartReturn.current);
+  }
+
+  function clearFilters() {
+    setPriceMin(""); setPriceMax(""); setCategory("All categories");
+    setSelectedSubcategories([]); setSelectedSubSubcategories([]);
+    setAvailability("all"); setOffer("all"); setCollection("");
   }
 
   function selectCategory(name, id = "") {
@@ -265,7 +303,7 @@ export default function Storefront() {
   return (
     <div className="store-shell">
       <div className="utility-bar"><span>PAM Essentials & More · Ghana</span><div><a href="/account#orders">Track Order</a><a href="/account">{user && !role ? "My Account" : "Sign In"}</a></div></div>
-      <header className={`store-header${mobileHeaderCompact ? " mobile-compact" : ""}`}>
+      <header className={`store-header${mobileTabsHidden ? " mobile-tabs-hidden" : ""}`}>
         <div className="header-main">
           <a className="brand" href="/" aria-label="PAM Essentials home"><span className="brand-mark" aria-hidden="true">P</span><span>PAM Essentials</span></a>
           <nav className="store-nav" aria-label="Primary navigation">
@@ -276,12 +314,12 @@ export default function Storefront() {
             {dealsActive && <button type="button" onClick={() => browse("deals")}>Deals</button>}
             <a href="/info/delivery"><span className="nav-full">Payment &amp; Delivery</span><span className="nav-short">Delivery</span></a>
           </nav>
-          <div className="header-search" ref={searchRef}>
-            <div className="search-field"><input type="search" aria-label="Search products, categories, or brands" aria-expanded={searchOpen && query.trim().length > 0} aria-controls="search-suggestions" placeholder="Search products, categories, or brands" value={query} onFocus={() => setSearchOpen(true)} onKeyDown={(event) => { if (event.key === "Escape") setSearchOpen(false); if (event.key === "Enter" && suggestions.length === 1) { event.preventDefault(); setQuickProduct(suggestions[0]); setSearchOpen(false); } }} onChange={(event) => { setBrowseMode("products"); setQuery(event.target.value); setSearchOpen(true); }} /><button type="button" aria-label="Show matching products" onClick={() => { setSearchOpen(true); searchRef.current?.querySelector("input")?.focus(); }}>⌕</button></div>
+          <div className={`header-search${searchOpen && !query.trim() ? " search-active" : ""}`} ref={searchRef}>
+            <div className="search-field"><input type="search" aria-label="Search products, categories, or brands" aria-expanded={searchOpen && query.trim().length > 0} aria-controls="search-suggestions" placeholder="Search products, categories, or brands" value={query} onFocus={() => setSearchOpen(true)} onKeyDown={(event) => { if (event.key === "Escape") setSearchOpen(false); if (event.key === "Enter") { event.preventDefault(); submitSearch(); } }} onChange={(event) => { setBrowseMode("products"); setQuery(event.target.value); setSearchOpen(true); }} /><button type="button" aria-label="Show matching products" onClick={submitSearch}>⌕</button></div>
             {searchOpen && query.trim() && <div id="search-suggestions" className="search-suggestions" role="listbox" aria-label="Matching products">{suggestions.length ? <><p>Suggested products</p>{suggestions.map((item) => <button type="button" role="option" aria-selected="false" key={item.id} onClick={() => { recordClick(item); setQuickProduct(item); setSearchOpen(false); }}><span><b>{item.name}</b><small>{item.category} · {item.id}</small></span><strong>{money.format(item.price)}</strong></button>)}</> : <p>No matching products. Try another name or keyword.</p>}</div>}
             <div className="popular-searches"><span><span className="popular-full">Popular Searches:</span><span className="popular-short">Popular:</span></span>{[...curatedSearches, ...popularProducts.map((product) => product.name)].map((term) => <button key={term} type="button" onClick={() => searchPopular(term)}>{term}</button>)}</div>
           </div>
-          <button className="cart-button" onClick={() => setCartOpen(true)} aria-label={`Cart, ${cartCount} items`}>Cart <b>{cartCount}</b></button>
+          <button className="cart-button" onClick={() => setCartOpen(true)} aria-label={`View cart, ${cartCount} items`}><span className="cart-text">Cart</span><svg className="cart-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 4h2l2.1 10.4a2 2 0 0 0 2 1.6H19a2 2 0 0 0 2-1.6L22 8H6"/><circle cx="10" cy="20" r="1"/><circle cx="19" cy="20" r="1"/></svg><b>{cartCount}</b></button>
         </div>
       </header>
 
@@ -292,6 +330,7 @@ export default function Storefront() {
         <button type="button" className="mobile-filter-toggle" aria-expanded={mobileFiltersOpen} aria-controls="store-filters" onClick={() => setMobileFiltersOpen((open) => !open)}><span aria-hidden="true">☰</span><span className="filter-label-wide">Categories &amp; filters</span><span className="filter-label-mobile">Filters</span></button>
         <aside id="store-filters" className={mobileFiltersOpen ? "filters mobile-open" : "filters"} aria-label="Product filters">
           <button type="button" className="mobile-filter-close" onClick={() => setMobileFiltersOpen(false)}>× Close filters</button>
+          <div className="price-filter"><b>Price range</b><label>Minimum<input type="number" min="0" placeholder="Min price" value={priceMin} onChange={(event) => setPriceMin(event.target.value)} /></label><label>Maximum<input type="number" min="0" placeholder="Max price" value={priceMax} onChange={(event) => setPriceMax(event.target.value)} /></label></div>
           <p className="eyebrow">Browse</p><h2>Categories</h2>
           <button type="button" className={category === "All categories" ? "filter active" : "filter"} onClick={() => selectCategory("All categories")}>
             <span>All categories</span><small>{products.length}</small>
@@ -324,10 +363,10 @@ export default function Storefront() {
             </div>;
           })}
           {!categoryList.length && categories.slice(1).map((name) => <button type="button" className={category === name ? "filter active" : "filter"} key={name} onClick={() => selectCategory(name)}>{name}</button>)}
-          <div className="price-filter"><b>Price range</b><label>Minimum<input type="number" min="0" value={priceMin} onChange={(event) => setPriceMin(Math.max(0, Number(event.target.value || 0)))} /></label><label>Maximum<input type="number" min="0" value={Number.isFinite(priceMax) ? priceMax : ""} onChange={(event) => setPriceMax(event.target.value === "" ? Infinity : Math.max(0, Number(event.target.value)))} /></label></div>
           <fieldset className="facet-group"><legend>Availability</legend>{[["all", "All"], ["in", "In Stock"], ["out", "Out of Stock"]].map(([value, label]) => <label key={value}><input type="radio" name="availability" checked={availability === value} onChange={() => setAvailability(value)} /> {label}</label>)}</fieldset>
           <fieldset className="facet-group"><legend>Offers</legend>{[["all", "All"], ["sale", "On Sale"], ["promotions", "Promotions"]].map(([value, label]) => <label key={value}><input type="radio" name="offer" checked={offer === value} onChange={() => setOffer(value)} /> {label}</label>)}</fieldset>
           <fieldset className="facet-group"><legend>Collections</legend><label><input type="radio" name="collection" checked={!collection} onChange={() => setCollection("")} /> All</label>{["New Arrivals", "Best Sellers", "Back to School", "Promotion", ...(dealsActive ? ["PAM Deals"] : [])].map((name) => <label key={name}><input type="radio" name="collection" checked={collection === name} onChange={() => setCollection(name)} /> {name}</label>)}</fieldset>
+          <button type="button" className="table-action" onClick={clearFilters}>Clear filters</button>
           <div className="service-note"><p>Need expert advice? Message or call us before you order and we’ll help you choose.</p></div>
         </aside>
 
@@ -371,7 +410,7 @@ export default function Storefront() {
       {servicesOpen && <div className="modal-backdrop" role="presentation" onMouseDown={() => setServicesOpen(false)}><div className="modal services-modal" role="dialog" aria-modal="true" aria-label="PAM services" onMouseDown={(event) => event.stopPropagation()}><button className="icon-button services-close" type="button" aria-label="Close services" onClick={() => setServicesOpen(false)}>×</button><p className="eyebrow">PAM Essentials &amp; More</p><h2>Services</h2><ul><li>Secretarial services</li><li>Printing</li><li>Communication consultancy</li><li>Laptop repairs and purchases</li></ul><p>Awoshie, Accra, Ghana</p><div className="services-contact"><a className="button primary" href="tel:+233207015198">Call +233 20 701 5198</a><a className="button whatsapp" href="https://wa.me/233207015198" target="_blank" rel="noreferrer"><WhatsAppIcon size={18} /> Message us</a></div></div></div>}
       {addedProduct && <div className="modal-backdrop" role="presentation"><div className="modal" role="dialog" aria-modal="true" aria-label="Added to cart"><h2>Added to cart</h2><p>{addedProduct.quantity} × {addedProduct.name}</p><p>SKU: {addedProduct.id}{addedProduct.colour && ` · ${addedProduct.colour}`}{addedProduct.size && ` · ${addedProduct.size}`}</p><div className="added-actions"><button className="button secondary" onClick={() => { setAddedProduct(null); document.getElementById("catalogue")?.scrollIntoView({ behavior: "smooth" }); }}>Continue shopping</button><button className="button primary" onClick={() => { setAddedProduct(null); setCartOpen(true); }}>View cart</button></div></div></div>}
 
-      {cartOpen && <div className="drawer-backdrop" onMouseDown={() => setCartOpen(false)}><aside className="cart-drawer" onMouseDown={(event) => event.stopPropagation()}><div className="drawer-title"><div><p className="eyebrow">Your order</p><h2>Shopping cart</h2></div><button className="icon-button" onClick={() => setCartOpen(false)}>×</button></div>{error && <p className="notice error-notice">{error}</p>}{!cart.length ? <div className="empty-state"><h3>Your cart is empty</h3><p>Add a product to get started.</p></div> : <><div className="cart-lines">{cart.map((item) => <div className="cart-line" key={item.id}><ProductArt name={item.name} category={item.category} /><div><h3>{item.name}</h3><p>{[item.colour, item.size, `SKU: ${item.id}`].filter(Boolean).join(" · ")}</p>{item.randomColours && <p className="colour-note">Random colours unless you indicate a choice in notes.</p>}<p>{money.format(item.price)}</p><div className="stepper"><button onClick={() => updateQuantity(item.id, item.quantity - 1)}>−</button><span>{item.quantity}</span><button onClick={() => updateQuantity(item.id, item.quantity + 1)}>+</button></div></div><b>{money.format(pricing.lines.find((line) => line.id === item.id)?.lineTotal || 0)}</b></div>)}</div>{quantityRule && cartCount > 0 && cartCount < 3 && <p className="discount-nudge" role="status">Add {3 - cartCount} more to qualify for 5% off</p>}{quantityDiscountApplied && <p className="discount-applied" role="status">5% quantity discount applied</p>}<div className="cart-total"><span>Subtotal</span><strong>{money.format(subtotal)}</strong></div>{discount > 0 && <div className="cart-total discount-total"><span>Discount</span><strong>−{money.format(discount)}</strong></div>}<div className="cart-total grand-total"><span>Total</span><strong>{money.format(total)}</strong></div>{!checkout ? <button className="button accent full" onClick={() => setCheckout(true)}>Continue to checkout</button> : <form className="checkout-form" onSubmit={placeOrder}><label>Full name<input required value={order.customer} onChange={(e) => setOrder({ ...order, customer: e.target.value })} /></label><label>Mobile number<input required type="tel" value={order.phone} onChange={(e) => setOrder({ ...order, phone: e.target.value })} /></label><label>Fulfilment<select value={order.deliveryMethod} onChange={(e) => setOrder({ ...order, deliveryMethod: e.target.value })}><option value="pickup">Pickup</option><option value="delivery-self">Delivery – self initiated</option><option value="delivery-shop">Delivery – arranged by shop</option></select></label>{order.deliveryMethod === "delivery-self" && <p className="pickup-address">Your courier collects from: <b>{SHOP_ADDRESS}</b></p>}{order.deliveryMethod !== "pickup" && <label>Delivery destination or landmark<input required={order.deliveryMethod === "delivery-shop"} value={order.deliveryAddress} onChange={(e) => setOrder({ ...order, deliveryAddress: e.target.value })} /></label>}<label>Order notes (optional)<textarea rows={3} maxLength={1000} placeholder="type specific details or requests here" value={order.notes} onChange={(e) => setOrder({ ...order, notes: e.target.value })} /></label><button className="button secondary full" type="button" disabled title="Payment provider has not been selected yet">Pay now · coming soon</button><button className="button accent full" type="submit" disabled={placingOrder}>{placingOrder ? "Creating order…" : `Pay on pickup/delivery · ${money.format(total)}`}</button><button className="button whatsapp full" type="button" disabled={placingOrder} onClick={orderOnWhatsApp}>Order on WhatsApp</button></form>}</>}</aside></div>}
+      {cartOpen && <div className="drawer-backdrop" onMouseDown={closeCart}><aside className="cart-drawer" onMouseDown={(event) => event.stopPropagation()}><div className="drawer-title"><div><p className="eyebrow">Your order</p><h2>Shopping cart</h2></div><button className="icon-button" onClick={closeCart} aria-label="Close cart">×</button></div>{error && <p className="notice error-notice">{error}</p>}{!cart.length ? <div className="empty-state"><h3>Your cart is empty</h3><p>Add a product to get started.</p><button type="button" className="button secondary full" onClick={closeCart}>Continue browsing</button></div> : <><div className="cart-lines">{cart.map((item) => <div className="cart-line" key={item.id}><ProductArt name={item.name} category={item.category} /><div><h3>{item.name}</h3><p>{[item.colour, item.size, `SKU: ${item.id}`].filter(Boolean).join(" · ")}</p>{item.randomColours && <p className="colour-note">Random colours unless you indicate a choice in notes.</p>}<p>{money.format(item.price)}</p><div className="stepper"><button onClick={() => updateQuantity(item.id, item.quantity - 1)}>−</button><span>{item.quantity}</span><button onClick={() => updateQuantity(item.id, item.quantity + 1)}>+</button></div></div><b>{money.format(pricing.lines.find((line) => line.id === item.id)?.lineTotal || 0)}</b></div>)}</div>{quantityRule && cartCount > 0 && cartCount < 3 && <p className="discount-nudge" role="status">Add {3 - cartCount} more to qualify for 5% off</p>}{quantityDiscountApplied && <p className="discount-applied" role="status">5% quantity discount applied</p>}<div className="cart-total"><span>Subtotal</span><strong>{money.format(subtotal)}</strong></div>{discount > 0 && <div className="cart-total discount-total"><span>Discount</span><strong>−{money.format(discount)}</strong></div>}<div className="cart-total grand-total"><span>Total</span><strong>{money.format(total)}</strong></div><button type="button" className="button secondary full" onClick={closeCart}>Continue browsing</button>{!checkout ? <button className="button accent full" onClick={() => setCheckout(true)}>Proceed to checkout</button> : <form className="checkout-form" onSubmit={placeOrder}><label>Full name<input required value={order.customer} onChange={(e) => setOrder({ ...order, customer: e.target.value })} /></label><label>Mobile number<input required type="tel" value={order.phone} onChange={(e) => setOrder({ ...order, phone: e.target.value })} /></label><label>Fulfilment<select value={order.deliveryMethod} onChange={(e) => setOrder({ ...order, deliveryMethod: e.target.value })}><option value="pickup">Pickup</option><option value="delivery-self">Delivery – self initiated</option><option value="delivery-shop">Delivery – arranged by shop</option></select></label>{order.deliveryMethod === "delivery-self" && <p className="pickup-address">Your courier collects from: <b>{SHOP_ADDRESS}</b></p>}{order.deliveryMethod !== "pickup" && <label>Delivery destination or landmark<input required={order.deliveryMethod === "delivery-shop"} value={order.deliveryAddress} onChange={(e) => setOrder({ ...order, deliveryAddress: e.target.value })} /></label>}<label>Order notes (optional)<textarea rows={3} maxLength={1000} placeholder="type specific details or requests here" value={order.notes} onChange={(e) => setOrder({ ...order, notes: e.target.value })} /></label><button className="button secondary full" type="button" disabled title="Payment provider has not been selected yet">Pay now · coming soon</button><button className="button accent full" type="submit" disabled={placingOrder}>{placingOrder ? "Creating order…" : `Pay on pickup/delivery · ${money.format(total)}`}</button><button className="button whatsapp full" type="button" disabled={placingOrder} onClick={orderOnWhatsApp}>Order on WhatsApp</button></form>}</>}</aside></div>}
       {confirmation && <div className="modal-backdrop"><div className="modal"><span className="success-mark">✓</span><h2>Order received</h2><p>Keep this reference for pickup or delivery.</p><strong className="order-reference">{confirmation.orderId}</strong><p>{user && !role ? "Track this order in your account." : "Create a customer account and link this guest order to track it."}</p><a className="button secondary full" href="/account#orders">Track my order</a><button className="button primary full" onClick={() => { setConfirmation(null); setCartOpen(false); }}>Continue shopping</button></div></div>}
       <a className="whatsapp-fab" href="https://wa.me/233207015198" target="_blank" rel="noreferrer" aria-label="Chat with PAM Essentials on WhatsApp"><WhatsAppIcon size={25} /></a>
       {cookieVisible && <div className="cookie-banner"><p><b>Privacy notice</b> We use essential browser storage for your cart, staff sign-in and offline till sync.</p><button className="button accent" onClick={() => { localStorage.setItem("pam-cookie-notice", "accepted"); setCookieVisible(false); }}>Okay</button></div>}

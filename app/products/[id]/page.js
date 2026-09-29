@@ -37,6 +37,19 @@ export default function ProductPage() {
     }).catch((reason) => setError(reason.message)).finally(() => setLoading(false));
   }, []);
   const product = products.find((item) => item.id === id);
+  const productPath = `/products/${encodeURIComponent(id)}${quickReturnId ? `?quick=${encodeURIComponent(quickReturnId)}` : ""}`;
+  const cartUrl = `/?cart=1&returnTo=${encodeURIComponent(productPath)}`;
+  function rememberCartPosition() { sessionStorage.setItem("pam-cart-return-scroll", JSON.stringify({ path: window.location.pathname + window.location.search, y: window.scrollY })); }
+  useEffect(() => {
+    if (loading || !product) return;
+    try {
+      const saved = JSON.parse(sessionStorage.getItem("pam-cart-return-scroll") || "null");
+      if (saved?.path === window.location.pathname + window.location.search) {
+        requestAnimationFrame(() => window.scrollTo(0, Number(saved.y) || 0));
+        sessionStorage.removeItem("pam-cart-return-scroll");
+      }
+    } catch { sessionStorage.removeItem("pam-cart-return-scroll"); }
+  }, [loading, product?.id]);
   const variants = useMemo(() => productVariants(product, products), [product, products]);
   const selected = selectedVariant && variants.find((item) => item.id === selectedVariant.id) || product;
   const gallery = useMemo(() => {
@@ -71,7 +84,7 @@ export default function ProductPage() {
     setShared(true);
   }
   return <div className="product-page store-shell">
-    <header className="product-page-header"><a className="brand" href="/"><span className="brand-mark">P</span><span>PAM Essentials</span></a><a href="/?cart=1">View cart</a></header>
+    <header className="product-page-header"><a className="brand" href="/"><span className="brand-mark">P</span><span>PAM Essentials</span></a><a href={cartUrl} onClick={rememberCartPosition}>View cart</a></header>
     <main className="product-page-main">
       <a className="detail-back" href={quickReturnId ? `/?quick=${encodeURIComponent(quickReturnId)}` : "/#catalogue"}>← Back {quickReturnId ? "to Quick View" : "to products"}</a>
       {loading && <div className="empty-state">Loading product…</div>}
@@ -79,17 +92,21 @@ export default function ProductPage() {
       {product && <>
         <nav className="breadcrumb"><a href="/">Home</a> / {product.category} / {product.name}</nav>
         <div className="product-detail-hero">
-          <ProductOptions key={product.id} initialProduct={product} products={variants} onAdd={add} onSelectionChange={(variant) => { setSelectedVariant(variant); setPreviewSource(null); }} previewSource={previewSource} onOpenGallery={() => setLightboxIndex(Math.max(0, gallery.findIndex((image) => image.source.url === (previewSource || detailImageSource(product, selected)).url)))} />
-          <div className="product-utilities"><button type="button" onClick={share}>Share</button>{shared && <span>Link copied</span>}<a href={`/account?wishlist=${encodeURIComponent(product.id)}`}>Add to wishlist</a><button type="button" disabled title="Product comparison is coming soon">Add to compare</button></div>
-          <section className="detail-section"><h2>Description</h2><p>{product.description || product.name}</p><h2>Product details</h2><dl><dt>SKU</dt><dd>{product.id}</dd>{product.productGroupId && <><dt>Product ID</dt><dd>{product.productGroupId}</dd><dt>Variant ID</dt><dd>{product.id}</dd></>}{product.size && <><dt>Size</dt><dd>{product.size}</dd></>}{product.colour && <><dt>Colour</dt><dd>{product.colour}</dd></>}</dl><h2>Delivery &amp; pickup</h2><p>🚚 Delivery available &nbsp; 🏪 Pickup available</p></section>
+          <ProductOptions key={product.id} initialProduct={product} products={variants} onAdd={add} onSelectionChange={(variant) => { setSelectedVariant(variant); setPreviewSource(null); }} previewSource={previewSource} onOpenGallery={() => setLightboxIndex(Math.max(0, gallery.findIndex((image) => image.source.url === (previewSource || detailImageSource(product, selected)).url)))} footer={<div className="product-utilities"><button type="button" onClick={share}>Share</button>{shared && <span>Link copied</span>}<a href={`/account?wishlist=${encodeURIComponent(product.id)}`}>Add to wishlist</a><button type="button" disabled title="Product comparison is coming soon">Add to compare</button></div>} />
+          {gallery.length > 0 && <section className="product-gallery"><h2>Explore the details</h2><div className="product-gallery-grid">{gallery.map((item, index) => <button type="button" className={(previewSource || detailImageSource(product, selected)).url === item.source.url ? "selected" : ""} key={`${item.source.url}-${index}`} onClick={() => { setPreviewSource(item.source); setLightboxIndex(index); }} aria-label={`View ${item.label} full screen`}><ProductImage product={selected} source={item.source} width={240} /><span>{item.label}</span></button>)}</div></section>}
+          <div className="detail-section">
+            <section className="detail-info-card"><h2><span aria-hidden="true">✦</span> Description</h2><p>{product.description || product.name}</p></section>
+            <section className="detail-info-card"><h2><span aria-hidden="true">◎</span> Product details</h2><dl><dt>SKU</dt><dd>{product.id}</dd>{product.productGroupId && <><dt>Product ID</dt><dd>{product.productGroupId}</dd><dt>Variant ID</dt><dd>{product.id}</dd></>}{product.size && <><dt>Size</dt><dd>{product.size}</dd></>}{product.colour && <><dt>Colour</dt><dd>{product.colour}</dd></>}</dl></section>
+            <section className="detail-info-card"><h2><span aria-hidden="true">↗</span> Delivery &amp; pickup</h2><p>Choose delivery or pickup when you order. Need help deciding? Our team is a message away.</p></section>
+          </div>
         </div>
+        <section className="product-trust"><div><p className="eyebrow">A little more confidence</p><h2>Why buy from PAM Essentials?</h2></div><div className="product-trust-grid"><article><span aria-hidden="true">✦</span><b>Friendly support</b><p>Ask us when you need a hand.</p></article><article><span aria-hidden="true">↗</span><b>Delivery or pickup</b><p>Choose what works for your day.</p></article><article><span aria-hidden="true">◎</span><b>WhatsApp ordering</b><p>Order with a familiar conversation.</p></article><article><span aria-hidden="true">✓</span><b>Clear order updates</b><p>Follow your order in your account.</p></article></div></section>
         <div className="product-detail-lower">
-          {gallery.length > 0 && <section className="product-gallery"><h2>Product gallery</h2><div className="product-gallery-grid">{gallery.map((item, index) => <button type="button" key={`${item.source.url}-${index}`} onClick={() => { setPreviewSource(item.source); setLightboxIndex(index); }} aria-label={`View ${item.label} full screen`}><ProductImage product={selected} source={item.source} width={240} /><span>{item.label}</span></button>)}</div></section>}
-          {related.length > 0 && <section className="related-products"><h2>You may also like…</h2><div className="related-grid">{related.map((item) => <a href={`/products/${encodeURIComponent(item.id)}`} key={item.id}><ProductImage product={item} /><b>{item.name}</b></a>)}</div></section>}
+          {related.length > 0 && <section className="related-products"><p className="eyebrow">Keep exploring</p><h2>You may also like</h2><div className="related-grid">{related.map((item) => <a href={`/products/${encodeURIComponent(item.id)}`} key={item.id}><ProductImage product={item} /><b>{item.name}</b></a>)}</div></section>}
         </div>
       </>}
     </main>
-    {added && <div className="modal-backdrop" role="presentation"><div className="modal" role="dialog" aria-modal="true" aria-label="Added to cart"><h2>Added to cart</h2><p>{added.quantity} × {added.name}</p><p>SKU: {added.id}{added.colour && ` · ${added.colour}`}{added.size && ` · ${added.size}`}</p><div className="added-actions"><button className="button secondary" onClick={() => setAdded(null)}>Continue shopping</button><a className="button primary" href="/?cart=1">View cart</a></div></div></div>}
+    {added && <div className="modal-backdrop" role="presentation"><div className="modal" role="dialog" aria-modal="true" aria-label="Added to cart"><h2>Added to cart</h2><p>{added.quantity} × {added.name}</p><p>SKU: {added.id}{added.colour && ` · ${added.colour}`}{added.size && ` · ${added.size}`}</p><div className="added-actions"><button className="button secondary" onClick={() => setAdded(null)}>Continue shopping</button><a className="button primary" href={cartUrl} onClick={rememberCartPosition}>View cart</a></div></div></div>}
     {lightboxIndex >= 0 && gallery.length > 0 && <div className="image-lightbox" role="dialog" aria-modal="true" aria-label="Product image gallery" onClick={(event) => { if (gesture.current.dragged) { gesture.current.dragged = false; return; } if (event.target === event.currentTarget) setLightboxIndex(-1); }} onPointerDown={(event) => { gesture.current.x = event.clientX; gesture.current.y = event.clientY; gesture.current.dragged = false; }} onPointerUp={(event) => { const dx = event.clientX - gesture.current.x; const dy = event.clientY - gesture.current.y; if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy)) { gesture.current.dragged = true; setLightboxIndex((index) => (index + (dx < 0 ? 1 : -1) + gallery.length) % gallery.length); } }} onWheel={(event) => { if (Math.abs(event.deltaX) > 35 && Math.abs(event.deltaX) > Math.abs(event.deltaY) && Date.now() - gesture.current.lastWheel > 450) { gesture.current.lastWheel = Date.now(); setLightboxIndex((index) => (index + (event.deltaX > 0 ? 1 : -1) + gallery.length) % gallery.length); } }}><button type="button" className="image-lightbox-close" onClick={() => setLightboxIndex(-1)} aria-label="Close gallery">×</button><button type="button" className="image-lightbox-nav" onClick={(event) => { event.stopPropagation(); setLightboxIndex((index) => (index - 1 + gallery.length) % gallery.length); }} aria-label="Previous image">‹</button><div className="image-lightbox-frame" onClick={(event) => event.stopPropagation()}><ProductImage product={selected} source={gallery[lightboxIndex]?.source} width={2200} eager /><span>{lightboxIndex + 1} / {gallery.length}</span></div><button type="button" className="image-lightbox-nav" onClick={(event) => { event.stopPropagation(); setLightboxIndex((index) => (index + 1) % gallery.length); }} aria-label="Next image">›</button></div>}
   </div>;
 }
