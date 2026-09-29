@@ -1,16 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { formatReceiptText, receiptSnapshot } from "@/lib/receiptData.mjs";
 
 const money = new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS" });
 const label = (value) => String(value || "").replaceAll("-", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 
-export default function ReceiptPanel({ sale: source, onClose, onNewSale }) {
+export default function ReceiptPanel({ sale: source, onClose, onNewSale, autoPrint = false }) {
   const sale = receiptSnapshot(source);
   const [message, setMessage] = useState("");
   const date = sale.createdAt ? new Date(sale.createdAt) : new Date();
   const text = formatReceiptText(sale);
+  useEffect(() => {
+    if (!autoPrint) return;
+    const afterPrint = () => onClose();
+    window.addEventListener("afterprint", afterPrint);
+    const timer = setTimeout(() => window.print(), 100);
+    return () => { clearTimeout(timer); window.removeEventListener("afterprint", afterPrint); };
+  }, [autoPrint]);
   const download = () => {
     const url = URL.createObjectURL(new Blob([text], { type: "text/plain;charset=utf-8" }));
     const link = document.createElement("a");

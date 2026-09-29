@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "test": "node --test tests/discount.test.mjs tests/whatsappOrder.test.mjs tests/cartPricing.test.mjs tests/receipt.test.mjs tests/ruleScopeOptions.test.mjs tests/productImages.test.mjs && node --import ./tests/fixtures/register-loader.mjs --test tests/customerFlows.test.mjs tests/categoryCollections.test.mjs",
+    "test": "node --test tests/discount.test.mjs tests/whatsappOrder.test.mjs tests/cartPricing.test.mjs tests/receipt.test.mjs tests/ruleScopeOptions.test.mjs tests/productImages.test.mjs tests/scanCode.test.mjs && node --import ./tests/fixtures/register-loader.mjs --test tests/customerFlows.test.mjs tests/categoryCollections.test.mjs",
     "test:auth-emulator": "node --import ./tests/fixtures/register-loader.mjs --test tests/authEmulator.test.mjs",
     "test:firestore-emulator": "node --test tests/firestoreRules.test.mjs",
     "test:customer-emulator": "node --import ./tests/fixtures/register-real-loader.mjs --test --test-concurrency=1 tests/customerEmulator.test.mjs tests/posDashboardEmulator.test.mjs tests/posSaleEmulator.test.mjs tests/posExpensesEmulator.test.mjs",
@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@google-cloud/storage": "8.2.0",
+    "@zxing/browser": "0.2.1",
     "@fontsource-variable/comfortaa": "5.3.0",
     "@fontsource-variable/nunito-sans": "5.3.0",
     "firebase": "12.4.0",
