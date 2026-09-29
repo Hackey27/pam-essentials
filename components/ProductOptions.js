@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import WhatsAppIcon from "@/components/WhatsAppIcon";
+import { cardImageSource, detailImageSource, getProductImageUrl } from "@/lib/productImages.mjs";
 
 const money = new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS" });
 
@@ -16,16 +17,43 @@ export function variantPrice(variants) {
   return low === high ? money.format(low) : `${money.format(low)} – ${money.format(high)}`;
 }
 
-export function ProductImage({ product, className = "" }) {
-  if (product.imageUrl) return <img className={className || "product-photo"} src={product.imageUrl} alt={product.name} />;
+export function ProductImage({ product, className = "", source, width = 350, eager = false }) {
+  const resolved = source || cardImageSource(product);
+  const url = resolved.path ? getProductImageUrl(resolved.path, width) : resolved.url;
+  const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [url]);
+  if (url && !failed) return <img className={className || "product-photo"} src={url} alt={product.name} loading={eager ? "eager" : "lazy"} onError={() => setFailed(true)} />;
   const initials = product.name.split(" ").slice(0, 2).map((word) => word[0]).join("");
   return <div className={`product-art ${className}`} role="img" aria-label={`${product.name} image placeholder`}><span>{initials}</span><small>{[product.colour, product.size].filter(Boolean).join(" · ") || product.category}</small></div>;
 }
 
-export default function ProductOptions({ initialProduct, products, onAdd, compact = false, onClose }) {
+function ProductPreview({ product, source, onOpenGallery }) {
+  const [highResolution, setHighResolution] = useState("");
+  const [hovering, setHovering] = useState(false);
+  const [origin, setOrigin] = useState("50% 50%");
+  useEffect(() => { setHighResolution(""); setHovering(false); }, [source.path, source.url]);
+  function enter(event) {
+    if (!window.matchMedia("(hover: hover) and (pointer: fine)").matches || !source.url) return;
+    setHovering(true);
+    if (source.path && !highResolution) {
+      const url = getProductImageUrl(source.path, 2200);
+      const preload = new window.Image();
+      preload.onload = () => setHighResolution(url);
+      preload.src = url;
+    }
+  }
+  return <button type="button" className={`product-preview product-detail-image${hovering ? " is-zooming" : ""}`} onPointerEnter={enter} onPointerMove={(event) => { if (hovering) { const rect = event.currentTarget.getBoundingClientRect(); setOrigin(`${Math.max(0, Math.min(100, (event.clientX - rect.left) / rect.width * 100))}% ${Math.max(0, Math.min(100, (event.clientY - rect.top) / rect.height * 100))}%`); } }} onPointerLeave={() => setHovering(false)} onClick={source.url && onOpenGallery ? onOpenGallery : undefined} aria-label={source.url ? `View ${product.name} image full screen` : `${product.name} image placeholder`} style={{ "--zoom-origin": origin }}>
+    <ProductImage product={product} source={highResolution && hovering ? { path: "", url: highResolution } : source} className="product-preview-image" width={1000} eager />
+  </button>;
+}
+
+export default function ProductOptions({ initialProduct, products, onAdd, compact = false, onClose, onSelectionChange, previewSource, onOpenGallery }) {
   const [selectedId, setSelectedId] = useState(initialProduct.id);
   const [quantity, setQuantity] = useState(1);
   const selected = products.find((item) => item.id === selectedId) || initialProduct;
+  const defaultSource = detailImageSource(initialProduct, selected);
+  const displayedSource = previewSource || defaultSource;
+  useEffect(() => { onSelectionChange?.(selected); }, [selected.id]);
   const variants = useMemo(() => productVariants(initialProduct, products), [initialProduct, products]);
   const hasVariants = variants.length > 1;
   const sizes = [...new Set(variants.map((item) => item.size).filter(Boolean))];
@@ -41,7 +69,7 @@ export default function ProductOptions({ initialProduct, products, onAdd, compac
   };
   const whatsappText = `Hello PAM Essentials & More 👋\n\nI'd like to order:\n1. ${selected.name}\n${[selected.colour && `Colour: ${selected.colour}`, selected.size && `Size: ${selected.size}`].filter(Boolean).join("\n")}\nSKU: ${selected.id}\nQty: ${quantity}\nPrice: ${money.format(selected.price)}\nTotal: ${money.format(selected.price * quantity)}\n\nName:\nPhone:\nDelivery/Pickup:\n${selected.randomColours ? "Preferred colour/notes:" : "Notes:"}`;
   return <div className={`product-options ${compact ? "compact" : ""}`}>
-    <ProductImage product={selected} className="product-detail-image" />
+    <ProductPreview product={selected} source={displayedSource} onOpenGallery={onOpenGallery} />
     <div className="product-option-body">
       <div className="product-option-top">{compact && <button type="button" className="icon-button" onClick={onClose} aria-label="Close Quick View">×</button>}</div>
       <h2>{selected.name}</h2><p className="detail-price">{money.format(selected.price)}</p>

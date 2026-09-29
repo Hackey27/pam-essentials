@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { priceCart, resolveDiscount } from "@/lib/commerce";
 import { curatedSearches, hasCollection, inCollection, isBestSeller, isNewArrival, isOnSale, isPromotion, matchesSearch } from "@/lib/catalogueBrowse.mjs";
-import ProductOptions, { variantPrice } from "@/components/ProductOptions";
+import ProductOptions, { ProductImage, variantPrice } from "@/components/ProductOptions";
 import { addToCart, readCart, saveCart } from "@/lib/storeCart";
 import { useAuth } from "@/components/AuthProvider";
 import { SHOP_ADDRESS } from "@/lib/shop";
@@ -342,7 +342,7 @@ export default function Storefront() {
             const variants = product.productGroupId ? products.filter((item) => item.productGroupId === product.productGroupId) : [product];
             const hasVariants = variants.length > 1;
             return <article className="product-card" key={product.id}>
-              <a href={`/products/${encodeURIComponent(product.id)}`} className="product-card-image">{product.imageUrl ? <img className="product-photo" src={product.imageUrl} alt={product.name} /> : <ProductArt name={product.name} category={product.category} />}{isPromotion(product, discountRules) && <span className="promo-ribbon">Promo</span>}</a>
+              <a href={`/products/${encodeURIComponent(product.id)}`} className="product-card-image"><ProductImage product={product} />{isPromotion(product, discountRules) && <span className="promo-ribbon">Promo</span>}</a>
               <div className="product-copy"><div className="product-badges"><span className={product.stock > 0 ? "badge success" : "badge danger"}>{product.stock > 0 ? "In stock" : "Out of stock"}</span>{product.stock > 0 && product.stock < Number(product.lowStockLevel ?? 8) && <span className="badge warning">Low stock</span>}{isNewArrival(product) && <span className="badge neutral">New</span>}{publicLaunch && isBestSeller(product) && <span className="badge neutral">Best seller</span>}{isOnSale(product, discountRules) && <span className="badge warning">On sale</span>}</div>
               <p className="sku">{product.id}</p><h3><a href={`/products/${encodeURIComponent(product.id)}`}>{product.name}</a></h3>{product.description && <p className="product-description">{product.description}</p>}{product.randomColours && <p className="colour-note">Random colours unless you indicate a choice in notes.</p>}
               <p className="price">{hasVariants ? variantPrice(variants) : money.format(product.price)}</p>{hasVariants && <small>{variants.length} variants available</small>}

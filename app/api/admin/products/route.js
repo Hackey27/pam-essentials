@@ -2,6 +2,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { NextResponse } from "next/server";
 import { adminDb, requireRole } from "@/lib/admin";
 import { auditPayload, nullableNumber, text } from "@/lib/serverData";
+import { isProductImagePath, productImageFolder, variantCombinationKey } from "@/lib/productImages.mjs";
 
 export async function POST(request) {
   const access = await requireRole(request, ["owner", "admin"]);
@@ -21,6 +22,20 @@ export async function POST(request) {
   if (!body.create && !existing.exists) return NextResponse.json({ error: "Product not found." }, { status: 404 });
 
   const oldValue = existing.exists ? existing.data() : null;
+  const groupId = oldValue?.productGroupId || "";
+  const groupSnapshot = groupId ? await store.collection("products").where("productGroupId", "==", groupId).get() : { docs: [] };
+  const groupDocs = groupSnapshot.docs;
+  const allowedFolders = new Set([id, ...groupDocs.map((doc) => doc.data().id || doc.id)].map((productId) => `products/${productImageFolder(productId)}/`));
+  const validPath = (path) => !path || isProductImagePath(path) && [...allowedFolders].some((folder) => path.startsWith(folder));
+  const imageField = (key) => body[key] === undefined ? oldValue?.[key] || "" : String(body[key] || "");
+  const imageList = (key) => body[key] === undefined ? oldValue?.[key] || [] : body[key];
+  const cardPreviewImagePath = imageField("cardPreviewImagePath");
+  const masterImagePath = imageField("masterImagePath");
+  const galleryImagePaths = imageList("galleryImagePaths");
+  const variantImages = body.variantImages === undefined ? oldValue?.variantImages || {} : body.variantImages;
+  if (!validPath(cardPreviewImagePath) || !validPath(masterImagePath) || !Array.isArray(galleryImagePaths) || galleryImagePaths.length > 12 || !galleryImagePaths.every((path) => typeof path === "string" && validPath(path))) return NextResponse.json({ error: "Product image paths are invalid." }, { status: 400 });
+  const knownKeys = new Set(groupDocs.map((doc) => variantCombinationKey(doc.data())).filter(Boolean));
+  if (!variantImages || typeof variantImages !== "object" || Array.isArray(variantImages) || Object.keys(variantImages).length > 60 || Object.entries(variantImages).some(([key, entry]) => !key || key.length > 250 || !knownKeys.has(key) && !Object.hasOwn(oldValue?.variantImages || {}, key) || !entry || typeof entry !== "object" || Array.isArray(entry) || !validPath(entry.imagePath || "") || !Array.isArray(entry.galleryImagePaths || []) || (entry.galleryImagePaths || []).length > 12 || !(entry.galleryImagePaths || []).every((path) => typeof path === "string" && validPath(path)))) return NextResponse.json({ error: "Variant image assignments are invalid." }, { status: 400 });
   const subcategoryId = text(body.subcategoryId ?? (oldValue?.categoryId === categoryId ? oldValue?.subcategoryId : ""), 250);
   const subSubcategoryId = text(body.subSubcategoryId ?? (oldValue?.categoryId === categoryId ? oldValue?.subSubcategoryId : ""), 350);
   let subcategoryName = "";
@@ -73,12 +88,17 @@ export async function POST(request) {
     lowStockLevel: nullableNumber(body.lowStockLevel),
     imageUrl: text(body.imageUrl, 1000),
     images: Array.isArray(body.images) ? body.images.map((value) => text(value, 1000)).filter(Boolean).slice(0, 12) : oldValue?.images || [],
+    cardPreviewImagePath,
+    galleryImagePaths,
+    masterImagePath,
+    variantImages,
     updatedAt: FieldValue.serverTimestamp(),
   };
 
   const batch = store.batch();
   if (existing.exists) batch.update(ref, product);
   else batch.create(ref, { ...product, stock: openingStock, createdAt: FieldValue.serverTimestamp() });
+  if (groupId && body.variantImages !== undefined) for (const sibling of groupDocs) if (sibling.ref.path !== ref.path) batch.update(sibling.ref, { variantImages, updatedAt: FieldValue.serverTimestamp() });
 
   if (openingStock > 0) {
     const movementRef = store.collection("stock_movements").doc();

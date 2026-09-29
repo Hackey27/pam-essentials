@@ -1,0 +1,24 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function activeAdmin() {
+      return request.auth != null
+        && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.active != false
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role in ['owner', 'admin'];
+    }
+    function validImage() {
+      return request.resource.size > 0
+        && request.resource.size <= 20 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp|avif)');
+    }
+    match /products/{productId}/{kind}/{fileName} {
+      allow create: if kind in ['card-preview', 'gallery', 'master'] && activeAdmin() && validImage();
+      allow read, update, delete: if false;
+    }
+    match /products/{productId}/variants/{combination}/{kind}/{fileName} {
+      allow create: if kind in ['main', 'gallery'] && activeAdmin() && validImage();
+      allow read, update, delete: if false;
+    }
+  }
+}

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import RequireRole from "@/components/RequireRole";
 import { signOut, useAuth } from "@/components/AuthProvider";
 import AdminReceipts from "@/components/AdminReceipts";
+import AdminProductImages from "@/components/AdminProductImages";
 import { ruleScopeOptions } from "@/lib/ruleScopeOptions.mjs";
 
 const money = new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS" });
@@ -73,6 +74,7 @@ function AdminPortal() {
   const [seeding, setSeeding] = useState(false);
   const [editor, setEditor] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [uploadingImages, setUploadingImages] = useState(false);
   const [inventory, setInventory] = useState({ type: "receive", productId: "", quantity: "", supplier: "", reason: "", notes: "" });
   const [period, setPeriod] = useState("today");
   const [customRange, setCustomRange] = useState({ start: "", end: "" });
@@ -131,6 +133,7 @@ function AdminPortal() {
   }
 
   function openEditor(type, item = null) {
+    setUploadingImages(false);
     const defaults = {
       product: { create: true, id: "", sku: "", barcode: "", name: "", description: "", categoryId: data.categories[0]?.categoryId || "", subcategoryId: "", subSubcategoryId: "", price: "", costPrice: "", lowStockLevel: "", openingStock: 0, active: true, archived: false, pinned: false, randomColours: false, newArrival: true, collections: [], imageUrl: "" },
       category: { create: true, name: "", description: "", sortOrder: Math.max(0, ...data.categories.map((item) => Number(item.sortOrder || 0))) + 1, collections: [], active: true, archived: false },
@@ -147,11 +150,12 @@ function AdminPortal() {
   }
 
   function updateEditor(key, value) {
-    setEditor((current) => ({ ...current, data: { ...current.data, [key]: value } }));
+    setEditor((current) => ({ ...current, data: { ...current.data, [key]: typeof value === "function" ? value(current.data[key]) : value } }));
   }
 
   async function saveEditor(event) {
     event.preventDefault();
+    if (uploadingImages || saving) return;
     const paths = { product: "products", category: "categories", subcategory: "hierarchy", subSubcategory: "hierarchy", discount: "discounts", promotion: "discounts", dealBundle: "deals", staff: "staff", setting: "settings", expense: "expenses" };
     const labels = { product: "Product saved.", category: "Category saved.", subcategory: "Subcategory saved.", subSubcategory: "Sub-subcategory saved.", discount: "Discount rule saved.", promotion: "Promotion saved.", dealBundle: "PAM Deal bundle saved.", staff: "Staff account saved.", setting: "Setting saved.", expense: "Expense recorded." };
     await mutate(`/api/admin/${paths[editor.type]}`, editor.data, labels[editor.type]);
@@ -317,7 +321,7 @@ function AdminPortal() {
         </>}
       </section>
     </main>
-    {editor && <div className="modal-backdrop"><form className="modal editor-modal admin-form" onSubmit={saveEditor}><div className="drawer-title"><div><p className="eyebrow">{editor.data.create ? "Create" : "Edit"}</p><h2>{editor.type}</h2></div><button type="button" className="icon-button" onClick={() => setEditor(null)}>×</button></div><EditorFields editor={editor} update={updateEditor} data={data} currentRole={role} /><div className="editor-actions"><button type="button" className="button secondary" onClick={() => setEditor(null)}>Cancel</button><button className="button primary" disabled={saving}>{saving ? "Saving…" : "Save changes"}</button></div></form></div>}
+    {editor && <div className="modal-backdrop"><form className="modal editor-modal admin-form" onSubmit={saveEditor}><div className="drawer-title"><div><p className="eyebrow">{editor.data.create ? "Create" : "Edit"}</p><h2>{editor.type}</h2></div><button type="button" className="icon-button" disabled={uploadingImages} onClick={() => setEditor(null)}>×</button></div><EditorFields editor={editor} update={updateEditor} data={data} currentRole={role} onImageBusyChange={setUploadingImages} /><div className="editor-actions"><button type="button" className="button secondary" disabled={uploadingImages} onClick={() => setEditor(null)}>Cancel</button><button className="button primary" disabled={saving || uploadingImages}>{uploadingImages ? "Uploading image…" : saving ? "Saving…" : "Save changes"}</button></div></form></div>}
     {selectedOrder && <div className="modal-backdrop"><div className="modal editor-modal order-detail"><div className="drawer-title"><div><p className="eyebrow">Order detail</p><h2>{selectedOrder.orderId}</h2></div><button type="button" className="icon-button" onClick={() => setSelectedOrder(null)}>×</button></div><div className="detail-grid"><div><span>Customer</span><b>{selectedOrder.customer}</b></div><div><span>Phone</span><b>{selectedOrder.phone}</b></div><div><span>Created</span><b>{dateTime(selectedOrder.createdAt)}</b></div><div><span>Channel</span><b>{selectedOrder.channel}</b></div><div><span>Fulfilment</span><b>{selectedOrder.deliveryMethod}</b></div><div><span>Shop collection</span><b>{selectedOrder.originAddress || "PAM Essentials & More, Awoshie, Accra, Ghana"}</b></div><div><span>Delivery destination</span><b>{selectedOrder.deliveryAddress || selectedOrder.landmark || "—"}</b></div><div><span>Payment</span><b>{selectedOrder.paymentStatus}</b></div><div><span>Status</span><b>{selectedOrder.status}</b></div>{selectedOrder.pickupCode && <div><span>Handover code</span><b>{selectedOrder.pickupCode}</b></div>}</div><h3>Items</h3><div className="order-items">{(selectedOrder.items || []).map((item) => <div className="order-row" key={item.productId}><div><b>{item.name}</b><span>{item.productId} · {item.quantity} × {money.format(item.unitPrice || 0)}</span></div><strong>{money.format(item.lineTotal || 0)}</strong></div>)}</div><div className="order-total"><span>Total</span><strong>{money.format(selectedOrder.total || 0)}</strong></div><div className="editor-actions"><button className="button secondary" onClick={() => setSelectedOrder(null)}>Close</button><select aria-label={`Update ${selectedOrder.orderId}`} value={selectedOrder.status} onChange={async (event) => { await updateOrder(selectedOrder.orderId, event.target.value); setSelectedOrder(null); }}>{["pending", "confirmed", "paid", "processing", "ready", "completed", "cancelled"].map((value) => <option key={value}>{value}</option>)}</select></div></div></div>}
   </div>;
 }
@@ -351,10 +355,11 @@ function editDateTime(value) {
   return Number.isNaN(date.getTime()) ? "" : new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 }
 
-function EditorFields({ editor, update, data, currentRole }) {
+function EditorFields({ editor, update, data, currentRole, onImageBusyChange }) {
   const value = editor.data;
   if (editor.type === "dealBundle") return <DealBundleFields value={value} update={update} products={data.products} />;
   if (editor.type === "product") return <>
+    <AdminProductImages value={value} update={update} products={data.products} onBusyChange={onImageBusyChange} />
     <fieldset><legend>Identity</legend><label>Product ID<input required disabled={!value.create} value={value.id || ""} onChange={(event) => update("id", event.target.value)} /></label><label>Name<input required value={value.name || ""} onChange={(event) => update("name", event.target.value)} /></label><div className="form-grid"><label>SKU<input value={value.sku || ""} onChange={(event) => update("sku", event.target.value)} /></label><label>Barcode<input value={value.barcode || ""} onChange={(event) => update("barcode", event.target.value)} /></label></div><label>Description<textarea value={value.description || ""} onChange={(event) => update("description", event.target.value)} /></label></fieldset>
     <fieldset><legend>Pricing · Admin only</legend><div className="form-grid"><label>Selling price<input type="number" min="0" step="0.01" value={value.price ?? ""} onChange={(event) => update("price", event.target.value)} /></label><label>Cost price<input type="number" min="0" step="0.01" value={value.costPrice ?? ""} onChange={(event) => update("costPrice", event.target.value)} /></label></div></fieldset>
     <fieldset><legend>Classification</legend><label>Category<select required value={value.categoryId || ""} onChange={(event) => { update("categoryId", event.target.value); update("subcategoryId", ""); update("subSubcategoryId", ""); }}>{data.categories.map((category) => <option key={category.categoryId} value={category.categoryId}>{category.name}</option>)}</select></label><label>Subcategory<select value={value.subcategoryId || ""} onChange={(event) => { update("subcategoryId", event.target.value); update("subSubcategoryId", ""); }}><option value="">No subcategory</option>{data.subcategories.filter((item) => item.categoryId === value.categoryId && ((item.active !== false && !item.archived) || item.subcategoryId === value.subcategoryId)).map((item) => <option key={item.subcategoryId} value={item.subcategoryId}>{item.name}</option>)}</select></label><label>Sub-subcategory<select value={value.subSubcategoryId || ""} disabled={!value.subcategoryId} onChange={(event) => update("subSubcategoryId", event.target.value)}><option value="">No sub-subcategory</option>{data.subSubcategories.filter((item) => item.subcategoryId === value.subcategoryId && ((item.active !== false && !item.archived) || item.subSubcategoryId === value.subSubcategoryId)).map((item) => <option key={item.subSubcategoryId} value={item.subSubcategoryId}>{item.name}</option>)}</select></label><div className="form-grid"><label>Low-stock level<input type="number" min="0" value={value.lowStockLevel ?? ""} onChange={(event) => update("lowStockLevel", event.target.value)} /></label>{value.create && <label>Opening stock<input type="number" min="0" value={value.openingStock || 0} onChange={(event) => update("openingStock", event.target.value)} /></label>}</div><label>Primary image URL<input type="url" value={value.imageUrl || ""} onChange={(event) => update("imageUrl", event.target.value)} /></label><div className="toggle-row"><label><input type="checkbox" checked={value.pinned || false} onChange={(event) => update("pinned", event.target.checked)} /> Pinned / high-demand</label><label><input type="checkbox" checked={value.newArrival === true} onChange={(event) => update("newArrival", event.target.checked)} /> New arrival</label><label><input type="checkbox" checked={value.randomColours === true} onChange={(event) => update("randomColours", event.target.checked)} /> Random colours (customer may request a choice in notes)</label><label><input type="checkbox" checked={value.active !== false} onChange={(event) => update("active", event.target.checked)} /> Active</label><label><input type="checkbox" checked={value.archived || false} onChange={(event) => update("archived", event.target.checked)} /> Archived</label></div></fieldset><CollectionChoices value={value} update={update} />

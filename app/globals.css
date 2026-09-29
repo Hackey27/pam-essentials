@@ -214,6 +214,9 @@ input, select { min-height: 44px; border: 1px solid var(--line); border-radius: 
 .quick-view-modal { width: min(960px, 100%); max-height: calc(100vh - 2rem); overflow-y: auto; padding: 1rem; text-align: left; }
 .product-options { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: clamp(1rem, 4vw, 3rem); align-items: start; }
 .product-options .product-detail-image { display: grid; width: 100%; min-height: 360px; aspect-ratio: 1; object-fit: contain; place-content: center; border-radius: 14px; background: var(--soft-blue); }
+.product-preview { border: 0; padding: 0; overflow: hidden; cursor: zoom-in; }
+.product-preview-image { display: block; width: 100%; height: 100%; max-height: 540px; object-fit: contain; transform-origin: var(--zoom-origin, center); transition: transform .18s ease; }
+@media (hover: hover) and (pointer: fine) { .product-preview.is-zooming .product-preview-image { transform: scale(1.8); } }
 .product-option-body { display: grid; gap: .7rem; }
 .product-option-body h2 { margin: 0; font-size: clamp(1.4rem, 3vw, 2.2rem); line-height: 1.2; }
 .product-option-body .sku { margin: 0; }
@@ -277,9 +280,14 @@ input, select { min-height: 44px; border: 1px solid var(--line); border-radius: 
 .product-gallery { margin-top: 2rem; border-top: 1px solid var(--line); padding-top: 1.5rem; }
 .product-gallery h2 { margin: 0 0 1rem; color: var(--navy); }
 .product-gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 160px)); gap: .8rem; }
-.product-gallery-grid a, .product-gallery-placeholder { display: grid; gap: .45rem; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; padding-bottom: .6rem; color: var(--navy); font-size: .78rem; font-weight: 800; }
+.product-gallery-grid button { display: grid; gap: .45rem; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; padding: 0 0 .6rem; color: var(--navy); background: white; text-align: left; font-size: .78rem; font-weight: 800; cursor: zoom-in; }
 .product-gallery-grid img, .product-gallery-grid .product-art { width: 100%; min-height: 140px; aspect-ratio: 1; object-fit: contain; }
 .product-gallery-grid span:last-child { padding: 0 .6rem; }
+.image-lightbox { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; gap: clamp(.3rem, 2vw, 2rem); padding: 2rem .5rem; background: rgba(5, 12, 30, .95); color: white; touch-action: none; }
+.image-lightbox-frame { display: grid; place-items: center; max-width: min(84vw, 1300px); max-height: 92vh; gap: .5rem; }
+.image-lightbox-frame img { display: block; max-width: 100%; max-height: 84vh; object-fit: contain; }
+.image-lightbox-nav, .image-lightbox-close { border: 0; color: white; background: transparent; cursor: pointer; font-size: 3rem; }
+.image-lightbox-close { position: absolute; top: .3rem; right: 1rem; }
 @media (min-width: 1024px) {
   .product-page-main { max-width: 1480px; }
   .product-detail-hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1fr); grid-template-rows: auto 1fr; align-items: start; gap: 1rem clamp(1.25rem, 3vw, 3rem); }
@@ -363,6 +371,22 @@ input, select { min-height: 44px; border: 1px solid var(--line); border-radius: 
 .admin-form textarea { min-height: 84px; resize: vertical; }
 .admin-form fieldset { display: grid; gap: .75rem; border: 1px solid var(--line); border-radius: 9px; padding: 1rem; }
 .admin-form legend { padding: 0 .35rem; color: var(--navy); font-weight: 900; }
+.admin-images section { display: grid; gap: .6rem; border-top: 1px solid var(--line); padding-top: .8rem; }
+.admin-images h3, .admin-images h4 { margin: 0; color: var(--navy); }
+.admin-images h4 small { display: block; color: var(--muted); font-size: .72rem; }
+.admin-image-row { display: flex; align-items: center; gap: .75rem; }
+.admin-image-row > img, .admin-image-empty, .admin-gallery-item > img { width: 88px; height: 88px; border: 1px solid var(--line); border-radius: 8px; object-fit: contain; background: var(--soft-blue); }
+.admin-image-empty { display: grid; place-items: center; padding: .4rem; color: var(--muted); font-size: .7rem; text-align: center; }
+.admin-image-row > div, .admin-gallery-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem; }
+.admin-images button, .admin-upload-label { min-height: 36px; border: 1px solid var(--line); border-radius: 7px; padding: .45rem .65rem; color: var(--navy); background: white; font-size: .75rem; font-weight: 800; cursor: pointer; }
+.admin-images button:disabled { opacity: .45; cursor: not-allowed; }
+.admin-form .admin-upload-label { display: inline-flex; width: fit-content; align-items: center; }
+.admin-upload-label input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.admin-upload-label:focus-within { outline: 2px solid var(--navy); outline-offset: 2px; }
+.admin-gallery-list { display: flex; flex-wrap: wrap; gap: .6rem; }
+.admin-gallery-item { display: grid; gap: .3rem; max-width: 180px; }
+.admin-variant-images { display: grid; gap: .55rem; border: 1px solid var(--line); border-radius: 8px; padding: .75rem; }
+.admin-image-message { margin: 0; color: var(--navy); font-size: .82rem; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
 .toggle-row { display: flex; flex-wrap: wrap; gap: 1rem; }
 .toggle-row label { display: flex; align-items: center; gap: .45rem; color: var(--ink); }
