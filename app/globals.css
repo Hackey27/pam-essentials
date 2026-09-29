@@ -608,6 +608,7 @@ body > div > main h1 { color: var(--navy); }
   .store-shell .mobile-sort-label { display: inline-flex; align-items: center; margin-left: auto; color: var(--navy); font-size: .8rem; font-weight: 800; }
   .store-shell .catalogue-controls select { width: min(45vw, 200px); min-width: 0; min-height: 42px; padding: .45rem .5rem; font-size: .78rem; }
   .store-shell .catalogue-controls .page-size-select { display: none; }
+  .store-shell .whatsapp-fab { bottom: 6rem; }
   #catalogue { scroll-margin-top: 115px; }
 }
 
