@@ -39,6 +39,7 @@ export default function Storefront() {
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const [mobileHeaderCompact, setMobileHeaderCompact] = useState(false);
   const [category, setCategory] = useState("All categories");
   const [sort, setSort] = useState("featured");
   const [browseMode, setBrowseMode] = useState("products");
@@ -72,6 +73,7 @@ export default function Storefront() {
   useEffect(() => { setCookieVisible(localStorage.getItem("pam-cookie-notice") !== "accepted"); }, []);
   useEffect(() => { setCart(readCart()); if (new URLSearchParams(window.location.search).has("cart")) setCartOpen(true); }, []);
   useEffect(() => { const close = (event) => { if (!searchRef.current?.contains(event.target)) setSearchOpen(false); }; document.addEventListener("pointerdown", close); return () => document.removeEventListener("pointerdown", close); }, []);
+  useEffect(() => { const update = () => setMobileHeaderCompact(window.scrollY > 100); update(); window.addEventListener("scroll", update, { passive: true }); return () => window.removeEventListener("scroll", update); }, []);
 
   const categories = useMemo(() => {
     const ordered = categoryList.map((item) => item.name);
@@ -263,21 +265,21 @@ export default function Storefront() {
   return (
     <div className="store-shell">
       <div className="utility-bar"><span>PAM Essentials & More · Ghana</span><div><a href="/account#orders">Track Order</a><a href="/account">{user && !role ? "My Account" : "Sign In"}</a></div></div>
-      <header className="store-header">
+      <header className={`store-header${mobileHeaderCompact ? " mobile-compact" : ""}`}>
         <div className="header-main">
           <a className="brand" href="/" aria-label="PAM Essentials home"><span className="brand-mark" aria-hidden="true">P</span><span>PAM Essentials</span></a>
           <nav className="store-nav" aria-label="Primary navigation">
-            <button type="button" onClick={() => browse("products")}>Products</button>
+            <button type="button" className={browseMode === "products" ? "active" : ""} aria-current={browseMode === "products" ? "page" : undefined} onClick={() => browse("products")}>Products</button>
             <button type="button" onClick={() => setServicesOpen(true)}>Services</button>
-            <button type="button" onClick={() => browse("new")}>New Arrivals</button>
-            <button type="button" onClick={() => browse("promotions")}>Promotions</button>
+            <button type="button" className={browseMode === "new" ? "active" : ""} aria-current={browseMode === "new" ? "page" : undefined} onClick={() => browse("new")}><span className="nav-full">New Arrivals</span><span className="nav-short">New</span></button>
+            <button type="button" className={browseMode === "promotions" ? "active" : ""} aria-current={browseMode === "promotions" ? "page" : undefined} onClick={() => browse("promotions")}><span className="nav-full">Promotions</span><span className="nav-short">Promos</span></button>
             {dealsActive && <button type="button" onClick={() => browse("deals")}>Deals</button>}
-            <a href="/info/delivery">Payment &amp; Delivery</a>
+            <a href="/info/delivery"><span className="nav-full">Payment &amp; Delivery</span><span className="nav-short">Delivery</span></a>
           </nav>
           <div className="header-search" ref={searchRef}>
-            <div className="search-field"><input type="search" aria-label="Search products, category or key words" aria-expanded={searchOpen && query.trim().length > 0} aria-controls="search-suggestions" placeholder="Search products, category or key words" value={query} onFocus={() => setSearchOpen(true)} onKeyDown={(event) => { if (event.key === "Escape") setSearchOpen(false); if (event.key === "Enter" && suggestions.length === 1) { event.preventDefault(); setQuickProduct(suggestions[0]); setSearchOpen(false); } }} onChange={(event) => { setBrowseMode("products"); setQuery(event.target.value); setSearchOpen(true); }} /><button type="button" aria-label="Show matching products" onClick={() => { setSearchOpen(true); searchRef.current?.querySelector("input")?.focus(); }}>⌕</button></div>
+            <div className="search-field"><input type="search" aria-label="Search products, categories, or brands" aria-expanded={searchOpen && query.trim().length > 0} aria-controls="search-suggestions" placeholder="Search products, categories, or brands" value={query} onFocus={() => setSearchOpen(true)} onKeyDown={(event) => { if (event.key === "Escape") setSearchOpen(false); if (event.key === "Enter" && suggestions.length === 1) { event.preventDefault(); setQuickProduct(suggestions[0]); setSearchOpen(false); } }} onChange={(event) => { setBrowseMode("products"); setQuery(event.target.value); setSearchOpen(true); }} /><button type="button" aria-label="Show matching products" onClick={() => { setSearchOpen(true); searchRef.current?.querySelector("input")?.focus(); }}>⌕</button></div>
             {searchOpen && query.trim() && <div id="search-suggestions" className="search-suggestions" role="listbox" aria-label="Matching products">{suggestions.length ? <><p>Suggested products</p>{suggestions.map((item) => <button type="button" role="option" aria-selected="false" key={item.id} onClick={() => { recordClick(item); setQuickProduct(item); setSearchOpen(false); }}><span><b>{item.name}</b><small>{item.category} · {item.id}</small></span><strong>{money.format(item.price)}</strong></button>)}</> : <p>No matching products. Try another name or keyword.</p>}</div>}
-            <div className="popular-searches"><span>Popular Searches:</span>{[...curatedSearches, ...popularProducts.map((product) => product.name)].map((term) => <button key={term} type="button" onClick={() => searchPopular(term)}>{term}</button>)}</div>
+            <div className="popular-searches"><span><span className="popular-full">Popular Searches:</span><span className="popular-short">Popular:</span></span>{[...curatedSearches, ...popularProducts.map((product) => product.name)].map((term) => <button key={term} type="button" onClick={() => searchPopular(term)}>{term}</button>)}</div>
           </div>
           <button className="cart-button" onClick={() => setCartOpen(true)} aria-label={`Cart, ${cartCount} items`}>Cart <b>{cartCount}</b></button>
         </div>
@@ -287,7 +289,7 @@ export default function Storefront() {
       {dealsActive && (dealProducts.length > 0 || dealBundles.length > 0) && <section className="deals-feature"><div><p className="eyebrow">Selected for you</p><h2>PAM Deals</h2><p>{dealPercent > 0 ? `Up to ${dealPercent}% off selected products` : "Selected everyday offers"}</p></div><a className="button accent" href="/?browse=deals#catalogue">Shop deals</a></section>}
 
       <section className="catalogue" id="catalogue">
-        <button type="button" className="mobile-filter-toggle" aria-expanded={mobileFiltersOpen} aria-controls="store-filters" onClick={() => setMobileFiltersOpen((open) => !open)}><span aria-hidden="true">☰</span> Categories &amp; filters</button>
+        <button type="button" className="mobile-filter-toggle" aria-expanded={mobileFiltersOpen} aria-controls="store-filters" onClick={() => setMobileFiltersOpen((open) => !open)}><span aria-hidden="true">☰</span><span className="filter-label-wide">Categories &amp; filters</span><span className="filter-label-mobile">Filters</span></button>
         <aside id="store-filters" className={mobileFiltersOpen ? "filters mobile-open" : "filters"} aria-label="Product filters">
           <button type="button" className="mobile-filter-close" onClick={() => setMobileFiltersOpen(false)}>× Close filters</button>
           <p className="eyebrow">Browse</p><h2>Categories</h2>
@@ -330,7 +332,7 @@ export default function Storefront() {
         </aside>
 
         <main className="catalogue-main">
-          <div className="catalogue-heading"><div><p className="breadcrumb">{breadcrumb}</p><h2>{heading}</h2><p>{selectedNodes.length > 1 ? `Showing ${visible.length} products from ${selectedNodes.length} selected subcategories` : `${visible.length} products ready to browse`}</p></div><div className="catalogue-controls"><select aria-label="Sort products" value={sort} onChange={(e) => setSort(e.target.value)}><option value="featured">Popularity</option><option value="price-low">Price low to high</option><option value="price-high">Price high to low</option><option value="latest">Latest</option></select><select aria-label="Products per page" value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))}>{[20, 30, 40, 50].map((size) => <option key={size} value={size}>{size} per page</option>)}</select></div></div>
+          <div className="catalogue-heading"><div><p className="breadcrumb">{breadcrumb}</p><h2>{heading}</h2><p className="desktop-product-count">{selectedNodes.length > 1 ? `Showing ${visible.length} products from ${selectedNodes.length} selected subcategories` : `${visible.length} products ready to browse`}</p><p className="mobile-product-count">{visible.length} products available</p></div><div className="catalogue-controls"><button type="button" className="mobile-filter-inline" aria-expanded={mobileFiltersOpen} aria-controls="store-filters" onClick={() => setMobileFiltersOpen((open) => !open)}><span aria-hidden="true">☰</span> Filters</button><label className="mobile-sort-label" htmlFor="store-sort">Sort:</label><select id="store-sort" aria-label="Sort products" value={sort} onChange={(e) => setSort(e.target.value)}><option value="featured">Popularity</option><option value="price-low">Price low to high</option><option value="price-high">Price high to low</option><option value="latest">Latest</option></select><select className="page-size-select" aria-label="Products per page" value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))}>{[20, 30, 40, 50].map((size) => <option key={size} value={size}>{size} per page</option>)}</select></div></div>
           {selectedNodes.length > 0 && <div className="filter-chips" aria-label="Selected subcategories"><span>{selectedNodes.length} {selectedNodes.length === 1 ? "subcategory" : "subcategories"} selected</span>{selectedNodes.map((item) => <button type="button" key={item.subSubcategoryId || item.subcategoryId} onClick={() => item.subSubcategoryId ? toggleSubSubcategory(item) : toggleSubcategory(item)} aria-label={`Remove ${item.name} filter`}>{item.name} ×</button>)}<button type="button" onClick={() => { setSelectedSubcategories([]); setSelectedSubSubcategories([]); }}>Clear</button></div>}
           {loading && <div className="empty-state"><div className="spinner" /><p>Loading the catalogue…</p></div>}
           {error && !products.length && <div className="empty-state error-panel"><h3>Catalogue unavailable</h3><p>{error}</p></div>}

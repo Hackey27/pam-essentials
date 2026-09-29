@@ -33,6 +33,7 @@ export default function ProductPage() {
   }, []);
   const product = products.find((item) => item.id === id);
   const variants = useMemo(() => productVariants(product, products), [product, products]);
+  const gallery = useMemo(() => variants.filter((item) => item.imageUrl), [variants]);
   const related = useMemo(() => products.filter((item) => item.id !== product?.id && (!product?.productGroupId || item.productGroupId !== product.productGroupId) && item.categoryId === product?.categoryId).sort((a, b) => Number(b.subcategoryId === product?.subcategoryId) - Number(a.subcategoryId === product?.subcategoryId)).slice(0, 4), [product, products]);
   function add(selected, quantity) {
     saveCart(addToCart(readCart(), selected, quantity));
@@ -52,10 +53,15 @@ export default function ProductPage() {
       {(error || !loading && !product) && <div className="empty-state"><h1>Product unavailable</h1><p>{error || "This product is no longer in the storefront."}</p><a href="/">Shop products</a></div>}
       {product && <>
         <nav className="breadcrumb"><a href="/">Home</a> / {product.category} / {product.name}</nav>
-        <ProductOptions key={product.id} initialProduct={product} products={variants} onAdd={add} />
-        <div className="product-utilities"><button type="button" onClick={share}>Share</button>{shared && <span>Link copied</span>}<a href={`/account?wishlist=${encodeURIComponent(product.id)}`}>Add to wishlist</a><button type="button" disabled title="Product comparison is coming soon">Add to compare</button></div>
-        <section className="detail-section"><h2>Description</h2><p>{product.description || product.name}</p><h2>Product details</h2><dl><dt>SKU</dt><dd>{product.id}</dd>{product.productGroupId && <><dt>Product ID</dt><dd>{product.productGroupId}</dd><dt>Variant ID</dt><dd>{product.id}</dd></>}{product.size && <><dt>Size</dt><dd>{product.size}</dd></>}{product.colour && <><dt>Colour</dt><dd>{product.colour}</dd></>}</dl><h2>Delivery &amp; pickup</h2><p>🚚 Delivery available &nbsp; 🏪 Pickup available</p></section>
-        {related.length > 0 && <section className="related-products"><h2>You may also like…</h2><div className="related-grid">{related.map((item) => <a href={`/products/${encodeURIComponent(item.id)}`} key={item.id}><ProductImage product={item} /><b>{item.name}</b></a>)}</div></section>}
+        <div className="product-detail-hero">
+          <ProductOptions key={product.id} initialProduct={product} products={variants} onAdd={add} />
+          <div className="product-utilities"><button type="button" onClick={share}>Share</button>{shared && <span>Link copied</span>}<a href={`/account?wishlist=${encodeURIComponent(product.id)}`}>Add to wishlist</a><button type="button" disabled title="Product comparison is coming soon">Add to compare</button></div>
+          <section className="detail-section"><h2>Description</h2><p>{product.description || product.name}</p><h2>Product details</h2><dl><dt>SKU</dt><dd>{product.id}</dd>{product.productGroupId && <><dt>Product ID</dt><dd>{product.productGroupId}</dd><dt>Variant ID</dt><dd>{product.id}</dd></>}{product.size && <><dt>Size</dt><dd>{product.size}</dd></>}{product.colour && <><dt>Colour</dt><dd>{product.colour}</dd></>}</dl><h2>Delivery &amp; pickup</h2><p>🚚 Delivery available &nbsp; 🏪 Pickup available</p></section>
+        </div>
+        <div className="product-detail-lower">
+          <section className="product-gallery"><h2>Product gallery</h2><div className="product-gallery-grid">{gallery.length ? gallery.map((item) => <a href={item.imageUrl} target="_blank" rel="noreferrer" key={item.id} aria-label={`View ${item.name} image`}><ProductImage product={item} /><span>{[item.colour, item.size].filter(Boolean).join(" · ") || item.name}</span></a>) : <div className="product-gallery-placeholder"><ProductImage product={product} /><span>More product photos coming soon</span></div>}</div></section>
+          {related.length > 0 && <section className="related-products"><h2>You may also like…</h2><div className="related-grid">{related.map((item) => <a href={`/products/${encodeURIComponent(item.id)}`} key={item.id}><ProductImage product={item} /><b>{item.name}</b></a>)}</div></section>}
+        </div>
       </>}
     </main>
     {added && <div className="modal-backdrop" role="presentation"><div className="modal" role="dialog" aria-modal="true" aria-label="Added to cart"><h2>Added to cart</h2><p>{added.quantity} × {added.name}</p><p>SKU: {added.id}{added.colour && ` · ${added.colour}`}{added.size && ` · ${added.size}`}</p><div className="added-actions"><button className="button secondary" onClick={() => setAdded(null)}>Continue shopping</button><a className="button primary" href="/?cart=1">View cart</a></div></div></div>}
