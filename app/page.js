@@ -301,9 +301,9 @@ export default function Storefront() {
   }
 
   return (
-    <div className="store-shell">
+    <div className={`store-shell${mobileTabsHidden || mobileFiltersOpen ? " mobile-tabs-hidden" : ""}`}>
       <div className="utility-bar"><span>PAM Essentials & More · Ghana</span><div><a href="/account#orders">Track Order</a><a href="/account">{user && !role ? "My Account" : "Sign In"}</a></div></div>
-      <header className={`store-header${mobileTabsHidden ? " mobile-tabs-hidden" : ""}`}>
+      <header className={`store-header${mobileTabsHidden || mobileFiltersOpen ? " mobile-tabs-hidden" : ""}`}>
         <div className="header-main">
           <a className="brand" href="/" aria-label="PAM Essentials home"><span className="brand-mark" aria-hidden="true">P</span><span>PAM Essentials</span></a>
           <nav className="store-nav" aria-label="Primary navigation">
@@ -319,6 +319,7 @@ export default function Storefront() {
             {searchOpen && query.trim() && <div id="search-suggestions" className="search-suggestions" role="listbox" aria-label="Matching products">{suggestions.length ? <><p>Suggested products</p>{suggestions.map((item) => <button type="button" role="option" aria-selected="false" key={item.id} onClick={() => { recordClick(item); setQuickProduct(item); setSearchOpen(false); }}><span><b>{item.name}</b><small>{item.category} · {item.id}</small></span><strong>{money.format(item.price)}</strong></button>)}</> : <p>No matching products. Try another name or keyword.</p>}</div>}
             <div className="popular-searches"><span><span className="popular-full">Popular Searches:</span><span className="popular-short">Popular:</span></span>{[...curatedSearches, ...popularProducts.map((product) => product.name)].map((term) => <button key={term} type="button" onClick={() => searchPopular(term)}>{term}</button>)}</div>
           </div>
+          <p className="header-product-count">{visible.length} products available</p>
           <button className="cart-button" onClick={() => setCartOpen(true)} aria-label={`View cart, ${cartCount} items`}><span className="cart-text">Cart</span><svg className="cart-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 4h2l2.1 10.4a2 2 0 0 0 2 1.6H19a2 2 0 0 0 2-1.6L22 8H6"/><circle cx="10" cy="20" r="1"/><circle cx="19" cy="20" r="1"/></svg><b>{cartCount}</b></button>
         </div>
       </header>
@@ -330,6 +331,7 @@ export default function Storefront() {
         <button type="button" className="mobile-filter-toggle" aria-expanded={mobileFiltersOpen} aria-controls="store-filters" onClick={() => setMobileFiltersOpen((open) => !open)}><span aria-hidden="true">☰</span><span className="filter-label-wide">Categories &amp; filters</span><span className="filter-label-mobile">Filters</span></button>
         <aside id="store-filters" className={mobileFiltersOpen ? "filters mobile-open" : "filters"} aria-label="Product filters">
           <button type="button" className="mobile-filter-close" onClick={() => setMobileFiltersOpen(false)}>× Close filters</button>
+          <div className="filter-scroll">
           <div className="price-filter"><b>Price range</b><label>Minimum<input type="number" min="0" placeholder="Min price" value={priceMin} onChange={(event) => setPriceMin(event.target.value)} /></label><label>Maximum<input type="number" min="0" placeholder="Max price" value={priceMax} onChange={(event) => setPriceMax(event.target.value)} /></label></div>
           <p className="eyebrow">Browse</p><h2>Categories</h2>
           <button type="button" className={category === "All categories" ? "filter active" : "filter"} onClick={() => selectCategory("All categories")}>
@@ -368,9 +370,11 @@ export default function Storefront() {
           <fieldset className="facet-group"><legend>Collections</legend><label><input type="radio" name="collection" checked={!collection} onChange={() => setCollection("")} /> All</label>{["New Arrivals", "Best Sellers", "Back to School", "Promotion", ...(dealsActive ? ["PAM Deals"] : [])].map((name) => <label key={name}><input type="radio" name="collection" checked={collection === name} onChange={() => setCollection(name)} /> {name}</label>)}</fieldset>
           <button type="button" className="table-action" onClick={clearFilters}>Clear filters</button>
           <div className="service-note"><p>Need expert advice? Message or call us before you order and we’ll help you choose.</p></div>
+          </div>
+          <button type="button" className="filter-results-action" onClick={() => { setMobileFiltersOpen(false); setPage(1); requestAnimationFrame(() => document.getElementById("catalogue-results")?.scrollIntoView({ behavior: "smooth", block: "start" })); }}>Show {visible.length} {visible.length === 1 ? "result" : "results"}</button>
         </aside>
 
-        <main className="catalogue-main">
+        <main className="catalogue-main" id="catalogue-results">
           <div className="catalogue-heading"><div><p className="breadcrumb">{breadcrumb}</p><h2>{heading}</h2><p className="desktop-product-count">{selectedNodes.length > 1 ? `Showing ${visible.length} products from ${selectedNodes.length} selected subcategories` : `${visible.length} products ready to browse`}</p><p className="mobile-product-count">{visible.length} products available</p></div><div className="catalogue-controls"><button type="button" className="mobile-filter-inline" aria-expanded={mobileFiltersOpen} aria-controls="store-filters" onClick={() => setMobileFiltersOpen((open) => !open)}><span aria-hidden="true">☰</span> Filters</button><label className="mobile-sort-label" htmlFor="store-sort">Sort:</label><select id="store-sort" aria-label="Sort products" value={sort} onChange={(e) => setSort(e.target.value)}><option value="featured">Popularity</option><option value="price-low">Price low to high</option><option value="price-high">Price high to low</option><option value="latest">Latest</option></select><select className="page-size-select" aria-label="Products per page" value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))}>{[20, 30, 40, 50].map((size) => <option key={size} value={size}>{size} per page</option>)}</select></div></div>
           {selectedNodes.length > 0 && <div className="filter-chips" aria-label="Selected subcategories"><span>{selectedNodes.length} {selectedNodes.length === 1 ? "subcategory" : "subcategories"} selected</span>{selectedNodes.map((item) => <button type="button" key={item.subSubcategoryId || item.subcategoryId} onClick={() => item.subSubcategoryId ? toggleSubSubcategory(item) : toggleSubcategory(item)} aria-label={`Remove ${item.name} filter`}>{item.name} ×</button>)}<button type="button" onClick={() => { setSelectedSubcategories([]); setSelectedSubSubcategories([]); }}>Clear</button></div>}
           {loading && <div className="empty-state"><div className="spinner" /><p>Loading the catalogue…</p></div>}

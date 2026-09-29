@@ -1,25 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ref, uploadBytesResumable } from "firebase/storage";
-import { auth, storage } from "@/lib/firebase";
+import { auth } from "@/lib/firebase";
 import { useAuth } from "@/components/AuthProvider";
 import { getProductImageUrl, isProductImagePath, productImageFolder, safeImageSegment, variantCombinationKey } from "@/lib/productImages.mjs";
 
 const allowed = new Map([["image/jpeg", "jpg"], ["image/png", "png"], ["image/webp", "webp"], ["image/avif", "avif"]]);
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
-
-function uploadError(error) {
-  const messages = {
-    "storage/unauthenticated": "Your sign-in expired. Sign in again before uploading.",
-    "storage/unauthorized": "Storage denied this upload. Ask the owner to check deployed Storage rules and your Admin role.",
-    "storage/bucket-not-found": "The configured image bucket was not found. Check Firebase Storage setup.",
-    "storage/quota-exceeded": "The image bucket has reached its quota or needs billing enabled.",
-    "storage/retry-limit-exceeded": "The upload timed out. Check your connection and try again.",
-    "storage/canceled": "The upload was cancelled.",
-  };
-  return messages[error?.code] || error?.message || "Upload failed. Check your connection and Storage permissions.";
-}
 
 function Preview({ path, label, localUrl }) {
   const [failed, setFailed] = useState(false);
@@ -65,23 +52,18 @@ export default function AdminProductImages({ value, update, products, onBusyChan
     const prefix = key ? `products/${folder}/variants/${productImageFolder(key)}/${kind === "variant-main" ? "main" : "gallery"}` : `products/${folder}/${kind}`;
     const path = `${prefix}/${name}`;
     setMessage("");
-    setProgress({ path, percent: 0 });
+    setProgress({ path });
     onBusyChange(true);
     try {
-      await new Promise((resolve, reject) => {
-        const task = uploadBytesResumable(ref(storage, path), file, { contentType: file.type, cacheControl: "public,max-age=31536000,immutable", customMetadata: { originalName: file.name } });
-        let timer;
-        let timedOut = false;
-        const armTimeout = () => {
-          clearTimeout(timer);
-          timer = setTimeout(() => { timedOut = true; task.cancel(); reject(new Error("No upload progress for 45 seconds. Check your connection, bucket and Storage rules, then try again.")); }, 45000);
-        };
-        armTimeout();
-        task.on("state_changed", (snapshot) => {
-          setProgress({ path, percent: snapshot.totalBytes ? Math.round(100 * snapshot.bytesTransferred / snapshot.totalBytes) : 0 });
-          armTimeout();
-        }, (error) => { clearTimeout(timer); if (!timedOut) reject(error); }, () => { clearTimeout(timer); resolve(); });
-      });
+      const token = await auth.currentUser.getIdToken();
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 120000);
+      let response;
+      try {
+        response = await fetch("/api/admin/images", { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": file.type, "x-product-id": value.id, "x-image-path": path }, body: file, signal: controller.signal });
+      } finally { clearTimeout(timeout); }
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || `Upload failed (${response.status}).`);
       const localUrl = URL.createObjectURL(file);
       previewUrls.current.push(localUrl);
       setUploadPreviews((current) => ({ ...current, [path]: localUrl }));
@@ -91,9 +73,9 @@ export default function AdminProductImages({ value, update, products, onBusyChan
       else {
         updateGallery((current) => { const next = [...current]; if (replaceIndex >= 0) next[replaceIndex] = path; else next.push(path); return next; }, key);
       }
-      setMessage("✓ Upload complete. Preview is local until you save changes; the storefront image also requires the image service to access Storage.");
+      setMessage("✓ Upload complete. Save changes to assign this image to the product.");
     } catch (error) {
-      setMessage(uploadError(error));
+      setMessage(error?.name === "AbortError" ? "Upload timed out. Check the connection and try again." : error?.message || "Image upload failed.");
     } finally {
       setProgress(null);
       onBusyChange(false);
@@ -111,7 +93,7 @@ export default function AdminProductImages({ value, update, products, onBusyChan
     <section><h3>Master image (optional)</h3><div className="admin-image-row"><Preview key={value.masterImagePath || "master-empty"} path={value.masterImagePath} localUrl={uploadPreviews[value.masterImagePath]} label="Master image" /><div><label className="admin-upload-label">{value.masterImagePath ? "Replace image" : "Upload image"}<input type="file" accept="image/jpeg,image/png,image/webp,image/avif" disabled={Boolean(progress)} onChange={(event) => { upload(event.target.files?.[0], "master"); event.target.value = ""; }} /></label>{value.masterImagePath && <button type="button" onClick={() => update("masterImagePath", "")}>Remove assignment</button>}</div></div></section>
     <section><h3>Product gallery</h3>{galleryEditor(value.galleryImagePaths || [], "gallery")}<label className="admin-upload-label">Add gallery images<input type="file" multiple accept="image/jpeg,image/png,image/webp,image/avif" disabled={Boolean(progress)} onChange={async (event) => { for (const file of event.target.files || []) await upload(file, "gallery"); event.target.value = ""; }} /></label></section>
     <section><h3>Variant combination images</h3>{combinations.length ? combinations.map(([key, product]) => { const entry = value.variantImages?.[key] || {}; return <div className="admin-variant-images" key={key}><h4>{[product.size, product.colour, ...Object.values(product.variantOptions || {})].filter(Boolean).join(" · ") || product.name} <small>{product.id}</small></h4><div className="admin-image-row"><Preview key={entry.imagePath || key} path={entry.imagePath} localUrl={uploadPreviews[entry.imagePath]} label={`${product.name} variant`} /><div><label className="admin-upload-label">{entry.imagePath ? "Replace main image" : "Assign main image"}<input type="file" accept="image/jpeg,image/png,image/webp,image/avif" disabled={Boolean(progress)} onChange={(event) => { upload(event.target.files?.[0], "variant-main", key); event.target.value = ""; }} /></label>{entry.imagePath && <button type="button" onClick={() => setVariant(key, { imagePath: "" })}>Remove assignment</button>}</div></div>{galleryEditor(entry.galleryImagePaths || [], "variant-gallery", key)}<label className="admin-upload-label">Add variant gallery images<input type="file" multiple accept="image/jpeg,image/png,image/webp,image/avif" disabled={Boolean(progress)} onChange={async (event) => { for (const file of event.target.files || []) await upload(file, "variant-gallery", key); event.target.value = ""; }} /></label></div>; }) : <p>No variants configured for this product.</p>}</section>
-    {progress && <p role="status">Uploading {progress.percent}% <progress value={progress.percent} max="100" /></p>}
+    {progress && <p role="status">Uploading image… <progress /></p>}
     {message && <p role="status" className="admin-image-message">{message}</p>}
   </fieldset>;
 }
