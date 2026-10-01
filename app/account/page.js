@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { signOut, useAuth } from "@/components/AuthProvider";
+import BrandLogo from "@/components/BrandLogo";
 
 const money = new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS" });
 
@@ -68,7 +69,7 @@ export default function CustomerAccount() {
     catch (reason) { setError(reason.message); }
   }
 
-  return <div className="customer-account"><header className="product-page-header"><a className="brand" href="/"><span className="brand-mark">P</span><span>PAM Essentials</span></a><a href="/">Continue shopping</a></header><main className="account-main">
+  return <div className="customer-account"><header className="product-page-header"><a className="brand" href="/" aria-label="PAM Essentials home"><BrandLogo /></a><a href="/">Continue shopping</a></header><main className="account-main">
     <p className="eyebrow">PAM Essentials &amp; More</p><h1>Customer account</h1><p>Browse and check out as a guest whenever you like. Create an account to save products and track orders.</p>
     {error && <p className="notice error-notice">{error}</p>}{notice && <p className="notice">{notice}</p>}
     {loading ? <p>Checking account…</p> : role ? <div className="panel account-panel"><h2>Staff session active</h2><p>Customer accounts are separate from staff access.</p><button className="button secondary" onClick={() => signOut()}>Sign out of staff account</button></div> : !user ? <form className="panel account-panel" onSubmit={handleAuth}><div className="account-tabs"><button type="button" className={mode === "register" ? "active" : ""} onClick={() => setMode("register")}>Create account</button><button type="button" className={mode === "signin" ? "active" : ""} onClick={() => setMode("signin")}>Sign in</button></div><label>Email<input required type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} /></label><label>Password<input required type="password" minLength={6} autoComplete={mode === "register" ? "new-password" : "current-password"} value={password} onChange={(event) => setPassword(event.target.value)} /></label><button className="button primary" disabled={busy}>{busy ? "Please wait…" : mode === "register" ? "Create account" : "Sign in"}</button></form> : <>

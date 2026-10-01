@@ -10,6 +10,7 @@ import { SHOP_ADDRESS } from "@/lib/shop";
 import { whatsappOrderMessage } from "@/lib/whatsappOrder.mjs";
 import WhatsAppIcon from "@/components/WhatsAppIcon";
 import { getHeroImageUrl } from "@/lib/heroImages.mjs";
+import BrandLogo from "@/components/BrandLogo";
 
 const money = new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS" });
 
@@ -393,7 +394,7 @@ export default function Storefront() {
       <div className="utility-bar"><span>PAM Essentials & More · Ghana</span><div><a href="/account#orders">Track Order</a><a href="/account">{user && !role ? "My Account" : "Sign In"}</a></div></div>
       <header className={`store-header${mobileTabsHidden || mobileFiltersOpen ? " mobile-tabs-hidden" : ""}`}>
         <div className="header-main">
-          <a className="brand" href="/" aria-label="PAM Essentials home"><span className="brand-mark" aria-hidden="true">P</span><span className="brand-words"><strong>PAM Essentials</strong><small>and more</small></span></a>
+          <a className="brand" href="/" aria-label="PAM Essentials home"><BrandLogo background="white" mobileBackground="navy" /></a>
           <nav className="store-nav" aria-label="Primary navigation">
             <button type="button" className={browseMode === "products" ? "active" : ""} aria-current={browseMode === "products" ? "page" : undefined} onClick={() => browse("products")}>Products</button>
             <button type="button" onClick={() => setServicesOpen(true)}>Services</button>
@@ -488,7 +489,7 @@ export default function Storefront() {
       <section className="why-shop" id="services" aria-labelledby="why-shop-title"><div><p className="eyebrow">Why shop with PAM?</p><h2 id="why-shop-title">Everyday shopping made easier</h2></div><ul><li>✓ Affordable everyday essentials</li><li>✓ Convenient ordering</li><li>✓ Pickup or delivery</li><li>✓ WhatsApp ordering</li></ul></section>
       <footer className="store-footer" id="delivery">
         <div className="footer-grid">
-          <div className="footer-brand"><b>PAM Essentials &amp; More</b><p>School, home, gifts and daily essentials in one simple shop.</p><p className="footer-payment">Secured payment: Online payment is coming soon. Pay on pickup or delivery is available.</p></div>
+          <div className="footer-brand"><BrandLogo background="navy" /><p>School, home, gifts and daily essentials in one simple shop.</p><p className="footer-payment">Secured payment: Online payment is coming soon. Pay on pickup or delivery is available.</p></div>
           <nav aria-label="Shop links"><h2>Shop</h2><a href="/#catalogue">All Products</a><a href="/#catalogue">Categories</a>{dealsActive && <a href="/?browse=deals#catalogue">Deals</a>}<a href="/?browse=new#catalogue">New Arrivals</a></nav>
           <nav aria-label="Customer service links"><h2>Customer Service</h2><a href="/info/contact">Contact Us</a><a href="https://wa.me/233207015198" target="_blank" rel="noreferrer">WhatsApp</a><a href="/account#orders">Track My Order</a><a href="/info/delivery">Delivery Information</a><a href="/info/returns">Returns &amp; Exchanges</a><a href="/info/privacy">Privacy Policy</a><a href="/info/faqs">FAQs</a></nav>
           <div><h2>Contact</h2><p>Awoshie, Accra, Ghana</p><a href="tel:+233207015198">+233 20 701 5198</a></div>

@@ -6,6 +6,7 @@ import { AuthProvider } from "@/components/AuthProvider";
 export const metadata = {
   title: "PAM Essentials",
   description: "PAM Essentials online store",
+  icons: { icon: "/brand/pam-symbol-white.svg" },
 };
 
 export default function RootLayout({ children }) {

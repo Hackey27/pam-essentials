@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useAuth } from "@/components/AuthProvider";
+import BrandLogo from "@/components/BrandLogo";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -39,7 +40,7 @@ export default function Login() {
   return (
     <main className="login-shell">
       <section className="login-brand-panel">
-        <a href="/" className="login-brand">PAM <span>Essentials & More</span></a>
+        <a href="/" className="login-brand" aria-label="PAM Essentials home"><BrandLogo background="navy" /></a>
         <div><p className="eyebrow">One connected retail system</p><h1>Storefront, till and inventory in step.</h1><p>Secure access for every member of the shop team, with permissions matched to their role.</p></div>
         <p className="login-footnote">PAM Essentials & More · Ghana</p>
       </section>

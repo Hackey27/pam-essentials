@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import ProductOptions, { ProductImage, productVariants } from "@/components/ProductOptions";
 import { addToCart, readCart, saveCart } from "@/lib/storeCart";
 import { detailImageSource, galleryImagePaths, getProductImageUrl } from "@/lib/productImages.mjs";
+import BrandLogo from "@/components/BrandLogo";
 
 export default function ProductPage() {
   const { id } = useParams();
@@ -107,7 +108,7 @@ export default function ProductPage() {
     setShared(true);
   }
   return <div className="product-page store-shell">
-    <header className="product-page-header"><a className="brand" href="/"><span className="brand-mark">P</span><span>PAM Essentials</span></a><a href={cartUrl} onClick={rememberCartPosition}>View cart</a></header>
+    <header className="product-page-header"><a className="brand" href="/" aria-label="PAM Essentials home"><BrandLogo /></a><a href={cartUrl} onClick={rememberCartPosition}>View cart</a></header>
     <main className="product-page-main">
       <a className="detail-back" href={quickReturnId ? `/?quick=${encodeURIComponent(quickReturnId)}` : "/#catalogue"} onClick={(event) => { try { const saved = JSON.parse(sessionStorage.getItem("pam-listing-return") || "null"); if (saved && Date.now() - saved.at < 15 * 60 * 1000 && window.history.length > 1) { event.preventDefault(); window.history.back(); } } catch {} }}>← Back {quickReturnId ? "to Quick View" : "to products"}</a>
       {loading && <div className="empty-state">Loading product…</div>}
