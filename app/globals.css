@@ -230,7 +230,6 @@ input, select { min-height: 44px; border: 1px solid var(--line); border-radius: 
 
 /* Product details and variant choices */
 .product-card-image { display: block; }
-.product-copy .button + .button { margin-top: .45rem; }
 .button.quick-view-action { color: var(--navy); border-color: var(--navy); background: white; }
 .button.add-cart-action { color: white; background: var(--navy); }
 .quick-view-modal { width: min(960px, 100%); max-height: calc(100vh - 2rem); overflow-y: auto; padding: 1rem; text-align: left; }
@@ -380,6 +379,10 @@ input, select { min-height: 44px; border: 1px solid var(--line); border-radius: 
 .admin-topbar p { margin-bottom: .05rem; color: var(--navy); font: 800 .92rem var(--font-brand); }
 .admin-topbar span { color: var(--muted); font-size: .72rem; }
 .admin-topbar > div:last-child { display: flex; gap: .5rem; }
+.rule-lifecycle, .discount-overlap-warning { border: 1px solid var(--line); border-radius: 10px; padding: .8rem 1rem; }
+.rule-lifecycle p, .discount-overlap-warning p { margin: 0 0 .5rem; font-size: .82rem; }
+.rule-lifecycle label, .discount-overlap-warning label { display: flex; align-items: flex-start; gap: .45rem; font-size: .82rem; font-weight: 800; }
+.discount-overlap-warning { border-color: #e9b65c; color: #553900; background: var(--soft-yellow); }
 .admin-content { padding: 2rem; }
 .page-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .55rem; }
 .period-custom { display: flex; align-items: center; gap: .4rem; }

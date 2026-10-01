@@ -2,6 +2,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { NextResponse } from "next/server";
 import { adminDb, requireRole } from "@/lib/admin";
 import { auditPayload, nullableNumber, slug, text } from "@/lib/serverData";
+import { findRuleOverlaps } from "@/lib/discountOverlap.mjs";
 
 export async function POST(request) {
   const access = await requireRole(request, ["owner", "admin"]);
@@ -46,10 +47,24 @@ export async function POST(request) {
     minQty,
     startDate,
     endDate,
-    active: body.active !== false,
+    active: body.active !== false && body.archived !== true,
+    archived: body.archived === true,
     priority,
     updatedAt: FieldValue.serverTimestamp(),
   };
+  if (value.active) {
+    const [rulesSnap, dealsSnap, productsSnap] = await Promise.all([
+      store.collection("discount_rules").get(),
+      store.collection("deal_bundles").get(),
+      store.collection("products").get(),
+    ]);
+    const overlaps = findRuleOverlaps(value,
+      rulesSnap.docs.map((doc) => ({ ruleId: doc.id, ...doc.data() })),
+      dealsSnap.docs.map((doc) => ({ dealId: doc.id, ...doc.data() })),
+      productsSnap.docs.map((doc) => ({ id: decodeURIComponent(doc.id), ...doc.data() })),
+    );
+    if (overlaps.length && body.acknowledgeOverlap !== true) return NextResponse.json({ error: "This rule may overlap an active discount, promotion or deal. Review the warning and acknowledge it before saving.", overlaps }, { status: 409 });
+  }
   const batch = store.batch();
   if (existing.exists) batch.update(ref, value);
   else batch.create(ref, { ...value, createdAt: FieldValue.serverTimestamp() });

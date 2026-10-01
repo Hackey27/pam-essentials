@@ -1,10 +1,11 @@
 """One-time vector tracing of the owner's PAM artwork (requires Pillow and vtracer).
 
-Usage: python scripts/generate_brand_svg.py LOGO_PNG SWATCH_PNG OUTPUT_DIR
+Usage: python scripts/generate_brand_svg.py SWATCH_PNG OUTPUT_DIR
 The generated SVGs contain paths only, with transparent backgrounds and no PNG data.
 """
 
 from pathlib import Path
+import re
 import sys
 
 from PIL import Image
@@ -33,6 +34,11 @@ def trace(image, box, background, foreground, destination):
         mode="spline", filter_speckle=5, color_precision=8,
         layer_difference=16, length_threshold=4.0, path_precision=3,
     )
+    # VTracer slightly averages edge colours. Keep the exact supplied brand
+    # palette while retaining its traced path geometry.
+    svg = re.sub(r'fill="#[0-9A-Fa-f]{6}"', lambda match: 'fill="#{:02X}{:02X}{:02X}"'.format(
+        *min(foreground, key=lambda color: distance(tuple(bytes.fromhex(match.group()[7:13])), color))
+    ), svg)
     width, height = image.size
     svg = svg.replace(f'width="{width}" height="{height}"', f'viewBox="0 0 {width} {height}"', 1)
     destination.write_text(svg, encoding="utf-8")
@@ -40,13 +46,11 @@ def trace(image, box, background, foreground, destination):
 
 
 def main():
-    logo_path, swatch_path, output_path = map(Path, sys.argv[1:4])
+    swatch_path, output_path = map(Path, sys.argv[1:3])
     output_path.mkdir(parents=True, exist_ok=True)
-    logo = Image.open(logo_path)
     swatch = Image.open(swatch_path)
-    trace(logo, (0, 0, logo.width, logo.height), WHITE, [NAVY, YELLOW, RED], output_path / "pam-symbol-white.svg")
-    # Each swatch row is cropped inside its framing/border; the crop retains
-    # the exact relative geometry of the provided lockup and caption.
+    # The swatch is authoritative for both lockup and symbol. The separate
+    # Logo.png has a rectangular centre that does not match the owner's A.
     rows = [
         ("white", (20, 25, 655, 151), WHITE, [NAVY, YELLOW, RED]),
         ("navy", (20, 189, 655, 317), NAVY, [WHITE]),
@@ -55,9 +59,8 @@ def main():
     ]
     for name, box, background, foreground in rows:
         trace(swatch, box, background, foreground, output_path / f"pam-lockup-{name}.svg")
-        if name != "white":
-            symbol_box = (box[0], box[1], 244, box[3])
-            trace(swatch, symbol_box, background, foreground, output_path / f"pam-symbol-{name}.svg")
+        symbol_box = (box[0], box[1], 244, box[3])
+        trace(swatch, symbol_box, background, foreground, output_path / f"pam-symbol-{name}.svg")
 
 
 if __name__ == "__main__":

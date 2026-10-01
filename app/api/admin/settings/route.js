@@ -17,6 +17,7 @@ export async function POST(request) {
   const body = await request.json().catch(() => ({}));
   const key = text(body.key, 80).toUpperCase();
   if (!allowed.has(key)) return NextResponse.json({ error: "That setting cannot be changed here." }, { status: 400 });
+  if (key === "DISCOUNT_STACKING" && (body.value === true || body.value === "true")) return NextResponse.json({ error: "Discount stacking is disabled: bundles, promotions and standard discounts follow precedence instead." }, { status: 409 });
   if (key === "TAX_ENABLED" && (body.value === true || body.value === "true")) return NextResponse.json({ error: "Tax calculation remains disabled until registration and rates are verified." }, { status: 409 });
   if (key === "HERO_FLYER_URL" && body.value && !/^https:\/\//i.test(String(body.value))) return NextResponse.json({ error: "Use an HTTPS image URL for the flyer." }, { status: 400 });
   if ((key === "HERO_WEB_IMAGE_PATH" && body.value && !isHeroImagePath(body.value, "web")) || (key === "HERO_MOBILE_IMAGE_PATH" && body.value && !isHeroImagePath(body.value, "mobile"))) return NextResponse.json({ error: "Choose an uploaded hero image for that screen size." }, { status: 400 });

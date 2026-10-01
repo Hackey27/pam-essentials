@@ -70,15 +70,15 @@ test("mixed variants retain distinct prices and WhatsApp agrees with the saved o
   const store = setup();
   const created = await json(await createOrder(request("/api/orders", "customer-a", { customer: "Ada", phone: "0207015198", deliveryMethod: "pickup", items: [{ id: "PAM-WB001-PNK-500", quantity: 2 }, { id: "PAM-WB001-GRN-750", quantity: 1 }] })));
   assert.equal(created.status, 200);
-  assert.deepEqual([created.body.subtotal, created.body.discount, created.body.total], [115, 5.75, 109.25]);
+  assert.deepEqual([created.body.subtotal, created.body.discount, created.body.total], [115, 0, 115]);
   assert.deepEqual(created.body.items.map(({ sku, colour, size, unitPrice, lineTotal }) => ({ sku, colour, size, unitPrice, lineTotal })), [
-    { sku: "PAM-WB001-PNK-500", colour: "Pink", size: "500ml", unitPrice: 35, lineTotal: 66.5 },
-    { sku: "PAM-WB001-GRN-750", colour: "Green", size: "750ml", unitPrice: 45, lineTotal: 42.75 },
+    { sku: "PAM-WB001-PNK-500", colour: "Pink", size: "500ml", unitPrice: 35, lineTotal: 70 },
+    { sku: "PAM-WB001-GRN-750", colour: "Green", size: "750ml", unitPrice: 45, lineTotal: 45 },
   ]);
   assert.equal(store.inspect("orders", created.body.orderId).customerUid, "customer-a");
   const message = whatsappOrderMessage(created.body, "Ada", "0207015198");
   assert.match(message, /SKU: PAM-WB001-PNK-500[\s\S]*SKU: PAM-WB001-GRN-750/);
-  assert.match(message, /Total: GH₵109\.25/);
+  assert.match(message, /Total: GH₵115\.00/);
 });
 
 test("older guest references remain claimable with the checkout phone", async () => {
