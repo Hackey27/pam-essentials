@@ -81,7 +81,7 @@ export async function POST(request) {
       unitPrice: Number(product.price),
       lineTotal: priced.lineTotal,
       categorySnapshot: { id: product.categoryId, name: product.category },
-      discountRuleSnapshot: priced.rule ? { ruleId: priced.rule.ruleId, name: priced.rule.name, amount: priced.ruleDiscountCents / 100 } : null,
+      discountRuleSnapshot: priced.rule ? { ruleId: priced.rule.ruleId, name: priced.rule.name, discountType: priced.rule.discountType, value: priced.rule.value, minQty: priced.rule.minQty, amount: priced.ruleDiscountCents / 100 } : null,
       dealBundleSnapshot: priced.dealIds.length ? { dealIds: priced.dealIds, amount: priced.dealDiscountCents / 100 } : null,
     });
   }

@@ -157,7 +157,13 @@ input, select { min-height: 44px; border: 1px solid var(--line); border-radius: 
 .product-card { overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: white; transition: transform .18s ease, box-shadow .18s ease; }
 .product-card { position: relative; display: flex; height: 470px; flex-direction: column; }
 .product-card-tools { position: absolute; z-index: 2; top: .5rem; right: .5rem; display: flex; gap: .25rem; }
-.product-card-tools button { display: grid; width: 38px; height: 38px; place-items: center; border: 1px solid var(--line); border-radius: 50%; color: var(--navy); background: #ffffffed; box-shadow: 0 2px 8px #00235b22; font-size: 1.3rem; cursor: pointer; }
+@media (hover: hover) and (pointer: fine) {
+  .product-card-tools { opacity: 0; pointer-events: none; transition: opacity .15s ease; }
+  .product-card:hover .product-card-tools, .product-card:focus-within .product-card-tools { opacity: 1; pointer-events: auto; }
+}
+.product-card-tools button { position: relative; display: grid; width: 38px; height: 38px; place-items: center; border: 1px solid var(--line); border-radius: 50%; color: var(--navy); background: #ffffffed; box-shadow: 0 2px 8px #00235b22; font-size: 1.3rem; cursor: pointer; }
+.product-card-tools button::after { position: absolute; top: calc(100% + .35rem); right: 0; z-index: 3; border-radius: 5px; padding: .25rem .45rem; color: white; background: var(--navy); content: attr(data-tooltip); font-size: .7rem; font-weight: 800; white-space: nowrap; opacity: 0; pointer-events: none; }
+.product-card-tools button:hover::after, .product-card-tools button:focus-visible::after { opacity: 1; }
 .product-card-tools button[aria-pressed="true"] { color: var(--red); border-color: var(--red); }
 .save-toast { position: fixed; z-index: 80; right: 1rem; bottom: 5rem; display: flex; max-width: min(380px, 90vw); align-items: center; gap: 1rem; border-radius: 12px; padding: .9rem 1rem; color: white; background: var(--navy); box-shadow: var(--shadow); }
 .save-toast button { border: 0; color: white; background: transparent; font-size: 1.25rem; cursor: pointer; }
@@ -217,6 +223,7 @@ input, select { min-height: 44px; border: 1px solid var(--line); border-radius: 
 .cart-drawer > .drawer-title .icon-button { color: white; border-color: #ffffff70; }
 .cart-rule-summary { margin: .3rem 0 1rem; border-left: 4px solid var(--yellow); padding: .6rem .8rem; background: var(--soft-blue); color: var(--navy); font-size: .8rem; }
 .cart-rule-summary p { margin: .25rem 0 0; }
+.cart-drawer > .button.accent.full { margin-top: .8rem; }
 .cart-line-total { display: flex; flex-direction: row; align-items: center; justify-content: flex-end; gap: .4rem; flex-wrap: wrap; }
 .cart-line-discount { color: #0a8a4d; font-size: .8rem; font-weight: 900; }
 .stepper input { width: 48px; min-height: 35px; border: 0; border-radius: 0; padding: 0 .2rem; text-align: center; font-weight: 900; appearance: textfield; }
@@ -942,6 +949,11 @@ body > div > main h1 { color: var(--navy); }
 .pos-quantity-stepper input { width: 46px; height: 28px; min-height: 28px; border: 1px solid var(--line); padding: 2px; color: var(--navy); background: white; text-align: center; font: 800 .82rem var(--font-body); }
 .pos-quantity-stepper input::-webkit-inner-spin-button, .pos-quantity-stepper input::-webkit-outer-spin-button { appearance: none; margin: 0; }
 .pos-line-discount { color: #06745b !important; font-weight: 800; }
+.pos-line-total { display: inline-flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: .35rem; }
+.pos-basket-rules { padding: .6rem 1rem; color: var(--navy); background: var(--soft-blue); font-size: .8rem; }
+.pos-basket-rules p { margin: .2rem 0 0; }
+.till-lines .pos-basket-rules { margin-bottom: .7rem; border-radius: 8px; }
+.till-line-bottom .pos-line-discount { display: block; font-size: .74rem; }
 .pos-basket-empty { padding: 22px; color: var(--muted); }
 .pos-live-receipt { flex: 1; min-height: 150px; overflow-y: auto; }
 .pos-live-receipt-paper { width: min(100%, 80mm); margin: 0 auto 12px; padding: 12px; border: 1px dashed #a9b9c8; font-size: .74rem; }

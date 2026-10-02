@@ -104,7 +104,7 @@ export async function POST(request) {
           lineCost,
           lineProfit: Math.round((netLineTotal - lineCost) * 100) / 100,
           categorySnapshot: { id: product.categoryId, name: product.category },
-          discountRuleSnapshot: priced.rule ? { ruleId: priced.rule.ruleId, name: priced.rule.name, amount: priced.ruleDiscountCents / 100 } : null,
+          discountRuleSnapshot: priced.rule ? { ruleId: priced.rule.ruleId, name: priced.rule.name, discountType: priced.rule.discountType, value: priced.rule.value, minQty: priced.rule.minQty, amount: priced.ruleDiscountCents / 100 } : null,
           dealBundleSnapshot: priced.dealIds.length ? { dealIds: priced.dealIds, amount: priced.dealDiscountCents / 100 } : null,
         });
         tx.update(productRef, { stock: Number(product.stock) - quantity, ...(salesChannel === "walk-in" ? { purchaseCount: FieldValue.increment(quantity) } : {}), updatedAt: FieldValue.serverTimestamp() });
