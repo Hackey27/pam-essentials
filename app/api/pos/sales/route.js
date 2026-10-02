@@ -4,6 +4,7 @@ import { adminDb, requireRole } from "@/lib/admin";
 import { availableForSale, catalogueContext, priceCart } from "@/lib/commerce";
 import { SHOP_ADDRESS } from "@/lib/shop";
 import { receiptSnapshot } from "@/lib/receiptData.mjs";
+import { offlineReceiptId } from "@/lib/offlineSale.mjs";
 
 export async function POST(request) {
   const access = await requireRole(request, ["owner", "admin", "supervisor", "cashier"]);
@@ -29,6 +30,8 @@ export async function POST(request) {
 
   const transactionId = String(body.transactionId || "").trim();
   if (!transactionId) return NextResponse.json({ error: "A transaction ID is required." }, { status: 400 });
+  const offlineFinal = body.offlineFinal === true;
+  if (offlineFinal && (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(transactionId) || !Number.isFinite(Number(body.offlineTotal)))) return NextResponse.json({ error: "Offline sale needs a valid transaction ID and captured total." }, { status: 400 });
   const shiftId = String(body.shiftId || "").trim();
   const deviceId = String(body.deviceId || "").trim().slice(0, 120);
   if (!shiftId || !deviceId) return NextResponse.json({ error: "Open a till shift before checkout." }, { status: 409 });
@@ -59,9 +62,9 @@ export async function POST(request) {
       const linkedOrderSnap = orderReference ? await tx.get(store.collection("orders").doc(orderReference)) : null;
       const receiptDay = new Date().toISOString().slice(2, 10).replaceAll("-", "");
       const sequenceRef = store.collection("receipt_sequences").doc(receiptDay);
-      const sequenceSnap = await tx.get(sequenceRef);
-      const receiptNumber = Number(sequenceSnap.data()?.lastNumber || 0) + 1;
-      const receiptId = `PAM-${receiptDay}-${String(receiptNumber).padStart(4, "0")}`;
+      const sequenceSnap = offlineFinal ? null : await tx.get(sequenceRef);
+      const receiptNumber = Number(sequenceSnap?.data()?.lastNumber || 0) + 1;
+      const receiptId = offlineFinal ? offlineReceiptId(transactionId) : `PAM-${receiptDay}-${String(receiptNumber).padStart(4, "0")}`;
       if (salesChannel === "website" && orderReference && !linkedOrderSnap.exists) throw new Error("The linked website order no longer exists.");
       const linkedOrder = linkedOrderSnap?.data();
       for (let index = 0; index < normalizedItems.length; index += 1) {
@@ -72,6 +75,7 @@ export async function POST(request) {
         if (Number(snap.data().stock) < quantity) throw new Error(`Only ${snap.data().stock} × ${snap.data().name} remain.`);
       }
       const pricing = priceCart(productSnaps.map((snap, index) => ({ id: normalizedItems[index].id, categoryId: snap.data().categoryId, price: Number(snap.data().price), quantity: normalizedItems[index].quantity })), context.rules, context.deals);
+      if (offlineFinal && Math.abs(pricing.total - Number(body.offlineTotal)) > 0.005) throw new Error("Offline total differs from current pricing. Keep the local receipt and ask a manager to reconcile this sale.");
       const lines = [];
       let cost = 0;
 
@@ -126,7 +130,7 @@ export async function POST(request) {
       const tendered = Number(body.amountPaid);
       if (!Number.isFinite(tendered) || tendered < total) throw new Error("Amount paid cannot be less than the sale total.");
       const change = Math.round((tendered - total) * 100) / 100;
-      tx.set(sequenceRef, { lastNumber: receiptNumber, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+      if (!offlineFinal) tx.set(sequenceRef, { lastNumber: receiptNumber, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
       const saleData = {
         receiptId,
         clientTransactionId: transactionId,
@@ -150,6 +154,7 @@ export async function POST(request) {
         staffEmail: access.user.email,
         shiftId,
         deviceId,
+        offlineFinal,
         createdAt: FieldValue.serverTimestamp(),
       };
       tx.create(saleRef, saleData);

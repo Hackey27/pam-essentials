@@ -1,16 +1,19 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { priceCart, resolveDiscount } from "@/lib/commerce";
+import { priceCart } from "@/lib/commerce";
 import { curatedSearches, hasCollection, inCollection, isBestSeller, isNewArrival, isOnSale, isPromotion, matchesSearch } from "@/lib/catalogueBrowse.mjs";
 import ProductOptions, { ProductImage } from "@/components/ProductOptions";
 import { addToCart, readCart, saveCart } from "@/lib/storeCart";
 import { useAuth } from "@/components/AuthProvider";
-import { SHOP_ADDRESS } from "@/lib/shop";
+import { SHOP_ADDRESS, PRIMARY_WHATSAPP, PRIMARY_PHONE_LABEL, SECONDARY_PHONE_LABEL, OPENING_HOURS } from "@/lib/shop";
 import { whatsappOrderMessage } from "@/lib/whatsappOrder.mjs";
 import WhatsAppIcon from "@/components/WhatsAppIcon";
 import { getHeroImageUrl } from "@/lib/heroImages.mjs";
 import BrandLogo from "@/components/BrandLogo";
+import { readCompare, toggleCompare } from "@/lib/compare.mjs";
+import { sortProducts } from "@/lib/catalogueSort.mjs";
+import { quantityOfferMessage } from "@/lib/quantityOffer.mjs";
 
 const money = new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS" });
 
@@ -39,15 +42,22 @@ export default function Storefront() {
   const [flyerUrl, setFlyerUrl] = useState("");
   const [webHeroPath, setWebHeroPath] = useState("");
   const [mobileHeroPath, setMobileHeroPath] = useState("");
+  const [storeLocation, setStoreLocation] = useState(SHOP_ADDRESS);
+  const [mapsUrl, setMapsUrl] = useState("");
+  const [openingHours, setOpeningHours] = useState(OPENING_HOURS);
   const [discountRules, setDiscountRules] = useState([]);
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [mobileTabsHidden, setMobileTabsHidden] = useState(false);
   const [category, setCategory] = useState("All categories");
-  const [sort, setSort] = useState("featured");
+  const [sort, setSort] = useState("categories");
   const [browseMode, setBrowseMode] = useState("products");
-  const [pageSize, setPageSize] = useState(20);
+  const [pageSize, setPageSize] = useState(100);
+  const [gridDensity, setGridDensity] = useState("standard");
+  const [compareIds, setCompareIds] = useState([]);
+  const [wishlistIds, setWishlistIds] = useState([]);
+  const [saveNotice, setSaveNotice] = useState("");
   const [page, setPage] = useState(1);
   const [priceMin, setPriceMin] = useState("");
   const [priceMax, setPriceMax] = useState("");
@@ -84,20 +94,25 @@ export default function Storefront() {
       setQuery(saved.query || ""); setCategory(saved.category || "All categories");
       setSelectedSubcategories(saved.subcategories || []); setSelectedSubSubcategories(saved.subSubcategories || []);
       setAvailability(saved.availability || "all"); setOffer(saved.offer || "all"); setCollection(saved.collection || "");
-      setBrowseMode(saved.browseMode || "products"); setSort(saved.sort || "featured");
-      setPageSize(saved.pageSize || 20); setPriceMin(saved.priceMin || ""); setPriceMax(saved.priceMax || "");
+      setBrowseMode(saved.browseMode || "products"); setSort(saved.sort || "categories");
+      setPageSize(saved.pageSize || 100); setPriceMin(saved.priceMin || ""); setPriceMax(saved.priceMax || "");
       sessionStorage.removeItem("pam-listing-return");
     } catch { sessionStorage.removeItem("pam-listing-return"); }
   }, []);
 
   useEffect(() => {
     fetch("/api/catalog/products")
-      .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error); setProducts(data.products || []); setCategoryList(data.categories || []); setSubcategoryList(data.subcategories || []); setSubSubcategoryList(data.subSubcategories || []); setDiscountRules(data.discountRules || []); setDealBundles(data.dealBundles || []); setPopularProducts(data.popularProducts || []); setPublicLaunch(data.publicLaunch === true); setDealsActive(data.dealsActive === true); setFlyerUrl(data.flyerUrl || ""); setWebHeroPath(data.webHeroPath || ""); setMobileHeroPath(data.mobileHeroPath || ""); const params = new URLSearchParams(window.location.search); const mode = params.get("browse"); if (["new", "promotions"].includes(mode) || mode === "deals" && data.dealsActive === true) { setBrowseMode(mode); setSort(mode === "new" ? "latest" : mode === "deals" ? "price-low" : "featured"); } const quickId = params.get("quick"); if (quickId) setQuickProduct((data.products || []).find((item) => item.id === quickId) || null); const current = readCart(); const refreshed = current.map((line) => { const product = (data.products || []).find((item) => item.id === line.id); return product && product.stock > 0 ? { ...product, quantity: Math.min(Number(line.quantity), Number(product.stock)) } : null; }).filter(Boolean); saveCart(refreshed); setCart(refreshed); })
+      .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error); setProducts(data.products || []); setCategoryList(data.categories || []); setSubcategoryList(data.subcategories || []); setSubSubcategoryList(data.subSubcategories || []); setDiscountRules(data.discountRules || []); setDealBundles(data.dealBundles || []); setPopularProducts(data.popularProducts || []); setPublicLaunch(data.publicLaunch === true); setDealsActive(data.dealsActive === true); setFlyerUrl(data.flyerUrl || ""); setWebHeroPath(data.webHeroPath || ""); setMobileHeroPath(data.mobileHeroPath || ""); setStoreLocation(data.storeLocation || SHOP_ADDRESS); setMapsUrl(data.mapsUrl || ""); setOpeningHours(data.openingHours || OPENING_HOURS); const params = new URLSearchParams(window.location.search); const mode = params.get("browse"); if (["new", "promotions"].includes(mode) || mode === "deals" && data.dealsActive === true) { setBrowseMode(mode); setSort(mode === "new" ? "latest" : mode === "deals" ? "price-low" : "promotions"); } const quickId = params.get("quick"); if (quickId) setQuickProduct((data.products || []).find((item) => item.id === quickId) || null); const current = readCart(); const refreshed = current.map((line) => { const product = (data.products || []).find((item) => item.id === line.id); return product && product.stock > 0 ? { ...product, quantity: Math.min(Number(line.quantity), Number(product.stock)) } : null; }).filter(Boolean); saveCart(refreshed); setCart(refreshed); })
       .catch((err) => setError(err.message || "The catalogue is unavailable."))
       .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => { setCookieVisible(localStorage.getItem("pam-cookie-notice") !== "accepted"); }, []);
+  useEffect(() => { setCompareIds(readCompare(localStorage)); }, []);
+  useEffect(() => {
+    if (!user || role) { setWishlistIds([]); return; }
+    user.getIdToken().then((token) => fetch("/api/customer/wishlist", { headers: { authorization: `Bearer ${token}` } })).then((response) => response.json()).then((data) => setWishlistIds(data.wishlist || [])).catch(() => {});
+  }, [user, role]);
   useEffect(() => { setCart(readCart()); const params = new URLSearchParams(window.location.search); if (params.has("cart")) setCartOpen(true); const source = params.get("returnTo"); if (source?.startsWith("/products/") && !source.startsWith("//")) cartReturn.current = source; }, []);
   useEffect(() => { const close = (event) => { if (!searchRef.current?.contains(event.target)) setSearchOpen(false); }; document.addEventListener("pointerdown", close); return () => document.removeEventListener("pointerdown", close); }, []);
   useEffect(() => {
@@ -195,12 +210,7 @@ export default function Storefront() {
       inCollection(product, collection, discountRules) &&
       (browseMode === "products" || (browseMode === "new" ? isNewArrival(product) : browseMode === "promotions" ? isPromotion(product, discountRules) : dealsActive && hasCollection(product, "PAM Deals")))
     );
-    if (browseMode === "new" || sort === "latest") {
-      return [...filtered].sort((a, b) => (Date.parse(b.createdAt || "") || 0) - (Date.parse(a.createdAt || "") || 0) || a.name.localeCompare(b.name));
-    }
-    if (sort === "price-low") return [...filtered].sort((a, b) => a.price - b.price);
-    if (sort === "price-high") return [...filtered].sort((a, b) => b.price - a.price);
-    return filtered;
+    return sortProducts(filtered, browseMode === "new" ? "latest" : sort, discountRules);
   }, [products, discountRules, query, category, selectedSubcategories, selectedSubSubcategories, sort, browseMode, priceMin, priceMax, availability, offer, collection, publicLaunch, dealsActive]);
   const dealProducts = products.filter((product) => hasCollection(product, "PAM Deals"));
   const dealPercent = Math.max(0, ...discountRules.filter((rule) => rule.discountType === "PERCENT" && Number(rule.value) <= 20 && rule.scopeType !== "GLOBAL" && dealProducts.some((product) => rule.scopeType === "PRODUCT" ? rule.scopeId === product.id : rule.scopeType === "CATEGORY" && rule.scopeId === product.categoryId)).map((rule) => Number(rule.value || 0)));
@@ -218,11 +228,11 @@ export default function Storefront() {
   useEffect(() => { setPage(1); }, [query, category, selectedSubcategories, selectedSubSubcategories, availability, offer, collection, sort, browseMode, priceMin, priceMax, pageSize]);
 
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
+  const addedCartLine = addedProduct && cart.find((item) => item.id === addedProduct.id);
   const pricing = priceCart(cart, discountRules, dealBundles);
   const { subtotal, discount, total } = pricing;
   const quantityRule = discountRules.find((rule) => rule.scopeType === "GLOBAL" && rule.discountType === "PERCENT" && Number(rule.value) === 5 && Number(rule.minQty) === 3);
   const quantityDiscountApplied = quantityRule && pricing.lines.some((line) => line.rule?.ruleId === quantityRule.ruleId);
-  const quantityNudgeItem = quantityRule && cart.find((item) => item.quantity > 0 && item.quantity < 3 && !pricing.lines.find((line) => line.id === item.id)?.dealIds.length && resolveDiscount(item, 3, discountRules).rule?.ruleId === quantityRule.ruleId);
   const webHeroUrl = getHeroImageUrl(webHeroPath, 2200);
   const mobileHeroUrl = getHeroImageUrl(mobileHeroPath, 1200) || webHeroUrl;
   const heroBackground = (url) => url ? { backgroundImage: `linear-gradient(#00235b99, #00235b99), url(${JSON.stringify(url)})` } : flyerUrl ? { backgroundImage: `url(${JSON.stringify(flyerUrl)})` } : undefined;
@@ -237,7 +247,7 @@ export default function Storefront() {
     setOffer("all");
     setCollection("");
     setQuery("");
-    setSort(mode === "new" ? "latest" : mode === "deals" ? "price-low" : "featured");
+    setSort(mode === "new" ? "latest" : mode === "deals" ? "price-low" : mode === "promotions" ? "promotions" : "categories");
     document.getElementById("catalogue")?.scrollIntoView({ behavior: "smooth" });
   }
 
@@ -356,6 +366,26 @@ export default function Storefront() {
     setCart((current) => { const next = current.map((item) => item.id === id ? { ...item, quantity: Math.min(item.stock, Math.max(0, quantity)) } : item).filter((item) => item.quantity > 0); saveCart(next); return next; });
   }
 
+  function compareProduct(product) {
+    const full = compareIds.length >= 4 && !compareIds.includes(product.id);
+    if (full) { setSaveNotice("You can compare up to four products. Remove one first."); return; }
+    const next = toggleCompare(localStorage, product.id);
+    setCompareIds(next);
+    setSaveNotice(next.includes(product.id) ? `${product.name} added to comparison.` : `${product.name} removed from comparison.`);
+  }
+
+  async function wishlistProduct(product) {
+    if (!user || role) { window.location.href = `/account?mode=register&wishlist=${encodeURIComponent(product.id)}`; return; }
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch("/api/customer/wishlist", { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify({ productId: product.id }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not save this product.");
+      setWishlistIds((current) => [...new Set([...current, product.id])]);
+      setSaveNotice(`${product.name} added to your wishlist.`);
+    } catch (reason) { setSaveNotice(reason.message || "Could not save this product."); }
+  }
+
   async function createOrder(channel = "website") {
     if (orderRequest.current) return null;
     orderRequest.current = true;
@@ -384,7 +414,7 @@ export default function Storefront() {
     const data = await createOrder("whatsapp");
     if (!data) { whatsappWindow?.close(); return; }
     const message = whatsappOrderMessage(data, order.customer, order.phone);
-    const whatsappUrl = `https://wa.me/233207015198?text=${encodeURIComponent(message)}`;
+    const whatsappUrl = `https://wa.me/${PRIMARY_WHATSAPP}?text=${encodeURIComponent(message)}`;
     if (whatsappWindow) whatsappWindow.location.href = whatsappUrl;
     else window.location.href = whatsappUrl;
     setConfirmation(data); setCart([]); saveCart([]); setCheckout(false);
@@ -392,7 +422,7 @@ export default function Storefront() {
 
   return (
     <div className={`store-shell${mobileTabsHidden || mobileFiltersOpen ? " mobile-tabs-hidden" : ""}`}>
-      <div className="utility-bar"><span>PAM Essentials & More · Ghana</span><div><a href="/account#orders">Track Order</a><a href="/account">{user && !role ? "My Account" : "Sign In"}</a></div></div>
+      <div className="utility-bar"><span>Opening hours: {openingHours}</span><div><a href="/info/contact#location">Store Location</a><a href="/info/contact#contact">Contact</a><a href="/account#orders">Track Order</a><a href="/account#wishlist">View Wishlist</a><a href="/account?mode=signin">{user && !role ? "My Account" : "Sign In"}</a>{(!user || role) && <a href="/account?mode=register">Create Account</a>}</div></div>
       <header className={`store-header${mobileTabsHidden || mobileFiltersOpen ? " mobile-tabs-hidden" : ""}`}>
         <div className="header-main">
           <a className="brand" href="/" aria-label="PAM Essentials home"><BrandLogo background="white" mobileBackground="navy" /></a>
@@ -403,6 +433,7 @@ export default function Storefront() {
             <button type="button" className={browseMode === "promotions" ? "active" : ""} aria-current={browseMode === "promotions" ? "page" : undefined} onClick={() => browse("promotions")}><span className="nav-full">Promotions</span><span className="nav-short">Promos</span></button>
             {dealsActive && <button type="button" onClick={() => browse("deals")}>Deals</button>}
             <a href="/info/delivery"><span className="nav-full">Payment &amp; Delivery</span><span className="nav-short">Delivery</span></a>
+            <a className="mobile-extra-nav" href="/info/contact#location">Location</a><a className="mobile-extra-nav" href="/info/contact#contact">Contact</a><a className="mobile-extra-nav" href="/compare">Compare</a><a className="mobile-extra-nav" href="/account#wishlist">Wishlist</a><a className="mobile-extra-nav" href="/account?mode=register">Create account</a>
           </nav>
           <div className={`header-search${searchOpen && !query.trim() ? " search-active" : ""}`} ref={searchRef}>
             <div className="search-field"><input type="search" aria-label="Search products, categories, or brands" aria-expanded={searchOpen && query.trim().length > 0} aria-controls="search-suggestions" placeholder="Search products, categories, or brands" value={query} onFocus={() => setSearchOpen(true)} onKeyDown={(event) => { if (event.key === "Escape") setSearchOpen(false); if (event.key === "Enter") { event.preventDefault(); submitSearch(); } }} onChange={(event) => { setBrowseMode("products"); setQuery(event.target.value); setSearchOpen(true); }} /><button type="button" aria-label="Show matching products" onClick={submitSearch}>⌕</button></div>
@@ -414,7 +445,7 @@ export default function Storefront() {
         </div>
       </header>
 
-      <section className={`hero${webHeroUrl ? " has-web-image" : ""}${mobileHeroUrl ? " has-mobile-image" : ""}`}><div className={`hero-flyer hero-flyer-web${webHeroUrl ? " uploaded" : ""}`} aria-hidden="true" style={heroBackground(webHeroUrl)} /><div className={`hero-flyer hero-flyer-mobile${mobileHeroUrl ? " uploaded" : ""}`} aria-hidden="true" style={heroBackground(mobileHeroUrl)} /><div className="hero-content"><p className="eyebrow">Everyday Essentials, thoughtfully selected.</p><h1>Find what you need.<br />Pick up or get it delivered.</h1><p>School, home, gifts and daily essentials in one simple shop.</p><div className="hero-actions"><a className="button primary" href="#catalogue">Shop products</a><a className="button whatsapp" href="https://wa.me/233207015198" target="_blank" rel="noreferrer"><WhatsAppIcon size={18} /> WhatsApp us</a></div></div><div className="hero-panel" aria-hidden="true"><span>P</span><span>A</span><span>M</span></div></section>
+      <section className={`hero${webHeroUrl ? " has-web-image" : ""}${mobileHeroUrl ? " has-mobile-image" : ""}`}><div className={`hero-flyer hero-flyer-web${webHeroUrl ? " uploaded" : ""}`} aria-hidden="true" style={heroBackground(webHeroUrl)} /><div className={`hero-flyer hero-flyer-mobile${mobileHeroUrl ? " uploaded" : ""}`} aria-hidden="true" style={heroBackground(mobileHeroUrl)} /><div className="hero-content"><p className="eyebrow">Everyday Essentials, thoughtfully selected.</p><h1>Find what you need.<br />Pick up or get it delivered.</h1><p>School, home, gifts and daily essentials in one simple shop.</p><div className="hero-actions"><a className="button primary" href="#catalogue">Shop products</a><a className="button whatsapp" href={`https://wa.me/${PRIMARY_WHATSAPP}`} target="_blank" rel="noreferrer"><WhatsAppIcon size={18} /> WhatsApp us</a></div></div><div className="hero-panel" aria-hidden="true"><span>P</span><span>A</span><span>M</span></div></section>
       {dealsActive && (dealProducts.length > 0 || dealBundles.length > 0) && <section className="deals-feature"><div><p className="eyebrow">Selected for you</p><h2>PAM Deals</h2><p>{dealPercent > 0 ? `Up to ${dealPercent}% off selected products` : "Selected everyday offers"}</p></div><a className="button accent" href="/?browse=deals#catalogue">Shop deals</a></section>}
 
       <section className="catalogue" id="catalogue">
@@ -459,23 +490,25 @@ export default function Storefront() {
           <fieldset className="facet-group"><legend>Offers</legend>{[["all", "All"], ["sale", "On Sale"], ["promotions", "Promotions"]].map(([value, label]) => <label key={value}><input type="radio" name="offer" checked={offer === value} onChange={() => setOffer(value)} /> {label}</label>)}</fieldset>
           <fieldset className="facet-group"><legend>Collections</legend><label><input type="radio" name="collection" checked={!collection} onChange={() => setCollection("")} /> All</label>{["New Arrivals", "Best Sellers", "Back to School", "Promotion", ...(dealsActive ? ["PAM Deals"] : [])].map((name) => <label key={name}><input type="radio" name="collection" checked={collection === name} onChange={() => setCollection(name)} /> {name}</label>)}</fieldset>
           <button type="button" className="table-action" onClick={clearFilters}>Clear filters</button>
+          <a className="filter-compare-link" href="/compare">Compare Products ({compareIds.length})</a>
           <div className="service-note"><p>Need expert advice? Message or call us before you order and we’ll help you choose.</p></div>
           </div>
           <button type="button" className="filter-results-action" onClick={() => { setMobileFiltersOpen(false); setPage(1); requestAnimationFrame(() => document.getElementById("catalogue-results")?.scrollIntoView({ behavior: "smooth", block: "start" })); }}>Show {visible.length} {visible.length === 1 ? "result" : "results"}</button>
         </aside>
 
         <main className="catalogue-main" id="catalogue-results">
-          <div className="catalogue-heading"><div><p className="breadcrumb">{breadcrumb}</p><h2>{heading}</h2><p className="desktop-product-count">{selectedNodes.length > 1 ? `Showing ${visible.length} products from ${selectedNodes.length} selected subcategories` : `${visible.length} products ready to browse`}</p><p className="mobile-product-count">{visible.length} products available</p></div><div className="catalogue-controls"><button type="button" className="mobile-filter-inline" aria-expanded={mobileFiltersOpen} aria-controls="store-filters" onClick={() => setMobileFiltersOpen((open) => !open)}><span aria-hidden="true">☰</span> Filters</button><label className="mobile-sort-label" htmlFor="store-sort">Sort:</label><select id="store-sort" aria-label="Sort products" value={sort} onChange={(e) => setSort(e.target.value)}><option value="featured">Popularity</option><option value="price-low">Price low to high</option><option value="price-high">Price high to low</option><option value="latest">Latest</option></select><select className="page-size-select" aria-label="Products per page" value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))}>{[20, 30, 40, 50].map((size) => <option key={size} value={size}>{size} per page</option>)}</select></div></div>
+          <div className="catalogue-heading"><div><p className="breadcrumb">{breadcrumb}</p><h2>{heading}</h2><p className="desktop-product-count">{selectedNodes.length > 1 ? `Showing ${visible.length} products from ${selectedNodes.length} selected subcategories` : `${visible.length} products ready to browse`}</p><p className="mobile-product-count">{visible.length} products available</p></div><div className="catalogue-controls"><button type="button" className="mobile-filter-inline" aria-expanded={mobileFiltersOpen} aria-controls="store-filters" onClick={() => setMobileFiltersOpen((open) => !open)}><span aria-hidden="true">☰</span> Filters</button><label className="sort-control" htmlFor="store-sort">Sort by: <select id="store-sort" aria-label="Sort products" value={sort} onChange={(e) => setSort(e.target.value)}><option value="categories">Product categories</option><option value="popularity">Popularity</option><option value="price-low">Price: low to high</option><option value="price-high">Price: high to low</option><option value="rating">Rating</option><option value="latest">Latest</option><option value="promotions">Promotions</option></select></label><label className="page-size-control">Show: <select aria-label="Products per page" value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))}>{[30, 60, 80, 100].map((size) => <option key={size} value={size}>{size}</option>)}</select></label><div className="grid-density" role="group" aria-label="Grid density"><button type="button" aria-label="Standard grid" aria-pressed={gridDensity === "standard"} onClick={() => setGridDensity("standard")}>▦</button><button type="button" aria-label="Compact grid" aria-pressed={gridDensity === "compact"} onClick={() => setGridDensity("compact")}>▦▦</button></div></div></div>
           {selectedNodes.length > 0 && <div className="filter-chips" aria-label="Selected subcategories"><span>{selectedNodes.length} {selectedNodes.length === 1 ? "subcategory" : "subcategories"} selected</span>{selectedNodes.map((item) => <button type="button" key={item.subSubcategoryId || item.subcategoryId} onClick={() => item.subSubcategoryId ? toggleSubSubcategory(item) : toggleSubcategory(item)} aria-label={`Remove ${item.name} filter`}>{item.name} ×</button>)}<button type="button" onClick={() => { setSelectedSubcategories([]); setSelectedSubSubcategories([]); }}>Clear</button></div>}
           {loading && <div className="empty-state"><div className="spinner" /><p>Loading the catalogue…</p></div>}
           {error && !products.length && <div className="empty-state error-panel"><h3>Catalogue unavailable</h3><p>{error}</p></div>}
           {!loading && !error && !visible.length && !(dealsActive && browseMode === "deals" && dealBundles.length) && <div className="empty-state"><h3>No matching products</h3><p>Try another search, category or collection.</p></div>}
           {dealsActive && browseMode === "deals" && dealBundles.length > 0 && <section className="deal-bundle-grid" aria-label="PAM Deals bundles">{dealBundles.map((deal) => <article className="panel" key={deal.dealId}><span className="badge warning">PAM Deal</span><h3>{deal.name}</h3><p>{deal.productIds.map((id) => products.find((product) => product.id === id)?.name || id).join(" + ")}</p><p><del>{money.format(deal.aggregatePrice)}</del> <strong>{money.format(deal.finalPrice)}</strong></p><button type="button" className="button add-cart-action" disabled={!deal.available} onClick={() => addBundle(deal)}>{deal.available ? "Add deal to cart" : "Out of stock"}</button></article>)}</section>}
-          <div className="product-grid">{pagedProducts.map((product) => {
+          <div className={`product-grid${gridDensity === "compact" ? " compact" : ""}`}>{pagedProducts.map((product) => {
             const variants = product.productGroupId ? products.filter((item) => item.productGroupId === product.productGroupId) : [product];
             const hasVariants = variants.length > 1;
             return <article className="product-card" key={product.id}>
               <a href={`/products/${encodeURIComponent(product.id)}`} onClick={rememberListingContext} className="product-card-image"><ProductImage product={product} />{isPromotion(product, discountRules) && <span className="promo-ribbon">Promo</span>}</a>
+              <div className="product-card-tools"><button type="button" aria-label={`${compareIds.includes(product.id) ? "Remove" : "Add"} ${product.name} ${compareIds.includes(product.id) ? "from" : "to"} comparison`} aria-pressed={compareIds.includes(product.id)} onClick={() => compareProduct(product)}>⇄</button><button type="button" aria-label={`Add ${product.name} to wishlist`} aria-pressed={wishlistIds.includes(product.id)} onClick={() => wishlistProduct(product)}>{wishlistIds.includes(product.id) ? "♥" : "♡"}</button></div>
               <div className="product-copy"><div className="product-stock-line"><span className={product.stock > 0 ? "badge success" : "badge danger"}>{product.stock > 0 ? "✓ In stock" : "Out of stock"}</span>{product.stock > 0 && product.stock < Number(product.lowStockLevel ?? 8) && <span className="badge warning">Low stock</span>}</div><div className="product-badges">{isNewArrival(product) && <span className="badge neutral">New</span>}{publicLaunch && isBestSeller(product) && <span className="badge neutral">Best seller</span>}{isOnSale(product, discountRules) && <span className="badge warning">On sale</span>}</div>
               <h3><a href={`/products/${encodeURIComponent(product.id)}`} onClick={rememberListingContext}>{product.name}</a></h3>{product.description && <p className="product-description">{product.description}</p>}{product.randomColours && <p className="colour-note">Random colours unless you indicate a choice in notes.</p>}
               <p className="price">{money.format(product.price)}</p>{hasVariants && <small>{variants.length} variants available</small>}
@@ -492,22 +525,34 @@ export default function Storefront() {
         <div className="footer-grid">
           <div className="footer-brand"><BrandLogo background="navy" /><p>School, home, gifts and daily essentials in one simple shop.</p><p className="footer-payment">Secured payment: Online payment is coming soon. Pay on pickup or delivery is available.</p></div>
           <nav aria-label="Shop links"><h2>Shop</h2><a href="/#catalogue">All Products</a><a href="/#catalogue">Categories</a>{dealsActive && <a href="/?browse=deals#catalogue">Deals</a>}<a href="/?browse=new#catalogue">New Arrivals</a></nav>
-          <nav aria-label="Customer service links"><h2>Customer Service</h2><a href="/info/contact">Contact Us</a><a href="https://wa.me/233207015198" target="_blank" rel="noreferrer">WhatsApp</a><a href="/account#orders">Track My Order</a><a href="/info/delivery">Delivery Information</a><a href="/info/returns">Returns &amp; Exchanges</a><a href="/info/privacy">Privacy Policy</a><a href="/info/faqs">FAQs</a></nav>
-          <div><h2>Contact</h2><p>Awoshie, Accra, Ghana</p><a href="tel:+233207015198">+233 20 701 5198</a></div>
+          <nav aria-label="Customer service links"><h2>Customer Service</h2><a href="/info/contact">Contact Us</a><a href={`https://wa.me/${PRIMARY_WHATSAPP}`} target="_blank" rel="noreferrer">WhatsApp</a><a href="/account#orders">Track My Order</a><a href="/info/delivery">Delivery Information</a><a href="/info/returns">Returns &amp; Exchanges</a><a href="/info/privacy">Privacy Policy</a><a href="/info/faqs">FAQs</a></nav>
+          <div><h2>Contact</h2><p>{storeLocation}</p>{mapsUrl && <a href={mapsUrl} target="_blank" rel="noreferrer">View on Google Maps</a>}<a href="tel:+233596661439">{PRIMARY_PHONE_LABEL}</a><a href="tel:+233207015198">{SECONDARY_PHONE_LABEL}</a></div>
           <nav aria-label="About PAM links"><h2>About PAM</h2><a href="/info/about">About Us</a><a href="/info/story">Our Story</a></nav>
           <nav aria-label="Social links"><h2>Follow Us</h2><a href="/info/social?platform=Facebook">Facebook</a><a href="/info/social?platform=Instagram">Instagram</a><a href="/info/social?platform=TikTok">TikTok</a></nav>
         </div>
         <p className="footer-bottom">© 2026 PAM Essentials &amp; More</p>
       </footer>
 
-      {quickProduct && <div className="modal-backdrop" role="presentation" onMouseDown={() => setQuickProduct(null)}><div className="modal quick-view-modal" role="dialog" aria-modal="true" aria-label={`Quick View ${quickProduct.name}`} onMouseDown={(event) => event.stopPropagation()}><ProductOptions key={quickProduct.id} initialProduct={quickProduct} products={products} compact onClose={() => setQuickProduct(null)} onAdd={add} onNavigateDetail={rememberListingContext} /></div></div>}
-      {servicesOpen && <div className="modal-backdrop" role="presentation" onMouseDown={() => setServicesOpen(false)}><div className="modal services-modal" role="dialog" aria-modal="true" aria-label="PAM services" onMouseDown={(event) => event.stopPropagation()}><button className="icon-button services-close" type="button" aria-label="Close services" onClick={() => setServicesOpen(false)}>×</button><p className="eyebrow">PAM Essentials &amp; More</p><h2>Services</h2><ul><li>Secretarial services</li><li>Printing</li><li>Communication consultancy</li><li>Laptop repairs and purchases</li></ul><p>Awoshie, Accra, Ghana</p><div className="services-contact"><a className="button primary" href="tel:+233207015198">Call +233 20 701 5198</a><a className="button whatsapp" href="https://wa.me/233207015198" target="_blank" rel="noreferrer"><WhatsAppIcon size={18} /> Message us</a></div></div></div>}
-      {addedProduct && <div className="modal-backdrop" role="presentation"><div className="modal" role="dialog" aria-modal="true" aria-label="Added to cart"><h2>Added to cart</h2><p>{addedProduct.quantity} × {addedProduct.name}</p><p>SKU: {addedProduct.id}{addedProduct.colour && ` · ${addedProduct.colour}`}{addedProduct.size && ` · ${addedProduct.size}`}</p><div className="added-actions"><button className="button secondary" onClick={() => { setAddedProduct(null); document.getElementById("catalogue")?.scrollIntoView({ behavior: "smooth" }); }}>Continue shopping</button><button className="button primary" onClick={() => { setAddedProduct(null); setCartOpen(true); }}>View cart</button></div></div></div>}
+      {quickProduct && <div className="modal-backdrop" role="presentation" onMouseDown={() => setQuickProduct(null)}><div className="modal quick-view-modal" role="dialog" aria-modal="true" aria-label={`Quick View ${quickProduct.name}`} onMouseDown={(event) => event.stopPropagation()}><ProductOptions key={quickProduct.id} initialProduct={quickProduct} products={products} discountRules={discountRules} compact onClose={() => setQuickProduct(null)} onAdd={add} onNavigateDetail={rememberListingContext} /></div></div>}
+      {saveNotice && <div className="save-toast" role="status"><span>{saveNotice}</span><button type="button" onClick={() => setSaveNotice("")} aria-label="Dismiss notification">×</button></div>}
+      {servicesOpen && <div className="modal-backdrop" role="presentation" onMouseDown={() => setServicesOpen(false)}><div className="modal services-modal" role="dialog" aria-modal="true" aria-label="PAM services" onMouseDown={(event) => event.stopPropagation()}><button className="icon-button services-close" type="button" aria-label="Close services" onClick={() => setServicesOpen(false)}>×</button><p className="eyebrow">PAM Essentials &amp; More</p><h2>Services</h2><ul><li><a href="/services/secretarial">Secretarial services</a></li><li><a href="/services/printing">Printing</a></li><li><a href="/services/communication">Communication consultancy</a></li><li><a href="/services/laptop-repairs">Laptop repairs and purchases</a></li></ul><p>{storeLocation}</p><div className="services-contact"><a className="button primary" href="tel:+233596661439">Call {PRIMARY_PHONE_LABEL}</a><a className="button whatsapp" href={`https://wa.me/${PRIMARY_WHATSAPP}`} target="_blank" rel="noreferrer"><WhatsAppIcon size={18} /> Message us</a></div></div></div>}
+      {addedProduct && <div className="modal-backdrop" role="presentation"><div className="modal" role="dialog" aria-modal="true" aria-label="Added to cart"><h2>Added to cart</h2><p>{addedCartLine?.quantity || addedProduct.quantity} × {addedProduct.name}</p><p>SKU: {addedProduct.id}{addedProduct.colour && ` · ${addedProduct.colour}`}{addedProduct.size && ` · ${addedProduct.size}`}</p>{addedCartLine && <><div className="stepper added-quantity"><button type="button" onClick={() => updateQuantity(addedCartLine.id, Math.max(1, addedCartLine.quantity - 1))} aria-label="Decrease quantity">−</button><input type="number" min="1" max={addedCartLine.stock} aria-label={`Quantity of ${addedCartLine.name}`} value={addedCartLine.quantity} onChange={(event) => updateQuantity(addedCartLine.id, Math.max(1, Number(event.target.value) || 1))} /><button type="button" onClick={() => updateQuantity(addedCartLine.id, addedCartLine.quantity + 1)} disabled={addedCartLine.quantity >= addedCartLine.stock} aria-label="Increase quantity">+</button></div>{quantityOfferMessage(addedCartLine, addedCartLine.quantity, discountRules) && <p className="quantity-offer-note">{quantityOfferMessage(addedCartLine, addedCartLine.quantity, discountRules)}</p>}</>}<div className="added-actions"><button className="button secondary" onClick={() => setAddedProduct(null)}>Continue shopping</button><button className="button primary" onClick={() => { setAddedProduct(null); setCartOpen(true); }}>View cart</button></div></div></div>}
 
-      {cartOpen && <div className="drawer-backdrop" onMouseDown={closeCart}><aside className="cart-drawer" onMouseDown={(event) => event.stopPropagation()}><div className="drawer-title"><div><p className="eyebrow">Your order</p><h2>Shopping cart</h2></div><button className="icon-button" onClick={closeCart} aria-label="Close cart">×</button></div>{error && <p className="notice error-notice">{error}</p>}{!cart.length ? <div className="empty-state"><h3>Your cart is empty</h3><p>Add a product to get started.</p><button type="button" className="button secondary full" onClick={closeCart}>Continue browsing</button></div> : <><div className="cart-lines">{cart.map((item) => <div className="cart-line" key={item.id}><ProductArt name={item.name} category={item.category} /><div><h3>{item.name}</h3><p>{[item.colour, item.size, `SKU: ${item.id}`].filter(Boolean).join(" · ")}</p>{item.randomColours && <p className="colour-note">Random colours unless you indicate a choice in notes.</p>}<p>{money.format(item.price)}</p><div className="stepper"><button aria-label={`Decrease ${item.name} quantity`} onClick={() => updateQuantity(item.id, item.quantity - 1)}>−</button><span>{item.quantity}</span><button aria-label={`Increase ${item.name} quantity`} onClick={() => updateQuantity(item.id, item.quantity + 1)} disabled={item.quantity >= item.stock}>+</button></div><button type="button" className="cart-remove-line" onClick={() => updateQuantity(item.id, 0)} aria-label={`Remove ${item.name} from cart`}>Remove item</button></div><b>{money.format(pricing.lines.find((line) => line.id === item.id)?.lineTotal || 0)}</b></div>)}</div>{quantityNudgeItem && <p className="discount-nudge" role="status">Add {3 - quantityNudgeItem.quantity} more of {quantityNudgeItem.name} to qualify for 5% off that product</p>}{quantityDiscountApplied && <p className="discount-applied" role="status">5% quantity discount applied to eligible products</p>}<div className="cart-total"><span>Subtotal</span><strong>{money.format(subtotal)}</strong></div>{discount > 0 && <div className="cart-total discount-total"><span>Discount</span><strong>−{money.format(discount)}</strong></div>}<div className="cart-total grand-total"><span>Total</span><strong>{money.format(total)}</strong></div><button type="button" className="button secondary full" onClick={closeCart}>Continue browsing</button>{!checkout ? <button className="button accent full" onClick={() => setCheckout(true)}>Proceed to checkout</button> : <form className="checkout-form" onSubmit={placeOrder}><label>Full name<input required value={order.customer} onChange={(e) => setOrder({ ...order, customer: e.target.value })} /></label><label>Mobile number<input required type="tel" value={order.phone} onChange={(e) => setOrder({ ...order, phone: e.target.value })} /></label><label>Fulfilment<select value={order.deliveryMethod} onChange={(e) => setOrder({ ...order, deliveryMethod: e.target.value })}><option value="pickup">Pickup</option><option value="delivery-self">Delivery – self initiated</option><option value="delivery-shop">Delivery – arranged by shop</option></select></label>{order.deliveryMethod === "delivery-self" && <p className="pickup-address">Your courier collects from: <b>{SHOP_ADDRESS}</b></p>}{order.deliveryMethod !== "pickup" && <label>Delivery destination or landmark<input required={order.deliveryMethod === "delivery-shop"} value={order.deliveryAddress} onChange={(e) => setOrder({ ...order, deliveryAddress: e.target.value })} /></label>}<label>Order notes (optional)<textarea rows={3} maxLength={1000} placeholder="type specific details or requests here" value={order.notes} onChange={(e) => setOrder({ ...order, notes: e.target.value })} /></label><button className="button secondary full" type="button" disabled title="Payment provider has not been selected yet">Pay now · coming soon</button><button className="button accent full" type="submit" disabled={placingOrder}>{placingOrder ? "Creating order…" : `Pay on pickup/delivery · ${money.format(total)}`}</button><button className="button whatsapp full" type="button" disabled={placingOrder} onClick={orderOnWhatsApp}>Order on WhatsApp</button></form>}</>}</aside></div>}
+      {cartOpen && <div className="drawer-backdrop" onMouseDown={closeCart}><aside className="cart-drawer" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="drawer-title"><div><p className="eyebrow">Your order</p><h2>Shopping cart</h2></div><button className="icon-button" onClick={closeCart} aria-label="Close cart">×</button></div>
+        {error && <p className="notice error-notice">{error}</p>}
+        {!cart.length ? <div className="empty-state"><h3>Your cart is empty</h3><p>Add a product to get started.</p><button type="button" className="button secondary full" onClick={closeCart}>Continue browsing</button></div> : <>
+          {discountRules.length > 0 && <div className="cart-rule-summary"><strong>Available discount rules</strong>{discountRules.map((rule) => <p key={rule.ruleId}>{rule.name}: {rule.discountType === "PERCENT" ? `${rule.value}% off` : `${money.format(rule.value)} off`} when eligible; minimum {rule.minQty || 1} of the same product. Promotions and deals override standard discounts.</p>)}</div>}
+          <div className="cart-lines">{cart.map((item) => { const line = pricing.lines.find((entry) => entry.id === item.id); return <div className="cart-line" key={item.id}><ProductArt name={item.name} category={item.category} /><div><h3>{item.name}</h3><p>{[item.colour, item.size, `SKU: ${item.id}`].filter(Boolean).join(" · ")}</p>{item.randomColours && <p className="colour-note">Random colours unless you indicate a choice in notes.</p>}<p>{money.format(item.price)}</p><div className="stepper"><button aria-label={`Decrease ${item.name} quantity`} onClick={() => updateQuantity(item.id, item.quantity - 1)}>−</button><input type="number" min="1" max={item.stock} aria-label={`Quantity of ${item.name}`} value={item.quantity} onChange={(event) => updateQuantity(item.id, Math.max(1, Number(event.target.value) || 1))} /><button aria-label={`Increase ${item.name} quantity`} onClick={() => updateQuantity(item.id, item.quantity + 1)} disabled={item.quantity >= item.stock}>+</button></div><button type="button" className="cart-remove-line" onClick={() => updateQuantity(item.id, 0)} aria-label={`Remove ${item.name} from cart`}>Remove item</button></div><div className="cart-line-total">{line?.rule && line.ruleDiscountCents > 0 && <span className="cart-line-discount">−{line.rule.discountType === "PERCENT" ? `${line.rule.value}%` : money.format(line.ruleDiscountCents / 100)}</span>}<b>{money.format(line?.lineTotal || 0)}</b></div></div>; })}</div>
+          {quantityDiscountApplied && <p className="discount-applied" role="status">5% quantity discount applied to eligible products</p>}
+          <div className="cart-total"><span>Subtotal</span><strong>{money.format(subtotal)}</strong></div>{discount > 0 && <div className="cart-total discount-total"><span>Discount</span><strong>−{money.format(discount)}</strong></div>}<div className="cart-total grand-total"><span>Total</span><strong>{money.format(total)}</strong></div>
+          <button type="button" className="button secondary full" onClick={closeCart}>Continue browsing</button>
+          {!checkout ? <button className="button accent full" onClick={() => setCheckout(true)}>Proceed to checkout</button> : <form className="checkout-form" onSubmit={placeOrder}><label>Full name<input required value={order.customer} onChange={(e) => setOrder({ ...order, customer: e.target.value })} /></label><label>Mobile number<input required type="tel" value={order.phone} onChange={(e) => setOrder({ ...order, phone: e.target.value })} /></label><label>Fulfilment<select value={order.deliveryMethod} onChange={(e) => setOrder({ ...order, deliveryMethod: e.target.value })}><option value="pickup">Pickup</option><option value="delivery-self">Delivery – self initiated</option><option value="delivery-shop">Delivery – arranged by shop</option></select></label>{order.deliveryMethod === "delivery-self" && <p className="pickup-address">Your courier collects from: <b>{storeLocation}</b></p>}{order.deliveryMethod !== "pickup" && <label>Delivery destination or landmark<input required={order.deliveryMethod === "delivery-shop"} value={order.deliveryAddress} onChange={(e) => setOrder({ ...order, deliveryAddress: e.target.value })} /></label>}<label>Order notes (optional)<textarea rows={3} maxLength={1000} placeholder="type specific details or requests here" value={order.notes} onChange={(e) => setOrder({ ...order, notes: e.target.value })} /></label><button className="button secondary full" type="button" disabled title="Payment provider has not been selected yet">Pay now · coming soon</button><button className="button accent full" type="submit" disabled={placingOrder}>{placingOrder ? "Creating order…" : `Pay on pickup/delivery · ${money.format(total)}`}</button><button className="button whatsapp full" type="button" disabled={placingOrder} onClick={orderOnWhatsApp}>Order on WhatsApp</button></form>}
+        </>}
+      </aside></div>}
       {confirmation && <div className="modal-backdrop"><div className="modal"><span className="success-mark">✓</span><h2>Order received</h2><p>Keep this reference for pickup or delivery.</p><strong className="order-reference">{confirmation.orderId}</strong><p>{user && !role ? "Track this order in your account." : "Create a customer account and link this guest order to track it."}</p><a className="button secondary full" href="/account#orders">Track my order</a><button className="button primary full" onClick={() => { setConfirmation(null); setCartOpen(false); }}>Continue shopping</button></div></div>}
       {exitConfirm && <div className="modal-backdrop"><div className="modal" role="dialog" aria-modal="true" aria-label="Exit store confirmation"><h2>Do you want to exit the store?</h2><p>You can continue shopping or return to the previous page.</p><div className="added-actions"><button type="button" className="button secondary" onClick={() => setExitConfirm(false)}>No, continue shopping</button><button type="button" className="button primary" onClick={() => { leavingStore.current = true; setExitConfirm(false); window.history.go(-3); }}>Yes, exit</button></div></div></div>}
-      <a className="whatsapp-fab" href="https://wa.me/233207015198" target="_blank" rel="noreferrer" aria-label="Chat with PAM Essentials on WhatsApp"><WhatsAppIcon size={25} /></a>
+      <a className="whatsapp-fab" href={`https://wa.me/${PRIMARY_WHATSAPP}`} target="_blank" rel="noreferrer" aria-label="Chat with PAM Essentials on WhatsApp"><WhatsAppIcon size={25} /></a>
       {cookieVisible && <div className="cookie-banner"><p><b>Privacy notice</b> We use essential browser storage for your cart, staff sign-in and offline till sync.</p><button className="button accent" onClick={() => { localStorage.setItem("pam-cookie-notice", "accepted"); setCookieVisible(false); }}>Okay</button></div>}
     </div>
   );

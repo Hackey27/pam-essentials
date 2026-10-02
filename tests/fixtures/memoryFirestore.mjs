@@ -37,7 +37,7 @@ export function memoryFirestore(seed) {
       };
     },
     async getAll(...refs) { return Promise.all(refs.map((item) => item.get())); },
-    async runTransaction(work) { return work({ get: (item) => item.get(), update: (item, value) => item.update(value) }); },
+    async runTransaction(work) { return work({ get: (item) => item.get(), getAll: (...items) => Promise.all(items.map((item) => item.get())), create: (item, value) => item.create(value), update: (item, value) => item.update(value) }); },
     inspect(name, id) { return table(name).get(id); },
   };
 }

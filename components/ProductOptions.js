@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import WhatsAppIcon from "@/components/WhatsAppIcon";
+import { PRIMARY_WHATSAPP } from "@/lib/shop";
+import { quantityOfferMessage } from "@/lib/quantityOffer.mjs";
 import { cardImageSource, detailImageSource, getProductImageUrl } from "@/lib/productImages.mjs";
 
 const money = new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS" });
@@ -47,7 +49,7 @@ function ProductPreview({ product, source, onOpenGallery }) {
   </button>;
 }
 
-export default function ProductOptions({ initialProduct, products, onAdd, compact = false, onClose, onSelectionChange, previewSource, onOpenGallery, onNavigateDetail, footer }) {
+export default function ProductOptions({ initialProduct, products, discountRules = [], onAdd, compact = false, onClose, onSelectionChange, previewSource, onOpenGallery, onNavigateDetail, footer }) {
   const [selectedId, setSelectedId] = useState(initialProduct.id);
   const [quantity, setQuantity] = useState(1);
   const selected = products.find((item) => item.id === selectedId) || initialProduct;
@@ -81,9 +83,10 @@ export default function ProductOptions({ initialProduct, products, onAdd, compac
         {colours.length > 0 && <fieldset><legend>Other colours for this size</legend><div className="variant-choice-list">{colours.map((colour) => { const item = variants.find((entry) => entry.size === selected.size && entry.colour === colour); return <button type="button" key={colour} className={item?.id === selected.id ? "variant-choice selected" : "variant-choice"} disabled={!item || item.stock <= 0} title={item?.stock > 0 ? "" : "Out of Stock"} onClick={() => chooseColour(colour)}>{colour}{item?.stock <= 0 && <small>Out of Stock</small>}</button>; })}</div></fieldset>}
         {sizes.length > 0 && <fieldset><legend>Other sizes for this product</legend><div className="variant-choice-list">{sizes.map((size) => { const inStock = variants.some((item) => item.size === size && item.stock > 0); return <button type="button" key={size} className={size === selected.size ? "variant-choice selected" : "variant-choice"} disabled={!inStock} title={inStock ? "Available colours for this size" : "Out of Stock"} onClick={() => chooseSize(size)}>{size}{!inStock && <small>Out of Stock</small>}</button>; })}</div><small>Choose a size to see available colours for this size.</small></fieldset>}
       </div>}
-      <label className="quantity-control">Quantity <span className="stepper"><button type="button" onClick={() => setQuantity(Math.max(1, quantity - 1))} aria-label="Decrease quantity">−</button><span>{quantity}</span><button type="button" onClick={() => setQuantity(Math.min(selected.stock, quantity + 1))} aria-label="Increase quantity" disabled={quantity >= selected.stock}>+</button></span></label>
+      <label className="quantity-control">Quantity <span className="stepper"><button type="button" onClick={() => setQuantity(Math.max(1, quantity - 1))} aria-label="Decrease quantity">−</button><input type="number" min="1" max={selected.stock} value={quantity} onChange={(event) => setQuantity(Math.max(1, Math.min(selected.stock, Number(event.target.value) || 1)))} aria-label={`Quantity of ${selected.name}`} /><button type="button" onClick={() => setQuantity(Math.min(selected.stock, quantity + 1))} aria-label="Increase quantity" disabled={quantity >= selected.stock}>+</button></span></label>
+      {quantityOfferMessage(selected, quantity, discountRules) && <p className="quantity-offer-note">{quantityOfferMessage(selected, quantity, discountRules)}</p>}
       <button type="button" className="button primary full" disabled={selected.stock <= 0} onClick={() => onAdd(selected, quantity)}>{selected.stock > 0 ? "Add to cart" : "Out of Stock"}</button>
-      {selected.stock <= 0 ? <a className="button secondary full" target="_blank" rel="noreferrer" href={`https://wa.me/233207015198?text=${encodeURIComponent(`Please notify me when ${selected.name} (${selected.id}) is available.`)}`}>Notify me when available</a> : <a className="button whatsapp full" target="_blank" rel="noreferrer" href={`https://wa.me/233207015198?text=${encodeURIComponent(whatsappText)}`}><WhatsAppIcon size={18} /> Order via WhatsApp</a>}
+      {selected.stock <= 0 ? <a className="button secondary full" target="_blank" rel="noreferrer" href={`https://wa.me/${PRIMARY_WHATSAPP}?text=${encodeURIComponent(`Please notify me when ${selected.name} (${selected.id}) is available.`)}`}>Notify me when available</a> : <a className="button whatsapp full" target="_blank" rel="noreferrer" href={`https://wa.me/${PRIMARY_WHATSAPP}?text=${encodeURIComponent(whatsappText)}`}><WhatsAppIcon size={18} /> Order via WhatsApp</a>}
       {compact && <a href={`/products/${encodeURIComponent(selected.id)}?quick=${encodeURIComponent(initialProduct.id)}`} className="detail-link" onClick={onNavigateDetail}>View full product details →</a>}
       {footer}
     </div>

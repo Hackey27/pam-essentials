@@ -6,10 +6,13 @@ import ProductOptions, { ProductImage, productVariants } from "@/components/Prod
 import { addToCart, readCart, saveCart } from "@/lib/storeCart";
 import { detailImageSource, galleryImagePaths, getProductImageUrl } from "@/lib/productImages.mjs";
 import BrandLogo from "@/components/BrandLogo";
+import { readCompare, toggleCompare } from "@/lib/compare.mjs";
 
 export default function ProductPage() {
   const { id } = useParams();
   const [products, setProducts] = useState([]);
+  const [discountRules, setDiscountRules] = useState([]);
+  const [compareNotice, setCompareNotice] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [added, setAdded] = useState(null);
@@ -48,6 +51,7 @@ export default function ProductPage() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "The product is unavailable.");
       setProducts(data.products || []);
+      setDiscountRules(data.discountRules || []);
       if (data.publicLaunch === true) {
         const productId = String(id);
         const seenKey = `pam-click-${productId}`;
@@ -107,6 +111,12 @@ export default function ProductPage() {
     await navigator.clipboard.writeText(url);
     setShared(true);
   }
+  function compareProduct() {
+    const current = readCompare(localStorage);
+    if (current.length >= 4 && !current.includes(selected.id)) { setCompareNotice("You can compare up to four products. Remove one first."); return; }
+    const next = toggleCompare(localStorage, selected.id);
+    setCompareNotice(next.includes(selected.id) ? "Product added to comparison." : "Product removed from comparison.");
+  }
   return <div className="product-page store-shell">
     <header className="product-page-header"><a className="brand" href="/" aria-label="PAM Essentials home"><BrandLogo /></a><a href={cartUrl} onClick={rememberCartPosition}>View cart</a></header>
     <main className="product-page-main">
@@ -116,7 +126,7 @@ export default function ProductPage() {
       {product && <>
         <nav className="breadcrumb"><a href="/">Home</a> / {product.category} / {product.name}</nav>
         <div className="product-detail-hero">
-          <ProductOptions key={product.id} initialProduct={product} products={variants} onAdd={add} onSelectionChange={(variant) => { setSelectedVariant(variant); setPreviewSource(null); }} previewSource={previewSource} onOpenGallery={() => setLightboxIndex(Math.max(0, gallery.findIndex((image) => image.source.url === (previewSource || detailImageSource(product, selected)).url)))} footer={<div className="product-utilities"><button type="button" onClick={share} aria-label="Share product"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V3m0 0L7 8m5-5 5 5M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/></svg>Share</button>{shared && <span>Link copied</span>}<a href={`/account?wishlist=${encodeURIComponent(product.id)}`} aria-label="Add to wishlist"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.8 8.5c0 4.2-8.8 10.1-8.8 10.1S3.2 12.7 3.2 8.5a4.4 4.4 0 0 1 8.8-.5 4.4 4.4 0 0 1 8.8.5Z"/></svg>Add to wishlist</a><button type="button" disabled title="Product comparison is coming soon" aria-label="Compare products"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h15m0 0-3-3m3 3-3 3M20 17H5m0 0 3-3m-3 3 3 3"/></svg>Compare</button></div>} />
+          <ProductOptions key={product.id} initialProduct={product} products={variants} discountRules={discountRules} onAdd={add} onSelectionChange={(variant) => { setSelectedVariant(variant); setPreviewSource(null); }} previewSource={previewSource} onOpenGallery={() => setLightboxIndex(Math.max(0, gallery.findIndex((image) => image.source.url === (previewSource || detailImageSource(product, selected)).url)))} footer={<div className="product-utilities"><button type="button" onClick={share} aria-label="Share product"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V3m0 0L7 8m5-5 5 5M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/></svg>Share</button>{shared && <span>Link copied</span>}<a href={`/account?wishlist=${encodeURIComponent(product.id)}`} aria-label="Add to wishlist"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.8 8.5c0 4.2-8.8 10.1-8.8 10.1S3.2 12.7 3.2 8.5a4.4 4.4 0 0 1 8.8-.5 4.4 4.4 0 0 1 8.8-.5Z"/></svg>Add to wishlist</a><button type="button" onClick={compareProduct} aria-label="Compare products"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h15m0 0-3-3m3 3-3 3M20 17H5m0 0 3-3m-3 3 3 3"/></svg>Compare</button>{compareNotice && <span role="status">{compareNotice}</span>}</div>} />
           {gallery.length > 0 && <section className="product-gallery"><h2>Explore the details</h2><div className="product-gallery-grid">{gallery.map((item, index) => <button type="button" className={(previewSource || detailImageSource(product, selected)).url === item.source.url ? "selected" : ""} key={`${item.source.url}-${index}`} onClick={() => { setPreviewSource(item.source); setLightboxIndex(index); }} aria-label={`View ${item.label} full screen`}><ProductImage product={selected} source={item.source} width={240} /><span>{item.label}</span></button>)}</div></section>}
           <div className="detail-section">
             <section className="detail-info-card"><h2>Description</h2><p>{product.description || product.name}</p></section>
