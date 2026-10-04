@@ -2,6 +2,7 @@ import "@fontsource-variable/comfortaa";
 import "@fontsource-variable/nunito-sans";
 import "./globals.css";
 import { AuthProvider } from "@/components/AuthProvider";
+import FooterReturn from "@/components/FooterReturn";
 
 export const metadata = {
   title: "PAM Essentials",
@@ -13,7 +14,7 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body>
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider><FooterReturn />{children}</AuthProvider>
       </body>
     </html>
   );
