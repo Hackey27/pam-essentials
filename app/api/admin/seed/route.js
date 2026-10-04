@@ -34,6 +34,14 @@ export async function POST(request) {
         sizeVariantColorProductId: product.sizeVariantColorProductId,
         keywords: product.keywords,
       };
+      // Admin-managed combinations are authoritative after the initial import.
+      if (current.variantManaged === true) {
+        delete details.productGroupId;
+        delete details.colour;
+        delete details.size;
+        delete details.colorVariantSizeProductId;
+        delete details.sizeVariantColorProductId;
+      }
       if (product.description && !current.description) details.description = product.description;
       if (Object.entries(details).every(([key, value]) => JSON.stringify(current[key] ?? null) === JSON.stringify(value))) continue;
       batch.update(ref, { ...details, updatedAt: FieldValue.serverTimestamp() });

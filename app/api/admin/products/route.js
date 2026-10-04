@@ -4,6 +4,7 @@ import { adminDb, requireRole } from "@/lib/admin";
 import { auditPayload, nullableNumber, text } from "@/lib/serverData";
 import { isProductImagePath, productImageFolder, variantCombinationKey } from "@/lib/productImages.mjs";
 import { allBarcodeCodes, normalizeBarcode, planBarcodes } from "@/lib/barcodes.mjs";
+import { planVariantGroup } from "@/lib/adminVariants.mjs";
 
 export async function POST(request) {
   const access = await requireRole(request, ["owner", "admin"]);
@@ -23,6 +24,10 @@ export async function POST(request) {
   if (!body.create && !existing.exists) return NextResponse.json({ error: "Product not found." }, { status: 404 });
 
   const oldValue = existing.exists ? existing.data() : null;
+  const managingVariants = body.variantEnabled !== undefined;
+  const variantProducts = managingVariants ? (await store.collection("products").get()).docs.map((doc) => ({ ...doc.data(), id: doc.data().id || decodeURIComponent(doc.id) })) : [];
+  const variantPlan = managingVariants ? planVariantGroup(body, { ...(oldValue || { id }), categoryId, subcategoryId: body.subcategoryId ?? oldValue?.subcategoryId ?? "", subSubcategoryId: body.subSubcategoryId ?? oldValue?.subSubcategoryId ?? "" }, variantProducts.map((item) => item.id === id ? { ...item, categoryId, subcategoryId: body.subcategoryId ?? item.subcategoryId ?? "", subSubcategoryId: body.subSubcategoryId ?? item.subSubcategoryId ?? "" } : item)) : null;
+  if (variantPlan?.error) return NextResponse.json({ error: variantPlan.error }, { status: 400 });
   const groupId = oldValue?.productGroupId || "";
   const groupSnapshot = groupId ? await store.collection("products").where("productGroupId", "==", groupId).get() : { docs: [] };
   const groupDocs = groupSnapshot.docs;
@@ -110,11 +115,25 @@ export async function POST(request) {
   };
 
   const batch = store.batch();
+  if (variantPlan) {
+    product.variantManaged = true;
+    product.variantEnabled = variantPlan.enabled;
+    product.productGroupId = variantPlan.groupId;
+    product.variantTitles = variantPlan.titles || [];
+    if (!variantPlan.enabled) product.variantOptions = {};
+    else product.variantOptions = variantPlan.members.find((item) => item.product.id === id)?.options || {};
+  }
   if (existing.exists) batch.update(ref, product);
   else batch.create(ref, { ...product, stock: openingStock, createdAt: FieldValue.serverTimestamp() });
   for (const [index, code] of [...newCodes].entries()) batch.create(barcodeRefs[index], { code, productId: id, sku, archived: false, createdAt: FieldValue.serverTimestamp() });
   for (const code of archiveCodes) batch.set(store.collection("barcode_registry").doc(encodeURIComponent(normalizeBarcode(code))), { code: normalizeBarcode(code), productId: id, sku: oldValue?.sku || id, archived: true, archivedAt: FieldValue.serverTimestamp() }, { merge: true });
   if (groupId && body.variantImages !== undefined) for (const sibling of groupDocs) if (sibling.ref.path !== ref.path) batch.update(sibling.ref, { variantImages, updatedAt: FieldValue.serverTimestamp() });
+  if (variantPlan?.enabled) for (const member of variantPlan.members) if (member.product.id !== id) {
+    batch.update(store.collection("products").doc(encodeURIComponent(member.product.id)), { productGroupId: variantPlan.groupId, variantEnabled: true, variantManaged: true, variantTitles: variantPlan.titles, variantOptions: member.options, updatedAt: FieldValue.serverTimestamp() });
+  }
+  if (variantPlan) for (const member of variantPlan.removed) if (member.id !== id) {
+    batch.update(store.collection("products").doc(encodeURIComponent(member.id)), { productGroupId: "", variantEnabled: false, variantManaged: true, variantTitles: [], variantOptions: {}, updatedAt: FieldValue.serverTimestamp() });
+  }
 
   if (openingStock > 0) {
     const movementRef = store.collection("stock_movements").doc();
