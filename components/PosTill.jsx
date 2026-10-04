@@ -5,6 +5,7 @@ import { cardImageSource } from "@/lib/productImages.mjs";
 import PosQuantityStepper from "@/components/PosQuantityStepper";
 import { activeRule } from "@/lib/discount.mjs";
 import { appliedOfferBadge, appliedOfferLabel } from "@/lib/quantityOffer.mjs";
+import { isPromotion, promotionPrice } from "@/lib/catalogueBrowse.mjs";
 
 const money = new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS" });
 
@@ -98,7 +99,7 @@ export default function PosTill({ shift, role, query, setQuery, barcode, setBarc
       <div className="pos-grid">{visible.map((product) => {
         const out = product.stock <= 0;
         const low = !out && product.stock < Number(product.lowStockLevel ?? 8);
-        return <button key={product.id} className="pos-product" onClick={() => add(product)} disabled={out}><span className="product-monogram">{product.name.slice(0, 2).toUpperCase()}</span><b>{product.name}</b><small>{product.sku || product.id}{[product.colour, product.size].filter(Boolean).length ? ` · ${[product.colour, product.size].filter(Boolean).join(" / ")}` : ""}</small><div><strong>{money.format(product.price)}</strong><span className={out ? "out" : low ? "low" : "healthy"}>{out ? "Out of stock" : low ? `Low stock · ${product.stock} left` : `${product.stock} in stock`}</span></div></button>;
+        return <button key={product.id} className="pos-product" onClick={() => add(product)} disabled={out}>{isPromotion(product, discountRules) && <span className="promo-ribbon">Promo</span>}<span className="product-monogram">{product.name.slice(0, 2).toUpperCase()}</span><b>{product.name}</b><small>{product.sku || product.id}{[product.colour, product.size].filter(Boolean).length ? ` · ${[product.colour, product.size].filter(Boolean).join(" / ")}` : ""}</small><div><strong>{promotionPrice(product, discountRules) != null ? <><del>{money.format(product.price)}</del> {money.format(promotionPrice(product, discountRules))}</> : money.format(product.price)}</strong><span className={out ? "out" : low ? "low" : "healthy"}>{out ? "Out of stock" : low ? `Low stock · ${product.stock} left` : `${product.stock} in stock`}</span></div></button>;
       })}</div>
     </section>
     <aside className={`till-cart ${cartOpen ? "open" : ""} ${checkoutStep ? "checkout-step" : ""}`}><div className="drawer-title"><div><p className="eyebrow">Receipt preview</p><h2>{cart.reduce((sum, item) => sum + item.quantity, 0)} items · {money.format(total)}</h2></div><button type="button" className="pos-cart-toggle" aria-expanded={cartOpen} onClick={() => { setCartOpen((open) => !open); setCheckoutStep(false); }}>{cartOpen ? "Close basket" : "View basket"}</button><button type="button" className="text-button pos-mobile-clear" onClick={clearBasket}>Clear</button></div>

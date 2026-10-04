@@ -5,15 +5,17 @@ import RequireRole from "@/components/RequireRole";
 import { signOut, useAuth } from "@/components/AuthProvider";
 import AdminReceipts from "@/components/AdminReceipts";
 import AdminProductImages from "@/components/AdminProductImages";
-import AdminHeroImages from "@/components/AdminHeroImages";
+import AdminHeroGallery from "@/components/AdminHeroGallery";
+import AdminAnnouncements from "@/components/AdminAnnouncements";
 import AdminLocationSettings from "@/components/AdminLocationSettings";
 import { ruleScopeOptions } from "@/lib/ruleScopeOptions.mjs";
 import BrandLogo from "@/components/BrandLogo";
 import { findDealOverlaps, findRuleOverlaps } from "@/lib/discountOverlap.mjs";
+import { effectiveRuleEnd } from "@/lib/discount.mjs";
 
 const money = new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS" });
 const whole = new Intl.NumberFormat("en-GH");
-const allNav = ["Overview", "Orders", "Products", "Categories", "Inventory", "Discounts", "Promotions", "Staff", "Analytics", "Transactions", "Settings", "Audit"];
+const allNav = ["Overview", "Orders", "Products", "Categories", "Inventory", "Discounts", "Promotions", "Announcements", "Staff", "Analytics", "Transactions", "Settings", "Audit"];
 const supervisorNav = ["Overview", "Orders", "Inventory"];
 const settingKeys = ["STORE_NAME", "STORE_LOCATION", "GOOGLE_MAPS_URL", "OPENING_HOURS", "WHATSAPP_NUMBER", "RECEIPT_FOOTER", "DELIVERY_OPTIONS", "DELIVERY_FEE", "PAM_DEALS_ACTIVE", "HERO_FLYER_URL"];
 const emptyData = { products: [], orders: [], movements: [], categories: [], subcategories: [], subSubcategories: [], discounts: [], dealBundles: [], settings: {}, users: [], audit: [], sales: [], expenses: [], metrics: {}, permissions: {} };
@@ -52,7 +54,7 @@ function CategoryHierarchy({ categories, subcategories, subSubcategories, onEdit
 function RuleSummaryCard({ rule, onOpen }) {
   const now = Date.now();
   const start = rule.startDate ? new Date(rule.startDate).getTime() : 0;
-  const end = rule.endDate ? new Date(rule.endDate).getTime() : Infinity;
+  const end = effectiveRuleEnd(rule.endDate)?.getTime() ?? Infinity;
   const status = rule.archived ? "Archived" : rule.active === false ? "Inactive" : start > now ? "Scheduled" : end < now ? "Expired" : "Active now";
   return <button type="button" className="summary-card" onClick={onOpen} aria-label={`Edit ${rule.name}`}><strong>{rule.name}</strong><span>Discount: {rule.discountType === "PERCENT" ? `${rule.value}%` : money.format(rule.value)}</span><span>Minimum per product: {rule.minQty || 1}</span><span className={status === "Active now" ? "badge success" : "badge danger"}>{status}</span></button>;
 }
@@ -351,7 +353,9 @@ function AdminPortal() {
 
           {section === "Transactions" && <AdminReceipts sales={data.sales} />}
 
-          {section === "Settings" && <AdminHeroImages settings={data.settings} saving={saving} onSave={(payload, message) => mutate("/api/admin/settings", payload, message)} />}
+          {section === "Announcements" && <AdminAnnouncements />}
+
+          {section === "Settings" && <AdminHeroGallery settings={data.settings} saving={saving} onSave={(payload, message) => mutate("/api/admin/settings", payload, message)} />}
           {section === "Settings" && <AdminLocationSettings settings={data.settings} saving={saving} onSave={(payload, message) => mutate("/api/admin/settings", payload, message)} />}
 
           {section === "Settings" && <><div className="panel deals-admin-control"><div><h2>PAM Deals</h2><p>{data.settings.PAM_DEALS_ACTIVE?.value === true ? "Active on the storefront" : "Hidden from the storefront"} · {data.products.filter((product) => (product.collections || []).includes("PAM Deals")).length} products tagged</p><small>Tag selected products in Products and add a targeted discount rule before advertising a percentage.</small></div><button type="button" className={data.settings.PAM_DEALS_ACTIVE?.value === true ? "button secondary" : "button primary"} disabled={saving} onClick={() => mutate("/api/admin/settings", { key: "PAM_DEALS_ACTIVE", value: data.settings.PAM_DEALS_ACTIVE?.value !== true, description: "Show PAM Deals collection on the storefront" }, "PAM Deals visibility updated.")}>{data.settings.PAM_DEALS_ACTIVE?.value === true ? "Deactivate PAM Deals" : "Activate PAM Deals"}</button></div><div className="data-table-wrap"><table className="data-table"><thead><tr><th>Setting</th><th>Value</th><th>Description</th><th>Action</th></tr></thead><tbody>{Object.values(data.settings).map((setting) => <tr key={setting.key}><td><b>{setting.key}</b></td><td>{String(setting.value ?? "")}</td><td>{setting.description || "—"}</td><td><button className="table-action" onClick={() => openEditor("setting", setting)}>Edit</button></td></tr>)}</tbody></table></div><div className="panel"><div className="panel-title"><div><h2>PAM Deals bundles</h2><p>Combine two or more products and set one final selling price.</p></div><button className="button primary" onClick={() => openEditor("dealBundle")}>New bundle</button></div><div className="data-table-wrap"><table className="data-table"><thead><tr><th>Bundle</th><th>Products</th><th>Combined price</th><th>Final price</th><th>Status</th><th>Action</th></tr></thead><tbody>{data.dealBundles.length ? data.dealBundles.map((deal) => <tr key={deal.dealId}><td><b>{deal.name}</b><span>{deal.dealId}</span></td><td>{(deal.productIds || []).length}</td><td>{money.format(deal.aggregatePrice || 0)}</td><td>{money.format(deal.finalPrice || 0)}</td><td>{deal.archived ? "Archived" : deal.active !== false ? "Active" : "Inactive"}</td><td><button className="table-action" onClick={() => openEditor("dealBundle", deal)}>Edit</button></td></tr>) : <tr><td colSpan="6" className="empty-cell">No deal bundles configured yet.</td></tr>}</tbody></table></div></div></>}

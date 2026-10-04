@@ -9,7 +9,7 @@ export async function GET(request) {
   if (access.error) return NextResponse.json({ error: access.error }, { status: access.status });
   const snapshot = await adminDb().collection("shifts").where("staffId", "==", access.user.uid).get();
   const shift = snapshot.docs.map((doc) => ({ ...serializeDoc(doc), startedAt: doc.data().startedAt?.toDate?.()?.toISOString?.() || null })).find((item) => item.status === "open") || null;
-  return NextResponse.json({ shift });
+  return NextResponse.json({ shift: shift ? { ...shift, staffName: access.user.displayName } : null });
 }
 
 export async function POST(request) {
@@ -20,12 +20,13 @@ export async function POST(request) {
   if (body.action === "open") {
     const existing = await store.collection("shifts").where("staffId", "==", access.user.uid).get();
     const open = existing.docs.find((doc) => doc.data().status === "open");
-    if (open) return NextResponse.json({ shift: { ...serializeDoc(open), startedAt: open.data().startedAt?.toDate?.()?.toISOString?.() || null }, existing: true });
+    if (open) return NextResponse.json({ shift: { ...serializeDoc(open), staffName: access.user.displayName, startedAt: open.data().startedAt?.toDate?.()?.toISOString?.() || null }, existing: true });
     const shiftId = `SHIFT-${Date.now().toString(36).toUpperCase()}`;
     const value = {
       shiftId,
       staffId: access.user.uid,
       staffEmail: access.user.email,
+      staffName: access.user.displayName,
       deviceId: text(body.deviceId, 120),
       status: "open",
       aggregationVersion: 1,

@@ -4,7 +4,8 @@ import { NextResponse } from "next/server";
 import { adminDb } from "@/lib/admin";
 import { customerIdentity, optionalCustomerIdentity } from "@/lib/customerAuth";
 import { availableForSale, catalogueContext, priceCart } from "@/lib/commerce";
-import { deliveryMethods, SHOP_ADDRESS } from "@/lib/shop";
+import { deliveryMethods } from "@/lib/shop";
+import { CURRENT_SHOP_ADDRESS } from "@/lib/shopAddress.mjs";
 
 export const dynamic = "force-dynamic";
 
@@ -98,7 +99,7 @@ export async function POST(request) {
     total,
     channel: body.channel === "whatsapp" ? "whatsapp" : "website",
     deliveryMethod,
-    originAddress: SHOP_ADDRESS,
+    originAddress: CURRENT_SHOP_ADDRESS,
     deliveryAddress: deliveryMethod === "pickup" ? "" : deliveryAddress,
     landmark: deliveryMethod === "pickup" ? "" : deliveryAddress,
     notes,
@@ -108,6 +109,6 @@ export async function POST(request) {
     createdAt: FieldValue.serverTimestamp(),
   };
   await store.collection("orders").doc(orderId).create(orderSnapshot);
-  return NextResponse.json({ orderId, subtotal: orderSnapshot.subtotal, discount: orderSnapshot.discount, total, items: items.map(({ name, sku, colour, size, quantity, unitPrice, lineTotal }) => ({ name, sku, colour, size, quantity, unitPrice, lineTotal })), deliveryMethod, originAddress: SHOP_ADDRESS, deliveryAddress: orderSnapshot.deliveryAddress, notes });
+  return NextResponse.json({ orderId, subtotal: orderSnapshot.subtotal, discount: orderSnapshot.discount, total, items: items.map(({ name, sku, colour, size, quantity, unitPrice, lineTotal }) => ({ name, sku, colour, size, quantity, unitPrice, lineTotal })), deliveryMethod, originAddress: CURRENT_SHOP_ADDRESS, deliveryAddress: orderSnapshot.deliveryAddress, notes });
 }
 

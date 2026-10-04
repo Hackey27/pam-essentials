@@ -343,7 +343,7 @@ function Till() {
 
   function finalizeOfflineSale() {
     const transactionId = crypto.randomUUID();
-    const localReceipt = offlineSaleReceipt({ transactionId, cart, pricing, shift, staffEmail: user?.email || "", staffName: user?.displayName || "", paymentMethod, amountPaid: tendered, salesChannel: orderChannel, orderReference, customerName, customerPhone });
+    const localReceipt = offlineSaleReceipt({ transactionId, cart, pricing, shift, staffEmail: user?.email || "", staffName: shift?.staffName || user?.displayName || "", paymentMethod, amountPaid: tendered, salesChannel: orderChannel, orderReference, customerName, customerPhone });
     const payload = { transactionId, offlineFinal: true, offlineTotal: total, paymentMethod, transactionVerified, salesChannel: orderChannel, orderReference: orderReference || null, customerName, customerPhone, amountPaid: tendered, shiftId: shift.shiftId, deviceId, items: cart.map(({ id, quantity }) => ({ id, quantity })) };
     const queued = JSON.parse(localStorage.getItem("pam-pos-queue") || "[]");
     const next = [...queued, { payload, receipt: localReceipt, createdAt: localReceipt.createdAt }];

@@ -5,15 +5,18 @@ import { publicProduct, serializeDoc } from "@/lib/productData";
 import { categoryLabels, effectiveCollections } from "@/lib/categoryHierarchy";
 import { popularityScore } from "@/lib/catalogueBrowse.mjs";
 import { isHeroImagePath } from "@/lib/heroImages.mjs";
+import { heroImageList } from "@/lib/heroGallery.mjs";
 import { isGoogleMapsUrl } from "@/lib/location.mjs";
-import { SHOP_ADDRESS, OPENING_HOURS } from "@/lib/shop";
+import { OPENING_HOURS } from "@/lib/shop";
+import { currentShopAddress } from "@/lib/shopAddress.mjs";
+import { activeAnnouncements } from "@/lib/announcements.mjs";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
     const store = adminDb();
-    const [snapshot, context, flyerSetting, webHeroSetting, mobileHeroSetting, locationSetting, mapsSetting, hoursSetting] = await Promise.all([store.collection("products").get(), catalogueContext(store), store.collection("settings").doc("HERO_FLYER_URL").get(), store.collection("settings").doc("HERO_WEB_IMAGE_PATH").get(), store.collection("settings").doc("HERO_MOBILE_IMAGE_PATH").get(), store.collection("settings").doc("STORE_LOCATION").get(), store.collection("settings").doc("GOOGLE_MAPS_URL").get(), store.collection("settings").doc("OPENING_HOURS").get()]);
+    const [snapshot, context, flyerSetting, webHeroSetting, mobileHeroSetting, locationSetting, mapsSetting, hoursSetting, announcementSnap, webGallerySetting, mobileGallerySetting] = await Promise.all([store.collection("products").get(), catalogueContext(store), store.collection("settings").doc("HERO_FLYER_URL").get(), store.collection("settings").doc("HERO_WEB_IMAGE_PATH").get(), store.collection("settings").doc("HERO_MOBILE_IMAGE_PATH").get(), store.collection("settings").doc("STORE_LOCATION").get(), store.collection("settings").doc("GOOGLE_MAPS_URL").get(), store.collection("settings").doc("OPENING_HOURS").get(), store.collection("announcements").get(), store.collection("settings").doc("HERO_WEB_IMAGES").get(), store.collection("settings").doc("HERO_MOBILE_IMAGES").get()]);
     const dealsActive = context.dealsActive;
     const flyerUrl = flyerSetting.exists ? String(flyerSetting.data().value || "") : "";
     const webHeroPath = isHeroImagePath(webHeroSetting.data()?.value, "web") ? webHeroSetting.data().value : "";
@@ -33,10 +36,11 @@ export async function GET() {
     const productMap = new Map(products.map((product) => [product.id, product]));
     const dealBundles = context.deals.filter((deal) => (deal.productIds || []).length >= 2 && deal.productIds.every((id) => productMap.has(id))).map((deal) => ({ dealId: deal.dealId, name: deal.name, productIds: deal.productIds, finalPrice: Number(deal.finalPrice), aggregatePrice: Math.round(deal.productIds.reduce((sum, id) => sum + productMap.get(id).price, 0) * 100) / 100, available: deal.productIds.every((id) => productMap.get(id).stock > 0) }));
 
-    const storeLocation = String(locationSetting.data()?.value || SHOP_ADDRESS);
+    const storeLocation = currentShopAddress(locationSetting.data()?.value);
     const mapsUrl = isGoogleMapsUrl(mapsSetting.data()?.value) ? String(mapsSetting.data()?.value || "") : "";
     const openingHours = String(hoursSetting.data()?.value || OPENING_HOURS);
-    return NextResponse.json({ products, ...context.activeHierarchy, discountRules: context.rules.map(publicDiscountRule), dealBundles, popularProducts, publicLaunch, dealsActive, flyerUrl, webHeroPath, mobileHeroPath, storeLocation, mapsUrl, openingHours });
+    const heroSettings = { HERO_WEB_IMAGE_PATH: { value: webHeroPath }, HERO_MOBILE_IMAGE_PATH: { value: mobileHeroPath }, ...(webGallerySetting.exists ? { HERO_WEB_IMAGES: webGallerySetting.data() } : {}), ...(mobileGallerySetting.exists ? { HERO_MOBILE_IMAGES: mobileGallerySetting.data() } : {}) };
+    return NextResponse.json({ products, ...context.activeHierarchy, discountRules: context.rules.map(publicDiscountRule), dealBundles, popularProducts, publicLaunch, dealsActive, flyerUrl, webHeroPath, mobileHeroPath, heroWebImages: heroImageList(heroSettings, "web").filter((image) => image.active), heroMobileImages: heroImageList(heroSettings, "mobile").filter((image) => image.active), storeLocation, mapsUrl, openingHours, announcements: activeAnnouncements(announcementSnap.docs.map((doc) => ({ announcementId: doc.id, ...doc.data() }))) });
   } catch (error) {
     console.error("catalog", error);
     return NextResponse.json({ products: [], error: "The catalogue is temporarily unavailable." }, { status: 503 });

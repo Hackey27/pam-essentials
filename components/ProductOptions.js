@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import WhatsAppIcon from "@/components/WhatsAppIcon";
 import { PRIMARY_WHATSAPP } from "@/lib/shop";
 import { quantityOfferMessage } from "@/lib/quantityOffer.mjs";
+import { promotionPrice } from "@/lib/catalogueBrowse.mjs";
+import { priceCart } from "@/lib/cartPricing.mjs";
 import { cardImageSource, detailImageSource, getProductImageUrl } from "@/lib/productImages.mjs";
 
 const money = new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS" });
@@ -69,12 +71,13 @@ export default function ProductOptions({ initialProduct, products, discountRules
     const next = variants.find((item) => item.size === selected.size && item.colour === colour && item.stock > 0);
     if (next) { setSelectedId(next.id); setQuantity(1); }
   };
-  const whatsappText = `Hello PAM Essentials & More 👋\n\nI'd like to order:\n1. ${selected.name}\n${[selected.colour && `Colour: ${selected.colour}`, selected.size && `Size: ${selected.size}`].filter(Boolean).join("\n")}\nSKU: ${selected.id}\nQty: ${quantity}\nPrice: ${money.format(selected.price)}\nTotal: ${money.format(selected.price * quantity)}\n\nName:\nPhone:\nDelivery/Pickup:\n${selected.randomColours ? "Preferred colour/notes:" : "Notes:"}`;
+  const optionPricing = priceCart([{ ...selected, quantity }], discountRules);
+  const whatsappText = `Hello PAM Essentials & More 👋\n\nI'd like to order:\n1. ${selected.name}\n${[selected.colour && `Colour: ${selected.colour}`, selected.size && `Size: ${selected.size}`].filter(Boolean).join("\n")}\nSKU: ${selected.id}\nQty: ${quantity}\nPrice: ${money.format(selected.price)}\nSubtotal: ${money.format(optionPricing.subtotal)}\n${optionPricing.discount > 0 ? `Discount: ${money.format(optionPricing.discount)}\n` : ""}Total: ${money.format(optionPricing.total)}\n\nName:\nPhone:\nDelivery/Pickup:\n${selected.randomColours ? "Preferred colour/notes:" : "Notes:"}`;
   return <div className={`product-options ${compact ? "compact" : ""}`}>
     <ProductPreview product={selected} source={displayedSource} onOpenGallery={onOpenGallery} />
     <div className="product-option-body">
       <div className="product-option-top">{compact && <button type="button" className="icon-button" onClick={onClose} aria-label="Close Quick View">×</button>}</div>
-      <h2>{selected.name}</h2><p className="detail-price">{money.format(selected.price)}</p>
+      <h2>{selected.name}</h2><p className="detail-price">{promotionPrice(selected, discountRules) != null ? <><del>{money.format(selected.price)}</del> <strong>{money.format(promotionPrice(selected, discountRules))}</strong></> : money.format(selected.price)}</p>
       <p className={selected.stock <= 0 ? "stock-label out" : selected.stock < Number(selected.lowStockLevel ?? 8) ? "stock-label low" : "stock-label"}>{selected.stock > 0 ? `✓ In stock${selected.stock < Number(selected.lowStockLevel ?? 8) ? " · Low stock" : ""}` : "Out of Stock"}</p>
       <p className="sku">SKU: {selected.id}</p>
       {selected.randomColours && <p className="colour-note">Random colours unless you indicate a choice in checkout notes.</p>}

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { adminDb, requireRole } from "@/lib/admin";
 import { serializeDoc } from "@/lib/productData";
 import { categoryLabels, loadHierarchy } from "@/lib/categoryHierarchy";
+import { currentShopAddress } from "@/lib/shopAddress.mjs";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +33,7 @@ export async function GET(request) {
   const { categories, subcategories, subSubcategories } = hierarchy;
   const discounts = discountsSnap.docs.map(serializeDoc).map((rule) => ({ ...rule, startDate: rule.startDate?.toDate?.()?.toISOString?.() || rule.startDate || null, endDate: rule.endDate?.toDate?.()?.toISOString?.() || rule.endDate || null })).sort((a, b) => Number(b.priority || 0) - Number(a.priority || 0));
   const settings = Object.fromEntries(settingsSnap.docs.map((doc) => [doc.id, serializeDoc(doc)]));
+  if (settings.STORE_LOCATION) settings.STORE_LOCATION.value = currentShopAddress(settings.STORE_LOCATION.value);
   const users = usersSnap.docs.map(serializeDoc).map(({ email = "", displayName = "", role = "", active = true, id }) => ({ id, email, displayName, role, active }));
   const audit = auditSnap.docs.map(serializeDoc);
   const sales = salesSnap.docs.map(serializeDoc);

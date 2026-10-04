@@ -1,14 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { OPENING_HOURS, SHOP_ADDRESS } from "@/lib/shop";
+import { OPENING_HOURS } from "@/lib/shop";
+import { CURRENT_SHOP_ADDRESS } from "@/lib/shopAddress.mjs";
 
 export default function AdminLocationSettings({ settings, onSave, saving }) {
-  const [address, setAddress] = useState(SHOP_ADDRESS);
+  const [address, setAddress] = useState(CURRENT_SHOP_ADDRESS);
   const [mapsUrl, setMapsUrl] = useState("");
   const [hours, setHours] = useState(OPENING_HOURS);
   useEffect(() => {
-    setAddress(String(settings.STORE_LOCATION?.value || SHOP_ADDRESS));
+    setAddress(String(settings.STORE_LOCATION?.value || CURRENT_SHOP_ADDRESS));
     setMapsUrl(String(settings.GOOGLE_MAPS_URL?.value || ""));
     setHours(String(settings.OPENING_HOURS?.value || OPENING_HOURS));
   }, [settings]);

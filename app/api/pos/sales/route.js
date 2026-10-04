@@ -2,7 +2,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { NextResponse } from "next/server";
 import { adminDb, requireRole } from "@/lib/admin";
 import { availableForSale, catalogueContext, priceCart } from "@/lib/commerce";
-import { SHOP_ADDRESS } from "@/lib/shop";
+import { CURRENT_SHOP_ADDRESS } from "@/lib/shopAddress.mjs";
 import { receiptSnapshot } from "@/lib/receiptData.mjs";
 import { offlineReceiptId } from "@/lib/offlineSale.mjs";
 
@@ -147,7 +147,7 @@ export async function POST(request) {
         orderReference,
         customerName,
         customerPhone,
-        fulfilmentSnapshot: { deliveryMethod: linkedOrder?.deliveryMethod || "pickup", originAddress: linkedOrder?.originAddress || SHOP_ADDRESS, deliveryAddress: linkedOrder?.deliveryAddress || linkedOrder?.landmark || "" },
+        fulfilmentSnapshot: { deliveryMethod: linkedOrder?.deliveryMethod || "pickup", originAddress: linkedOrder?.originAddress || CURRENT_SHOP_ADDRESS, deliveryAddress: linkedOrder?.deliveryAddress || linkedOrder?.landmark || "" },
         taxSnapshot: { enabled: false },
         staffId: access.user.uid,
         staffName: access.user.displayName,

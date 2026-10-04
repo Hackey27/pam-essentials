@@ -2,11 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { priceCart } from "@/lib/commerce";
-import { curatedSearches, hasCollection, inCollection, isBestSeller, isNewArrival, isOnSale, isPromotion, matchesSearch } from "@/lib/catalogueBrowse.mjs";
+import { curatedSearches, hasCollection, inCollection, isBestSeller, isNewArrival, isOnSale, isPromotion, matchesSearch, promotionPrice } from "@/lib/catalogueBrowse.mjs";
 import ProductOptions, { ProductImage } from "@/components/ProductOptions";
 import { addToCart, readCart, saveCart } from "@/lib/storeCart";
 import { useAuth } from "@/components/AuthProvider";
-import { SHOP_ADDRESS, PRIMARY_WHATSAPP, PRIMARY_PHONE_LABEL, SECONDARY_PHONE_LABEL, OPENING_HOURS } from "@/lib/shop";
+import { PRIMARY_WHATSAPP, PRIMARY_PHONE_LABEL, SECONDARY_PHONE_LABEL, OPENING_HOURS } from "@/lib/shop";
+import { CURRENT_SHOP_ADDRESS } from "@/lib/shopAddress.mjs";
 import { whatsappOrderMessage } from "@/lib/whatsappOrder.mjs";
 import WhatsAppIcon from "@/components/WhatsAppIcon";
 import { getHeroImageUrl } from "@/lib/heroImages.mjs";
@@ -20,6 +21,10 @@ const money = new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS
 function ProductArt({ name, category }) {
   const initials = name.split(" ").slice(0, 2).map((word) => word[0]).join("");
   return <div className="product-art" aria-label={`${name} image placeholder`}><span>{initials}</span><small>{category}</small></div>;
+}
+
+function Dropdown({ label, children, active = false, utility = false }) {
+  return <details className={`${utility ? "utility-dropdown" : "nav-dropdown"}${active ? " active" : ""}`}><summary>{label}<span aria-hidden="true">▾</span></summary><div className="dropdown-menu" onClick={(event) => { if (event.target.closest("a,button")) event.currentTarget.parentElement.open = false; }}>{children}</div></details>;
 }
 
 export default function Storefront() {
@@ -42,7 +47,10 @@ export default function Storefront() {
   const [flyerUrl, setFlyerUrl] = useState("");
   const [webHeroPath, setWebHeroPath] = useState("");
   const [mobileHeroPath, setMobileHeroPath] = useState("");
-  const [storeLocation, setStoreLocation] = useState(SHOP_ADDRESS);
+  const [heroWebImages, setHeroWebImages] = useState([]);
+  const [heroMobileImages, setHeroMobileImages] = useState([]);
+  const [heroIndex, setHeroIndex] = useState(0);
+  const [storeLocation, setStoreLocation] = useState(CURRENT_SHOP_ADDRESS);
   const [mapsUrl, setMapsUrl] = useState("");
   const [openingHours, setOpeningHours] = useState(OPENING_HOURS);
   const [discountRules, setDiscountRules] = useState([]);
@@ -66,6 +74,10 @@ export default function Storefront() {
   const [addedProduct, setAddedProduct] = useState(null);
   const [cartOpen, setCartOpen] = useState(false);
   const [servicesOpen, setServicesOpen] = useState(false);
+  const [announcements, setAnnouncements] = useState([]);
+  const [announcementOpen, setAnnouncementOpen] = useState(false);
+  const [announcementOptOut, setAnnouncementOptOut] = useState(false);
+  const announcementOptOutRef = useRef(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [checkout, setCheckout] = useState(false);
@@ -82,14 +94,14 @@ export default function Storefront() {
   const previousLayer = useRef("");
   const closingOverlay = useRef(false);
   const leavingStore = useRef(false);
-  const activeLayer = exitConfirm ? "exit" : confirmation ? "confirmation" : addedProduct ? "added" : quickProduct ? "quick" : cartOpen ? "cart" : mobileFiltersOpen ? "filters" : servicesOpen ? "services" : "";
+  const activeLayer = exitConfirm ? "exit" : confirmation ? "confirmation" : addedProduct ? "added" : quickProduct ? "quick" : cartOpen ? "cart" : mobileFiltersOpen ? "filters" : servicesOpen ? "services" : announcementOpen ? "announcement" : "";
   const activeLayerRef = useRef("");
   activeLayerRef.current = activeLayer;
 
   useEffect(() => {
     try {
       const saved = JSON.parse(sessionStorage.getItem("pam-listing-return") || "null");
-      if (!saved || saved.path !== window.location.pathname + window.location.search || Date.now() - saved.at > 15 * 60 * 1000) return;
+      if (!saved || saved.path !== window.location.pathname + window.location.search || Date.now() - saved.at > 15 * 60 * 1000) { if (window.matchMedia("(max-width: 767px)").matches) setPageSize(30); return; }
       listingRestore.current = saved;
       setQuery(saved.query || ""); setCategory(saved.category || "All categories");
       setSelectedSubcategories(saved.subcategories || []); setSelectedSubSubcategories(saved.subSubcategories || []);
@@ -97,17 +109,18 @@ export default function Storefront() {
       setBrowseMode(saved.browseMode || "products"); setSort(saved.sort || "categories");
       setPageSize(saved.pageSize || 100); setPriceMin(saved.priceMin || ""); setPriceMax(saved.priceMax || "");
       sessionStorage.removeItem("pam-listing-return");
-    } catch { sessionStorage.removeItem("pam-listing-return"); }
+    } catch { sessionStorage.removeItem("pam-listing-return"); if (window.matchMedia("(max-width: 767px)").matches) setPageSize(30); }
   }, []);
 
   useEffect(() => {
     fetch("/api/catalog/products")
-      .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error); setProducts(data.products || []); setCategoryList(data.categories || []); setSubcategoryList(data.subcategories || []); setSubSubcategoryList(data.subSubcategories || []); setDiscountRules(data.discountRules || []); setDealBundles(data.dealBundles || []); setPopularProducts(data.popularProducts || []); setPublicLaunch(data.publicLaunch === true); setDealsActive(data.dealsActive === true); setFlyerUrl(data.flyerUrl || ""); setWebHeroPath(data.webHeroPath || ""); setMobileHeroPath(data.mobileHeroPath || ""); setStoreLocation(data.storeLocation || SHOP_ADDRESS); setMapsUrl(data.mapsUrl || ""); setOpeningHours(data.openingHours || OPENING_HOURS); const params = new URLSearchParams(window.location.search); const mode = params.get("browse"); if (["new", "promotions"].includes(mode) || mode === "deals" && data.dealsActive === true) { setBrowseMode(mode); setSort(mode === "new" ? "latest" : mode === "deals" ? "price-low" : "promotions"); } const quickId = params.get("quick"); if (quickId) setQuickProduct((data.products || []).find((item) => item.id === quickId) || null); const current = readCart(); const refreshed = current.map((line) => { const product = (data.products || []).find((item) => item.id === line.id); return product && product.stock > 0 ? { ...product, quantity: Math.min(Number(line.quantity), Number(product.stock)) } : null; }).filter(Boolean); saveCart(refreshed); setCart(refreshed); })
+      .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error); setProducts(data.products || []); setCategoryList(data.categories || []); setSubcategoryList(data.subcategories || []); setSubSubcategoryList(data.subSubcategories || []); setDiscountRules(data.discountRules || []); setDealBundles(data.dealBundles || []); setPopularProducts(data.popularProducts || []); setPublicLaunch(data.publicLaunch === true); setDealsActive(data.dealsActive === true); setFlyerUrl(data.flyerUrl || ""); setWebHeroPath(data.webHeroPath || ""); setMobileHeroPath(data.mobileHeroPath || ""); setHeroWebImages(data.heroWebImages || []); setHeroMobileImages(data.heroMobileImages || []); setStoreLocation(data.storeLocation || CURRENT_SHOP_ADDRESS); setMapsUrl(data.mapsUrl || ""); setOpeningHours(data.openingHours || OPENING_HOURS); setAnnouncements(data.announcements || []); if ((data.announcements || []).length && localStorage.getItem("pam-announcements-off") !== "1" && sessionStorage.getItem("pam-announcements-seen") !== "1") setAnnouncementOpen(true); const params = new URLSearchParams(window.location.search); const mode = params.get("browse"); if (["new", "promotions"].includes(mode) || mode === "deals" && data.dealsActive === true) { setBrowseMode(mode); setSort(mode === "new" ? "latest" : mode === "deals" ? "price-low" : "promotions"); } const quickId = params.get("quick"); if (quickId) setQuickProduct((data.products || []).find((item) => item.id === quickId) || null); const current = readCart(); const refreshed = current.map((line) => { const product = (data.products || []).find((item) => item.id === line.id); return product && product.stock > 0 ? { ...product, quantity: Math.min(Number(line.quantity), Number(product.stock)) } : null; }).filter(Boolean); saveCart(refreshed); setCart(refreshed); })
       .catch((err) => setError(err.message || "The catalogue is unavailable."))
       .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => { setCookieVisible(localStorage.getItem("pam-cookie-notice") !== "accepted"); }, []);
+  useEffect(() => { if (Math.max(heroWebImages.length, heroMobileImages.length) < 2) return; const timer = setInterval(() => setHeroIndex((index) => index + 1), 6000); return () => clearInterval(timer); }, [heroWebImages.length, heroMobileImages.length]);
   useEffect(() => { setCompareIds(readCompare(localStorage)); }, []);
   useEffect(() => {
     if (!user || role) { setWishlistIds([]); return; }
@@ -161,6 +174,7 @@ export default function Storefront() {
         else if (layer === "quick") setQuickProduct(null);
         else if (layer === "filters") setMobileFiltersOpen(false);
         else if (layer === "services") setServicesOpen(false);
+        else if (layer === "announcement") dismissAnnouncement();
         return;
       }
       if (window.scrollY > 110) window.scrollTo({ top: 0, behavior: "smooth" });
@@ -179,6 +193,11 @@ export default function Storefront() {
     else if (!activeLayer && previous && window.history.state?.pamStoreOverlay) { closingOverlay.current = true; window.history.back(); }
     previousLayer.current = activeLayer;
   }, [activeLayer]);
+
+  function dismissAnnouncement() {
+    try { sessionStorage.setItem("pam-announcements-seen", "1"); if (announcementOptOutRef.current) localStorage.setItem("pam-announcements-off", "1"); } catch {}
+    setAnnouncementOpen(false);
+  }
 
   const categories = useMemo(() => {
     const ordered = categoryList.map((item) => item.name);
@@ -231,8 +250,8 @@ export default function Storefront() {
   const addedCartLine = addedProduct && cart.find((item) => item.id === addedProduct.id);
   const pricing = priceCart(cart, discountRules, dealBundles);
   const { subtotal, discount, total } = pricing;
-  const webHeroUrl = getHeroImageUrl(webHeroPath, 2200);
-  const mobileHeroUrl = getHeroImageUrl(mobileHeroPath, 1200) || webHeroUrl;
+  const webHeroUrl = getHeroImageUrl(heroWebImages.length ? heroWebImages[heroIndex % heroWebImages.length].path : webHeroPath, 2200);
+  const mobileHeroUrl = getHeroImageUrl(heroMobileImages.length ? heroMobileImages[heroIndex % heroMobileImages.length].path : mobileHeroPath, 1200) || webHeroUrl;
   const heroBackground = (url) => url ? { backgroundImage: `linear-gradient(#00235b99, #00235b99), url(${JSON.stringify(url)})` } : flyerUrl ? { backgroundImage: `url(${JSON.stringify(flyerUrl)})` } : undefined;
 
   function browse(mode) {
@@ -420,18 +439,18 @@ export default function Storefront() {
 
   return (
     <div className={`store-shell${mobileTabsHidden || mobileFiltersOpen ? " mobile-tabs-hidden" : ""}`}>
-      <div className="utility-bar"><span>Opening hours: {openingHours}</span><div><a href="/info/contact#location">Store Location</a><a href="/info/contact#contact">Contact</a><a href="/account#orders">Track Order</a><a href="/account#wishlist">View Wishlist</a><a href="/account?mode=signin">{user && !role ? "My Account" : "Sign In"}</a>{(!user || role) && <a href="/account?mode=register">Create Account</a>}</div></div>
+      <div className="utility-bar"><span>Opening hours: {openingHours}</span><div><Dropdown label="Store Location" utility><a href="/info/contact#location">Address and opening hours</a>{mapsUrl && <a href={mapsUrl} target="_blank" rel="noreferrer">Open Google Maps</a>}</Dropdown><Dropdown label="Contact Us" utility><a href={`https://wa.me/${PRIMARY_WHATSAPP}`} target="_blank" rel="noreferrer"><WhatsAppIcon size={16} /> WhatsApp us</a><a href="tel:+233596661439">Call {PRIMARY_PHONE_LABEL}</a><a href="/info/contact#contact">All contact details</a></Dropdown><Dropdown label="Track Order" utility><a href="/account#orders">View my orders</a><a href="/account?mode=signin">Sign in to track</a></Dropdown><Dropdown label="Wishlist" utility><a href="/account#wishlist">View wishlist</a><a href="/compare">Compare products</a></Dropdown><Dropdown label={user && !role ? "My Account" : "Sign In"} utility><a href="/account?mode=signin">Sign in</a>{(!user || role) && <a href="/account?mode=register">Create account</a>}</Dropdown></div></div>
       <header className={`store-header${mobileTabsHidden || mobileFiltersOpen ? " mobile-tabs-hidden" : ""}`}>
         <div className="header-main">
           <a className="brand" href="/" aria-label="PAM Essentials home"><BrandLogo background="white" mobileBackground="navy" /></a>
           <nav className="store-nav" aria-label="Primary navigation">
-            <button type="button" className={browseMode === "products" ? "active" : ""} aria-current={browseMode === "products" ? "page" : undefined} onClick={() => browse("products")}>Products</button>
-            <button type="button" onClick={() => setServicesOpen(true)}>Services</button>
-            <button type="button" className={browseMode === "new" ? "active" : ""} aria-current={browseMode === "new" ? "page" : undefined} onClick={() => browse("new")}><span className="nav-full">New Arrivals</span><span className="nav-short">New</span></button>
-            <button type="button" className={browseMode === "promotions" ? "active" : ""} aria-current={browseMode === "promotions" ? "page" : undefined} onClick={() => browse("promotions")}><span className="nav-full">Promotions</span><span className="nav-short">Promos</span></button>
-            {dealsActive && <button type="button" onClick={() => browse("deals")}>Deals</button>}
-            <a href="/info/delivery"><span className="nav-full">Payment &amp; Delivery</span><span className="nav-short">Delivery</span></a>
-            <a className="mobile-extra-nav" href="/info/contact#location">Location</a><a className="mobile-extra-nav" href="/info/contact#contact">Contact</a><a className="mobile-extra-nav" href="/compare">Compare</a><a className="mobile-extra-nav" href="/account#wishlist">Wishlist</a><a className="mobile-extra-nav" href="/account?mode=register">Create account</a>
+            <Dropdown label="Products" active={browseMode === "products"}><button type="button" onClick={() => browse("products")}>All products</button><button type="button" onClick={() => { browse("products"); document.getElementById("catalogue")?.scrollIntoView(); }}>Categories and filters</button></Dropdown>
+            <Dropdown label="Services"><button type="button" onClick={() => setServicesOpen(true)}>All services and contact</button><a href="/services/secretarial">Secretarial services</a><a href="/services/printing">Printing</a><a href="/services/communication">Communication consultancy</a><a href="/services/laptop-repairs">Laptop repairs and purchases</a></Dropdown>
+            <Dropdown label={<><span className="nav-full">New Arrivals</span><span className="nav-short">New</span></>} active={browseMode === "new"}><button type="button" onClick={() => browse("new")}>Shop new arrivals</button></Dropdown>
+            <Dropdown label={<><span className="nav-full">Promotions</span><span className="nav-short">Promos</span></>} active={browseMode === "promotions"}><button type="button" onClick={() => browse("promotions")}>Shop promotions</button></Dropdown>
+            {dealsActive && <Dropdown label="Deals" active={browseMode === "deals"}><button type="button" onClick={() => browse("deals")}>Shop PAM Deals</button></Dropdown>}
+            <Dropdown label={<><span className="nav-full">Payment &amp; Delivery</span><span className="nav-short">Delivery</span></>}><a href="/info/delivery">Payment and delivery information</a><a href="/info/contact#location">Pickup location</a></Dropdown>
+            <div className="mobile-extra-nav"><Dropdown label="Contact"><a href="/info/contact#location">Store location</a><a href={`https://wa.me/${PRIMARY_WHATSAPP}`} target="_blank" rel="noreferrer"><WhatsAppIcon size={16} /> WhatsApp us</a><a href="/info/contact#contact">Contact details</a></Dropdown></div><div className="mobile-extra-nav"><Dropdown label="Account"><a href="/account#orders">Track order</a><a href="/account#wishlist">Wishlist</a><a href="/compare">Compare products</a><a href="/account?mode=signin">Sign in</a><a href="/account?mode=register">Create account</a></Dropdown></div>
           </nav>
           <div className={`header-search${searchOpen && !query.trim() ? " search-active" : ""}`} ref={searchRef}>
             <div className="search-field"><input type="search" aria-label="Search products, categories, or brands" aria-expanded={searchOpen && query.trim().length > 0} aria-controls="search-suggestions" placeholder="Search products, categories, or brands" value={query} onFocus={() => setSearchOpen(true)} onKeyDown={(event) => { if (event.key === "Escape") setSearchOpen(false); if (event.key === "Enter") { event.preventDefault(); submitSearch(); } }} onChange={(event) => { setBrowseMode("products"); setQuery(event.target.value); setSearchOpen(true); }} /><button type="button" aria-label="Show matching products" onClick={submitSearch}>⌕</button></div>
@@ -509,7 +528,7 @@ export default function Storefront() {
               <div className="product-card-tools"><button type="button" data-tooltip="Compare" aria-label={`${compareIds.includes(product.id) ? "Remove" : "Add"} ${product.name} ${compareIds.includes(product.id) ? "from" : "to"} comparison`} aria-pressed={compareIds.includes(product.id)} onClick={() => compareProduct(product)}>⇄</button><button type="button" data-tooltip="Wishlist" aria-label={`Add ${product.name} to wishlist`} aria-pressed={wishlistIds.includes(product.id)} onClick={() => wishlistProduct(product)}>{wishlistIds.includes(product.id) ? "♥" : "♡"}</button></div>
               <div className="product-copy"><div className="product-stock-line"><span className={product.stock > 0 ? "badge success" : "badge danger"}>{product.stock > 0 ? "✓ In stock" : "Out of stock"}</span>{product.stock > 0 && product.stock < Number(product.lowStockLevel ?? 8) && <span className="badge warning">Low stock</span>}</div><div className="product-badges">{isNewArrival(product) && <span className="badge neutral">New</span>}{publicLaunch && isBestSeller(product) && <span className="badge neutral">Best seller</span>}{isOnSale(product, discountRules) && <span className="badge warning">On sale</span>}</div>
               <h3><a href={`/products/${encodeURIComponent(product.id)}`} onClick={rememberListingContext}>{product.name}</a></h3>{product.description && <p className="product-description">{product.description}</p>}{product.randomColours && <p className="colour-note">Random colours unless you indicate a choice in notes.</p>}
-              <p className="price">{money.format(product.price)}</p>{hasVariants && <small>{variants.length} variants available</small>}
+              <p className="price">{promotionPrice(product, discountRules) != null ? <><del>{money.format(product.price)}</del> <strong>{money.format(promotionPrice(product, discountRules))}</strong></> : money.format(product.price)}</p>{hasVariants && <small>{variants.length} variants available</small>}
               <div className="product-card-actions"><button type="button" className="button quick-view-action full" aria-label="Quick view" onClick={() => { recordClick(product); setQuickProduct(product); }}>{hasVariants ? "View options" : "Quick View"}</button>
               {product.stock > 0 && <button type="button" className="button add-cart-action full" aria-label="Add to cart" onClick={() => add(product)}><span className="add-cart-label">Add to cart</span><svg className="add-cart-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M2 3h2l2 11h10l2-7H5"/><circle cx="8" cy="20" r="1"/><circle cx="16" cy="20" r="1"/><path d="M18 4h5M20.5 1.5v5"/></svg></button>}</div>
             </div></article>;
@@ -524,15 +543,16 @@ export default function Storefront() {
           <div className="footer-brand"><BrandLogo background="navy" /><p>School, home, gifts and daily essentials in one simple shop.</p><p className="footer-payment">Secured payment: Online payment is coming soon. Pay on pickup or delivery is available.</p></div>
           <nav aria-label="Shop links"><h2>Shop</h2><a href="/#catalogue">All Products</a><a href="/#catalogue">Categories</a>{dealsActive && <a href="/?browse=deals#catalogue">Deals</a>}<a href="/?browse=new#catalogue">New Arrivals</a></nav>
           <nav aria-label="Customer service links"><h2>Customer Service</h2><a href="/info/contact">Contact Us</a><a href={`https://wa.me/${PRIMARY_WHATSAPP}`} target="_blank" rel="noreferrer">WhatsApp</a><a href="/account#orders">Track My Order</a><a href="/info/delivery">Delivery Information</a><a href="/info/returns">Returns &amp; Exchanges</a><a href="/info/privacy">Privacy Policy</a><a href="/info/faqs">FAQs</a></nav>
-          <div><h2>Contact</h2><p>{storeLocation}</p>{mapsUrl && <a href={mapsUrl} target="_blank" rel="noreferrer">View on Google Maps</a>}<a href="tel:+233596661439">{PRIMARY_PHONE_LABEL}</a><a href="tel:+233207015198">{SECONDARY_PHONE_LABEL}</a></div>
+          <div className="footer-contact"><h2>Contact</h2><p>{storeLocation}</p>{mapsUrl && <a href={mapsUrl} target="_blank" rel="noreferrer">View on Google Maps</a>}<a href="tel:+233596661439">{PRIMARY_PHONE_LABEL}</a><a href="tel:+233207015198">{SECONDARY_PHONE_LABEL}</a></div>
           <nav aria-label="About PAM links"><h2>About PAM</h2><a href="/info/about">About Us</a><a href="/info/story">Our Story</a></nav>
-          <nav aria-label="Social links"><h2>Follow Us</h2><a href="/info/social?platform=Facebook">Facebook</a><a href="/info/social?platform=Instagram">Instagram</a><a href="/info/social?platform=TikTok">TikTok</a></nav>
+          <nav aria-label="Social links"><h2>Follow Us</h2><a href="https://www.facebook.com/share/1HM5dDyhHT/" target="_blank" rel="noreferrer">Facebook</a><a href="/info/social?platform=Instagram">Instagram</a><a href="/info/social?platform=TikTok">TikTok</a></nav>
         </div>
         <p className="footer-bottom">© 2026 PAM Essentials &amp; More</p>
       </footer>
 
       {quickProduct && <div className="modal-backdrop" role="presentation" onMouseDown={() => setQuickProduct(null)}><div className="modal quick-view-modal" role="dialog" aria-modal="true" aria-label={`Quick View ${quickProduct.name}`} onMouseDown={(event) => event.stopPropagation()}><ProductOptions key={quickProduct.id} initialProduct={quickProduct} products={products} discountRules={discountRules} compact onClose={() => setQuickProduct(null)} onAdd={add} onNavigateDetail={rememberListingContext} /></div></div>}
       {saveNotice && <div className="save-toast" role="status"><span>{saveNotice}</span><button type="button" onClick={() => setSaveNotice("")} aria-label="Dismiss notification">×</button></div>}
+      {announcementOpen && <div className="modal-backdrop announcement-backdrop" role="presentation"><div className="modal announcement-modal" role="dialog" aria-modal="true" aria-label="Store announcements"><div className="drawer-title"><div><p className="eyebrow">PAM Essentials &amp; More</p><h2>Announcements</h2></div><button type="button" className="icon-button" onClick={dismissAnnouncement} aria-label="Close announcements">×</button></div><div className="announcement-list">{announcements.map((item) => <article key={item.announcementId} className={item.style === "crawler" ? "announcement-crawler" : "announcement-static"}><h3>{item.title}</h3><div className="announcement-message"><p>{item.body}</p></div>{item.actionLabel && item.actionUrl && <a className="button secondary" href={item.actionUrl} onClick={dismissAnnouncement}>{item.actionLabel}</a>}</article>)}</div><label className="announcement-optout"><input type="checkbox" checked={announcementOptOut} onChange={(event) => { announcementOptOutRef.current = event.target.checked; setAnnouncementOptOut(event.target.checked); }} /> Do not show announcements again</label><button type="button" className="button primary full" onClick={dismissAnnouncement}>Continue to shop</button></div></div>}
       {servicesOpen && <div className="modal-backdrop" role="presentation" onMouseDown={() => setServicesOpen(false)}><div className="modal services-modal" role="dialog" aria-modal="true" aria-label="PAM services" onMouseDown={(event) => event.stopPropagation()}><button className="icon-button services-close" type="button" aria-label="Close services" onClick={() => setServicesOpen(false)}>×</button><p className="eyebrow">PAM Essentials &amp; More</p><h2>Services</h2><ul><li><a href="/services/secretarial">Secretarial services</a></li><li><a href="/services/printing">Printing</a></li><li><a href="/services/communication">Communication consultancy</a></li><li><a href="/services/laptop-repairs">Laptop repairs and purchases</a></li></ul><p>{storeLocation}</p><div className="services-contact"><a className="button primary" href="tel:+233596661439">Call {PRIMARY_PHONE_LABEL}</a><a className="button whatsapp" href={`https://wa.me/${PRIMARY_WHATSAPP}`} target="_blank" rel="noreferrer"><WhatsAppIcon size={18} /> Message us</a></div></div></div>}
       {addedProduct && <div className="modal-backdrop" role="presentation"><div className="modal" role="dialog" aria-modal="true" aria-label="Added to cart"><h2>Added to cart</h2><p>{addedCartLine?.quantity || addedProduct.quantity} × {addedProduct.name}</p><p>SKU: {addedProduct.id}{addedProduct.colour && ` · ${addedProduct.colour}`}{addedProduct.size && ` · ${addedProduct.size}`}</p>{addedCartLine && <><div className="stepper added-quantity"><button type="button" onClick={() => updateQuantity(addedCartLine.id, Math.max(1, addedCartLine.quantity - 1))} aria-label="Decrease quantity">−</button><input type="number" min="1" max={addedCartLine.stock} aria-label={`Quantity of ${addedCartLine.name}`} value={addedCartLine.quantity} onChange={(event) => updateQuantity(addedCartLine.id, Math.max(1, Number(event.target.value) || 1))} /><button type="button" onClick={() => updateQuantity(addedCartLine.id, addedCartLine.quantity + 1)} disabled={addedCartLine.quantity >= addedCartLine.stock} aria-label="Increase quantity">+</button></div>{quantityOfferMessage(addedCartLine, addedCartLine.quantity, discountRules) && <p className="quantity-offer-note">{quantityOfferMessage(addedCartLine, addedCartLine.quantity, discountRules)}</p>}</>}<div className="added-actions"><button className="button secondary" onClick={() => setAddedProduct(null)}>Continue shopping</button><button className="button primary" onClick={() => { setAddedProduct(null); setCartOpen(true); }}>View cart</button></div></div></div>}
 
