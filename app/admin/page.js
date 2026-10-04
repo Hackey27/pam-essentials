@@ -8,6 +8,8 @@ import AdminProductImages from "@/components/AdminProductImages";
 import AdminHeroGallery from "@/components/AdminHeroGallery";
 import AdminAnnouncements from "@/components/AdminAnnouncements";
 import AdminLocationSettings from "@/components/AdminLocationSettings";
+import AdminProductBarcodes from "@/components/AdminProductBarcodes";
+import { activeBarcodes } from "@/lib/barcodes.mjs";
 import { ruleScopeOptions } from "@/lib/ruleScopeOptions.mjs";
 import BrandLogo from "@/components/BrandLogo";
 import { findDealOverlaps, findRuleOverlaps } from "@/lib/discountOverlap.mjs";
@@ -175,7 +177,7 @@ function AdminPortal() {
   function openEditor(type, item = null) {
     setUploadingImages(false);
     const defaults = {
-      product: { create: true, id: "", sku: "", barcode: "", name: "", description: "", categoryId: data.categories[0]?.categoryId || "", subcategoryId: "", subSubcategoryId: "", price: "", costPrice: "", lowStockLevel: "", openingStock: 0, active: true, archived: false, pinned: false, randomColours: false, newArrival: true, collections: [], imageUrl: "" },
+      product: { create: true, id: "", sku: "", barcode: "", barcodeAdditions: "", archiveBarcodes: [], multipleBarcodes: false, name: "", description: "", categoryId: data.categories[0]?.categoryId || "", subcategoryId: "", subSubcategoryId: "", price: "", costPrice: "", lowStockLevel: "", openingStock: 0, active: true, archived: false, pinned: false, randomColours: false, newArrival: true, collections: [], imageUrl: "" },
       category: { create: true, name: "", description: "", sortOrder: Math.max(0, ...data.categories.map((item) => Number(item.sortOrder || 0))) + 1, collections: [], active: true, archived: false },
       subcategory: { create: true, kind: "subcategory", categoryId: data.categories[0]?.categoryId || "", name: "", description: "", sortOrder: data.subcategories.filter((item) => item.categoryId === data.categories[0]?.categoryId).length + 1, collections: [], active: true, archived: false },
       subSubcategory: { create: true, kind: "subSubcategory", categoryId: data.categories[0]?.categoryId || "", subcategoryId: "", name: "", description: "", sortOrder: 1, collections: [], active: true, archived: false },
@@ -186,7 +188,7 @@ function AdminPortal() {
       setting: { create: true, key: settingKeys.find((key) => !data.settings[key]) || "STORE_NAME", value: "", description: "" },
       expense: { amount: "", category: "Operating expense", description: "", paymentMethod: "cash" },
     };
-    setEditor({ type, data: { ...(item ? { ...item, create: false } : defaults[type]), acknowledgeOverlap: false } });
+    setEditor({ type, data: { ...(item ? { ...item, create: false, ...(type === "product" ? { barcodeAdditions: "", archiveBarcodes: [], multipleBarcodes: item.multipleBarcodes === true || activeBarcodes(item).length > 1 } : {}) } : defaults[type]), acknowledgeOverlap: false } });
   }
 
   function updateEditor(key, value) {
@@ -212,7 +214,7 @@ function AdminPortal() {
   }
 
   const products = useMemo(() => data.products.filter((product) => {
-    const matches = `${product.name} ${product.id} ${product.sku || ""} ${product.barcode || ""} ${product.category}`.toLowerCase().includes(query.toLowerCase());
+    const matches = `${product.name} ${product.id} ${product.sku || ""} ${activeBarcodes(product).join(" ")} ${product.category}`.toLowerCase().includes(query.toLowerCase());
     const state = status === "all" || (status === "priced" && Number(product.price) > 0) || (status === "needs-pricing" && !(Number(product.price) > 0)) || (status === "low" && Number(product.stock) <= Number(product.lowStockLevel || 8)) || (status === "archived" && product.archived);
     const category = productCategory === "all" || product.categoryId === productCategory;
     return matches && state && category;
@@ -410,7 +412,7 @@ function EditorFields({ editor, update, data, currentRole, onImageBusyChange }) 
   if (editor.type === "dealBundle") return <DealBundleFields value={value} update={update} products={data.products} />;
   if (editor.type === "product") return <>
     <AdminProductImages value={value} update={update} products={data.products} onBusyChange={onImageBusyChange} />
-    <fieldset><legend>Identity</legend><label>Product ID<input required disabled={!value.create} value={value.id || ""} onChange={(event) => update("id", event.target.value)} /></label><label>Name<input required value={value.name || ""} onChange={(event) => update("name", event.target.value)} /></label><div className="form-grid"><label>SKU<input value={value.sku || ""} onChange={(event) => update("sku", event.target.value)} /></label><label>Barcode<input value={value.barcode || ""} onChange={(event) => update("barcode", event.target.value)} /></label></div><label>Description<textarea value={value.description || ""} onChange={(event) => update("description", event.target.value)} /></label></fieldset>
+    <fieldset><legend>Identity</legend><label>Product ID<input required disabled={!value.create} value={value.id || ""} onChange={(event) => update("id", event.target.value)} /></label><label>Name<input required value={value.name || ""} onChange={(event) => update("name", event.target.value)} /></label><AdminProductBarcodes value={value} update={update} /><label>Description<textarea value={value.description || ""} onChange={(event) => update("description", event.target.value)} /></label></fieldset>
     <fieldset><legend>Pricing · Admin only</legend><div className="form-grid"><label>Selling price<input type="number" min="0" step="0.01" value={value.price ?? ""} onChange={(event) => update("price", event.target.value)} /></label><label>Cost price<input type="number" min="0" step="0.01" value={value.costPrice ?? ""} onChange={(event) => update("costPrice", event.target.value)} /></label></div></fieldset>
     <fieldset><legend>Classification</legend><label>Category<select required value={value.categoryId || ""} onChange={(event) => { update("categoryId", event.target.value); update("subcategoryId", ""); update("subSubcategoryId", ""); }}>{data.categories.map((category) => <option key={category.categoryId} value={category.categoryId}>{category.name}</option>)}</select></label><label>Subcategory<select value={value.subcategoryId || ""} onChange={(event) => { update("subcategoryId", event.target.value); update("subSubcategoryId", ""); }}><option value="">No subcategory</option>{data.subcategories.filter((item) => item.categoryId === value.categoryId && ((item.active !== false && !item.archived) || item.subcategoryId === value.subcategoryId)).map((item) => <option key={item.subcategoryId} value={item.subcategoryId}>{item.name}</option>)}</select></label><label>Sub-subcategory<select value={value.subSubcategoryId || ""} disabled={!value.subcategoryId} onChange={(event) => update("subSubcategoryId", event.target.value)}><option value="">No sub-subcategory</option>{data.subSubcategories.filter((item) => item.subcategoryId === value.subcategoryId && ((item.active !== false && !item.archived) || item.subSubcategoryId === value.subSubcategoryId)).map((item) => <option key={item.subSubcategoryId} value={item.subSubcategoryId}>{item.name}</option>)}</select></label><div className="form-grid"><label>Low-stock level<input type="number" min="0" value={value.lowStockLevel ?? ""} onChange={(event) => update("lowStockLevel", event.target.value)} /></label>{value.create && <label>Opening stock<input type="number" min="0" value={value.openingStock || 0} onChange={(event) => update("openingStock", event.target.value)} /></label>}</div><label>Primary image URL<input type="url" value={value.imageUrl || ""} onChange={(event) => update("imageUrl", event.target.value)} /></label><div className="toggle-row"><label><input type="checkbox" checked={value.pinned || false} onChange={(event) => update("pinned", event.target.checked)} /> Pinned / high-demand</label><label><input type="checkbox" checked={value.newArrival === true} onChange={(event) => update("newArrival", event.target.checked)} /> New arrival</label><label><input type="checkbox" checked={value.randomColours === true} onChange={(event) => update("randomColours", event.target.checked)} /> Random colours (customer may request a choice in notes)</label><label><input type="checkbox" checked={value.active !== false} onChange={(event) => update("active", event.target.checked)} /> Active</label><label><input type="checkbox" checked={value.archived || false} onChange={(event) => update("archived", event.target.checked)} /> Archived</label></div></fieldset><CollectionChoices value={value} update={update} />
   </>;

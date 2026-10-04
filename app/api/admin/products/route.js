@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { adminDb, requireRole } from "@/lib/admin";
 import { auditPayload, nullableNumber, text } from "@/lib/serverData";
 import { isProductImagePath, productImageFolder, variantCombinationKey } from "@/lib/productImages.mjs";
+import { allBarcodeCodes, normalizeBarcode, planBarcodes } from "@/lib/barcodes.mjs";
 
 export async function POST(request) {
   const access = await requireRole(request, ["owner", "admin"]);
@@ -52,11 +53,22 @@ export async function POST(request) {
     subSubcategoryName = subSubcategory.data().name;
   }
 
-  const barcode = text(body.barcode, 100);
-  if (barcode) {
-    const matches = await store.collection("products").where("barcode", "==", barcode).limit(2).get();
-    if (matches.docs.some((doc) => doc.id !== ref.id)) return NextResponse.json({ error: "That barcode is already assigned." }, { status: 409 });
-  }
+  const sku = text(body.sku || id, 100);
+  const archiveCodes = Array.isArray(body.archiveBarcodes) ? body.archiveBarcodes : [];
+  const barcodes = planBarcodes(oldValue || { id, sku }, {
+    additions: body.barcodeAdditions ?? (body.create ? body.barcode || "" : ""),
+    archive: archiveCodes,
+    multiple: body.multipleBarcodes === true,
+    sku,
+  });
+  if (barcodes.error) return NextResponse.json({ error: barcodes.error }, { status: 400 });
+  const allProducts = await store.collection("products").get();
+  const newCodes = new Set(barcodes.entries.filter((entry) => !allBarcodeCodes(oldValue).some((code) => normalizeBarcode(code) === normalizeBarcode(entry.code))).map((entry) => normalizeBarcode(entry.code)));
+  if (newCodes.size && allProducts.docs.some((doc) => doc.id !== ref.id && [
+    ...allBarcodeCodes(doc.data()), doc.data().sku, doc.data().id || doc.id, doc.data().qrCode, doc.data().productCode,
+  ].some((code) => newCodes.has(normalizeBarcode(code))))) return NextResponse.json({ error: "A barcode is already assigned to another product or product code." }, { status: 409 });
+  const barcodeRefs = [...newCodes].map((code) => store.collection("barcode_registry").doc(encodeURIComponent(code)));
+  if (barcodeRefs.length && (await store.getAll(...barcodeRefs)).some((snap) => snap.exists)) return NextResponse.json({ error: "A barcode was previously assigned and cannot be reused." }, { status: 409 });
 
   const price = nullableNumber(body.price);
   const costPrice = nullableNumber(body.costPrice);
@@ -66,8 +78,10 @@ export async function POST(request) {
   const collections = Array.isArray(body.collections) ? body.collections : oldValue?.collections || [];
   const product = {
     id,
-    sku: text(body.sku || id, 100),
-    barcode,
+    sku,
+    barcode: barcodes.barcode,
+    barcodeEntries: barcodes.entries,
+    multipleBarcodes: barcodes.multipleBarcodes,
     name,
     description: text(body.description, 3000),
     categoryId,
@@ -98,6 +112,8 @@ export async function POST(request) {
   const batch = store.batch();
   if (existing.exists) batch.update(ref, product);
   else batch.create(ref, { ...product, stock: openingStock, createdAt: FieldValue.serverTimestamp() });
+  for (const [index, code] of [...newCodes].entries()) batch.create(barcodeRefs[index], { code, productId: id, sku, archived: false, createdAt: FieldValue.serverTimestamp() });
+  for (const code of archiveCodes) batch.set(store.collection("barcode_registry").doc(encodeURIComponent(normalizeBarcode(code))), { code: normalizeBarcode(code), productId: id, sku: oldValue?.sku || id, archived: true, archivedAt: FieldValue.serverTimestamp() }, { merge: true });
   if (groupId && body.variantImages !== undefined) for (const sibling of groupDocs) if (sibling.ref.path !== ref.path) batch.update(sibling.ref, { variantImages, updatedAt: FieldValue.serverTimestamp() });
 
   if (openingStock > 0) {

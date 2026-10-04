@@ -93,7 +93,7 @@ export async function POST(request) {
           productId: product.id,
           productGroupId: product.productGroupId || "",
           variantId: product.productGroupId ? product.id : "",
-          sku: product.id,
+          sku: product.sku || product.id,
           colour: product.colour || "",
           size: product.size || "",
           name: product.name,
