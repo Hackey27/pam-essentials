@@ -42,3 +42,74 @@ test("archived barcode remains reserved even after its product record is absent"
   assert.equal(response.status, 409);
   assert.equal(store.inspect("products", "P1").barcode, "111");
 });
+
+
+test("barcode deletion requires a reason and leaves product, registry and audit unchanged on rejection", async () => {
+  const store = setup();
+  await store.collection("barcode_registry").doc("111").create({ productId: "P1", sku: "SKU-1" });
+  for (const deleteBarcodes of [[{ code: "111", reason: " " }], [{ code: "111", reason: "x".repeat(1001) }], [{ code: "unassigned", reason: "Wrong label" }], "111"]) {
+    assert.equal((await POST(post({ ...base, deleteBarcodes }))).status, 400);
+    assert.equal(store.inspect("products", "P1").barcode, "111");
+    assert.equal(store.inspect("barcode_registry", "111").productId, "P1");
+  }
+  assert.equal((await store.collection("admin_audit").get()).docs.length, 0);
+});
+
+test("deleting a legacy barcode unlinks its SKU, releases its reservation, and preserves sales with an audited reason", async () => {
+  const store = setup();
+  await store.collection("barcode_registry").doc("111").create({ code: "111", productId: "P1", sku: "SKU-1", archived: false });
+  const pastSale = { items: [{ productId: "P1", sku: "SKU-1", quantity: 1, unitPrice: 10 }] };
+  await store.collection("sales").doc("receipt-1").create(pastSale);
+  const result = await POST(post({ ...base, deleteBarcodes: [{ code: "111", reason: "  Incorrect supplier label  " }] }));
+  assert.equal(result.status, 200);
+  assert.equal(store.inspect("products", "P1").barcode, "");
+  assert.deepEqual(store.inspect("products", "P1").barcodeEntries, []);
+  assert.equal(store.inspect("barcode_registry", "111"), undefined);
+  assert.deepEqual(store.inspect("sales", "receipt-1"), pastSale);
+  const deletion = (await store.collection("admin_audit").get()).docs.map((doc) => doc.data()).find((entry) => entry.action === "DELETE_BARCODE");
+  assert.equal(deletion.admin, "owner");
+  assert.equal(deletion.oldValue.sku, "SKU-1");
+  assert.equal(deletion.newValue.reason, "Incorrect supplier label");
+  assert.match(deletion.description, /111.*SKU-1.*Incorrect supplier label/);
+  const reuse = await POST(post({ ...base, id: "P2", sku: "SKU-2", name: "Cup", barcodeAdditions: "111", multipleBarcodes: true }));
+  assert.equal(reuse.status, 200);
+  assert.equal(store.inspect("barcode_registry", "111").productId, "P2");
+});
+
+test("archived barcode can be deleted while remaining codes still scan", async () => {
+  const store = setup();
+  await POST(post({ ...base, barcodeAdditions: "222", archiveBarcodes: ["111"] }));
+  const response = await POST(post({ ...base, deleteBarcodes: [{ code: "111", reason: "Retired label" }] }));
+  assert.equal(response.status, 200);
+  const product = store.inspect("products", "P1");
+  assert.equal(product.barcode, "222");
+  assert.deepEqual(product.barcodeEntries.map((entry) => entry.code), ["222"]);
+  assert.equal(store.inspect("barcode_registry", "111"), undefined);
+  assert.equal(store.inspect("barcode_registry", "222").productId, "P1");
+});
+
+test("barcode deletion never removes a registration owned by another SKU", async () => {
+  const store = setup();
+  await store.collection("barcode_registry").doc("111").create({ productId: "P2", sku: "SKU-2" });
+  assert.equal((await POST(post({ ...base, deleteBarcodes: [{ code: "111", reason: "Incorrect code" }] }))).status, 409);
+  assert.equal(store.inspect("barcode_registry", "111").productId, "P2");
+  assert.equal(store.inspect("products", "P1").barcode, "111");
+});
+
+test("concurrent product edit cancels deletion and audit atomically", async () => {
+  const store = setup();
+  await store.collection("barcode_registry").doc("111").create({ productId: "P1", sku: "SKU-1" });
+  const originalBatch = store.batch.bind(store);
+  store.batch = () => {
+    const batch = originalBatch();
+    const commit = batch.commit.bind(batch);
+    batch.commit = async () => { await store.collection("products").doc("P1").update({ description: "Another admin edit" }); await commit(); };
+    return batch;
+  };
+  const result = await POST(post({ ...base, deleteBarcodes: [{ code: "111", reason: "Wrong label" }] }));
+  assert.equal(result.status, 409);
+  assert.equal(store.inspect("products", "P1").barcode, "111");
+  assert.equal(store.inspect("products", "P1").description, "Another admin edit");
+  assert.equal(store.inspect("barcode_registry", "111").productId, "P1");
+  assert.equal((await store.collection("admin_audit").get()).docs.length, 0);
+});

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
+import useBarcodeCamera from "@/components/useBarcodeCamera";
 import { cardImageSource } from "@/lib/productImages.mjs";
 import PosQuantityStepper from "@/components/PosQuantityStepper";
 import ReceiptPanel from "@/components/ReceiptPanel";
@@ -15,64 +16,10 @@ export default function PosTill({ shift, role, query, setQuery, barcode, setBarc
   const { subtotal, discount, total } = pricing;
   const [cartOpen, setCartOpen] = useState(false);
   const [checkoutStep, setCheckoutStep] = useState(false);
-  const [cameraOpen, setCameraOpen] = useState(false);
   const [scannerMessage, setScannerMessage] = useState("");
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
-  const videoRef = useRef(null);
-  const streamRef = useRef(null);
-  const detectorRef = useRef(null);
-  const controlsRef = useRef(null);
-  const frameRef = useRef(0);
-  function closeCamera() {
-    cancelAnimationFrame(frameRef.current);
-    controlsRef.current?.stop();
-    controlsRef.current = null;
-    streamRef.current?.getTracks().forEach((track) => track.stop());
-    streamRef.current = null;
-    setCameraOpen(false);
-  }
-  async function openCamera() {
-    if (!navigator.mediaDevices?.getUserMedia) { setScannerMessage("Camera scanning is unavailable here. Use the code field with a connected scanner or type the code."); barcodeInput.current?.focus(); return; }
-    try {
-      if (!window.BarcodeDetector) { detectorRef.current = null; setScannerMessage(""); setCameraOpen(true); return; }
-      const supported = typeof window.BarcodeDetector.getSupportedFormats === "function" ? await window.BarcodeDetector.getSupportedFormats() : ["qr_code", "code_128", "ean_13"];
-      const formats = ["qr_code", "code_128", "code_39", "code_93", "ean_13", "ean_8", "upc_a", "upc_e", "data_matrix", "pdf417"].filter((format) => supported.includes(format));
-      if (!formats.length) throw new Error("This camera does not support product barcode or QR scanning.");
-      detectorRef.current = new window.BarcodeDetector({ formats });
-      streamRef.current = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: "environment" } } });
-      setScannerMessage("");
-      setCameraOpen(true);
-    } catch (error) { setScannerMessage(error?.name === "NotAllowedError" ? "Camera permission was denied. Allow camera access or use the code field." : error?.message || "Could not start the camera. Use the code field instead."); }
-  }
-  useEffect(() => {
-    if (!cameraOpen || !videoRef.current) return;
-    const video = videoRef.current;
-    let active = true;
-    if (!detectorRef.current) {
-      import("@zxing/browser").then(({ BrowserMultiFormatReader }) => {
-        if (!active) return null;
-        return new BrowserMultiFormatReader().decodeFromConstraints({ audio: false, video: { facingMode: "environment" } }, video, (result, _error, controls) => {
-          if (result && active) { active = false; onScannedCode(result.getText()); controls.stop(); closeCamera(); }
-        });
-      }).then((controls) => { if (!active) controls?.stop(); else controlsRef.current = controls; }).catch((error) => { if (active) { closeCamera(); setScannerMessage(error?.name === "NotAllowedError" ? "Camera permission was denied. Allow camera access or use the code field." : "Camera scanning could not start. Use the code field instead."); } });
-      return () => { active = false; controlsRef.current?.stop(); };
-    }
-    video.srcObject = streamRef.current;
-    const inspect = async () => {
-      if (!active) return;
-      try {
-        if (video.readyState >= 2) {
-          const codes = await detectorRef.current.detect(video);
-          if (codes.length && codes[0].rawValue) { onScannedCode(codes[0].rawValue); closeCamera(); return; }
-        }
-      } catch { /* A transient video frame can fail; keep scanning. */ }
-      if (active) frameRef.current = requestAnimationFrame(inspect);
-    };
-    video.play().then(() => { frameRef.current = requestAnimationFrame(inspect); }).catch(() => { closeCamera(); setScannerMessage("Camera preview could not start. Use the code field instead."); });
-    return () => { active = false; cancelAnimationFrame(frameRef.current); };
-  }, [cameraOpen]);
-  useEffect(() => () => { controlsRef.current?.stop(); streamRef.current?.getTracks().forEach((track) => track.stop()); cancelAnimationFrame(frameRef.current); }, []);
+  const { cameraOpen, videoRef, openCamera, closeCamera } = useBarcodeCamera(onScannedCode, setScannerMessage);
   const uniqueMatch = useMemo(() => visible.filter((product) => product.stock > 0), [visible]);
   const selectUnique = (event) => {
     if (event.key === "Enter" && uniqueMatch.length === 1) { event.preventDefault(); add(uniqueMatch[0]); setQuery(""); }

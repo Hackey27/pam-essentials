@@ -1,4 +1,5 @@
 :root {
+  color-scheme: only light;
   --navy: #00235b;
   --navy-2: #0b3575;
   --red: #a31621;
@@ -21,6 +22,7 @@
 html { scroll-behavior: smooth; }
 body { margin: 0; color: var(--ink); background: var(--paper); font-family: var(--font-body); line-height: 1.5; }
 button, input, select, textarea { font: inherit; }
+textarea { color: var(--ink); background: var(--paper); }
 button, a { -webkit-tap-highlight-color: transparent; }
 a { color: inherit; text-decoration: none; }
 h1, h2, h3, .brand, .admin-brand { font-family: var(--font-brand); letter-spacing: -0.025em; }
@@ -584,6 +586,11 @@ html:has(#store-footer:target) { scroll-behavior: auto; }
 .admin-barcode-list { display: grid; gap: .35rem; }
 .admin-barcode-list > div { display: flex; align-items: center; justify-content: space-between; gap: .75rem; border: 1px solid var(--line); border-radius: 8px; padding: .4rem .6rem; }
 .admin-barcode-list code { overflow-wrap: anywhere; }
+.admin-barcode-list small { display: block; overflow-wrap: anywhere; }
+.admin-barcode-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .65rem; }
+.admin-barcode-delete { display: grid; gap: .6rem; padding: 1rem; border: 1px solid var(--red); border-radius: 8px; background: var(--soft-red); }
+.admin-barcode-delete p { margin: 0; }
+.admin-barcode-delete textarea { width: 100%; }
 .admin-barcode-list button { border: 0; background: transparent; color: #a52332; font-weight: 800; cursor: pointer; }
 .admin-barcode-tabs { max-width: 420px; }
 .admin-barcode-scan { display: flex; align-items: end; gap: .6rem; }

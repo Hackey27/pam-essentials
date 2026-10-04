@@ -32,3 +32,18 @@ test("barcode operations reject duplicate codes and SKU reassignment without arc
   assert.match(planBarcodes(product, { archive: ["999"], sku: "SKU-1" }).error, /Only assigned/i);
   assert.match(planBarcodes(product, { additions: "111", sku: "SKU-1", multiple: true }).error, /cannot be added again/i);
 });
+
+
+test("deletion removes exact codes from POS and fulfilment lookup without changing SKU or remaining codes", () => {
+  const original = { id: "P1", sku: "SKU-1", barcodeEntries: [{ code: "111", sku: "SKU-1" }, { code: "222", sku: "SKU-1" }] };
+  const result = planBarcodes(original, { deletions: [{ code: "111", reason: "Wrong label" }], sku: "SKU-1" });
+  assert.equal(result.error, undefined);
+  const product = { ...original, barcode: result.barcode, barcodeEntries: result.entries };
+  assert.deepEqual(matchingProducts([product], "111"), []);
+  assert.deepEqual(matchingProducts([product], "222").map((item) => item.id), ["P1"]);
+  assert.equal(matchingOrderLine({ items: [{ productId: "P1", quantity: 1 }] }, "111", [product]), -1);
+  assert.equal(result.deleted[0].reason, "Wrong label");
+  assert.equal(original.barcodeEntries.length, 2);
+  assert.match(planBarcodes(original, { deletions: [{ code: "111", reason: "Wrong label" }], archive: ["111"], sku: "SKU-1" }).error, /cannot be archived and deleted/);
+  assert.match(planBarcodes(original, { deletions: [{ code: "111", reason: "Wrong label" }], additions: "111", sku: "SKU-1" }).error, /cannot be deleted and added/);
+});

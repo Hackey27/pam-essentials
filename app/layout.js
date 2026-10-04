@@ -10,6 +10,11 @@ export const metadata = {
   icons: { icon: "/brand/pam-symbol-white.svg" },
 };
 
+export const viewport = {
+  colorScheme: "only light",
+  themeColor: "#ffffff",
+};
+
 export default function RootLayout({ children }) {
   return (
     <html lang="en">

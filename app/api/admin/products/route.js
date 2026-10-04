@@ -63,6 +63,7 @@ export async function POST(request) {
   const barcodes = planBarcodes(oldValue || { id, sku }, {
     additions: body.barcodeAdditions ?? (body.create ? body.barcode || "" : ""),
     archive: archiveCodes,
+    deletions: body.deleteBarcodes ?? [],
     multiple: body.multipleBarcodes === true,
     sku,
   });
@@ -74,6 +75,9 @@ export async function POST(request) {
   ].some((code) => newCodes.has(normalizeBarcode(code))))) return NextResponse.json({ error: "A barcode is already assigned to another product or product code." }, { status: 409 });
   const barcodeRefs = [...newCodes].map((code) => store.collection("barcode_registry").doc(encodeURIComponent(code)));
   if (barcodeRefs.length && (await store.getAll(...barcodeRefs)).some((snap) => snap.exists)) return NextResponse.json({ error: "A barcode was previously assigned and cannot be reused." }, { status: 409 });
+  const deletionRefs = barcodes.deleted.map((entry) => store.collection("barcode_registry").doc(encodeURIComponent(normalizeBarcode(entry.code))));
+  const deletionSnapshots = deletionRefs.length ? await store.getAll(...deletionRefs) : [];
+  if (deletionSnapshots.some((snap) => snap.exists && snap.data().productId !== id)) return NextResponse.json({ error: "A barcode registration belongs to another product. Reload the product before deleting it." }, { status: 409 });
 
   const price = nullableNumber(body.price);
   const costPrice = nullableNumber(body.costPrice);
@@ -126,10 +130,13 @@ export async function POST(request) {
     product.size = product.variantOptions.size || "";
     if (variantPlan.enabled) product.variantImages = remapVariantImages(variantPlan, variantImages);
   }
-  if (existing.exists) batch.update(ref, product);
+  if (existing.exists) batch.update(ref, product, existing.updateTime ? { lastUpdateTime: existing.updateTime } : {});
   else batch.create(ref, { ...product, stock: openingStock, createdAt: FieldValue.serverTimestamp() });
   for (const [index, code] of [...newCodes].entries()) batch.create(barcodeRefs[index], { code, productId: id, sku, archived: false, createdAt: FieldValue.serverTimestamp() });
   for (const code of archiveCodes) batch.set(store.collection("barcode_registry").doc(encodeURIComponent(normalizeBarcode(code))), { code: normalizeBarcode(code), productId: id, sku: oldValue?.sku || id, archived: true, archivedAt: FieldValue.serverTimestamp() }, { merge: true });
+  deletionSnapshots.forEach((snap, index) => {
+    if (snap.exists) batch.delete(deletionRefs[index], snap.updateTime ? { lastUpdateTime: snap.updateTime } : {});
+  });
   if (groupId && body.variantImages !== undefined) for (const sibling of groupDocs) if (sibling.ref.path !== ref.path) batch.update(sibling.ref, { variantImages, updatedAt: FieldValue.serverTimestamp() });
   if (variantPlan?.enabled) for (const member of variantPlan.members) if (member.product.id !== id) {
     batch.update(store.collection("products").doc(encodeURIComponent(member.product.id)), { productGroupId: variantPlan.groupId, variantEnabled: true, variantManaged: true, variantTitles: variantPlan.titles, variantOptions: member.options, colour: member.options.colour || "", size: member.options.size || "", variantImages: product.variantImages, updatedAt: FieldValue.serverTimestamp() });
@@ -155,7 +162,15 @@ export async function POST(request) {
   }
   const auditRef = store.collection("admin_audit").doc();
   batch.create(auditRef, auditPayload(access.user, existing.exists ? "UPDATE_PRODUCT" : "CREATE_PRODUCT", "product", id, `${existing.exists ? "Updated" : "Created"} ${name}.`, oldValue, product));
-  await batch.commit();
+  for (const entry of barcodes.deleted) {
+    const { reason, ...record } = entry;
+    batch.create(store.collection("admin_audit").doc(), auditPayload(access.user, "DELETE_BARCODE", "product", id, `Deleted barcode ${entry.code} from SKU ${entry.sku || oldValue?.sku || id}. Reason: ${reason}`, record, { code: entry.code, unlinked: true, reason }));
+  }
+  try { await batch.commit(); }
+  catch (error) {
+    if ([6, 9, "already-exists", "failed-precondition"].includes(error.code)) return NextResponse.json({ error: "The product or barcode changed while you were saving. Reload and try again; no changes were saved." }, { status: 409 });
+    throw error;
+  }
   return NextResponse.json({ ok: true, id });
 }
 

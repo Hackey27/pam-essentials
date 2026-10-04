@@ -179,7 +179,7 @@ function AdminPortal() {
   function openEditor(type, item = null) {
     setUploadingImages(false);
     const defaults = {
-      product: { create: true, id: "", sku: "", barcode: "", barcodeAdditions: "", archiveBarcodes: [], multipleBarcodes: false, name: "", description: "", categoryId: data.categories[0]?.categoryId || "", subcategoryId: "", subSubcategoryId: "", price: "", costPrice: "", lowStockLevel: "", openingStock: 0, active: true, archived: false, pinned: false, randomColours: false, newArrival: true, collections: [], imageUrl: "", variantEnabled: false, variantTitles: [], variantCombinations: [] },
+      product: { create: true, id: "", sku: "", barcode: "", barcodeAdditions: "", archiveBarcodes: [], deleteBarcodes: [], multipleBarcodes: false, name: "", description: "", categoryId: data.categories[0]?.categoryId || "", subcategoryId: "", subSubcategoryId: "", price: "", costPrice: "", lowStockLevel: "", openingStock: 0, active: true, archived: false, pinned: false, randomColours: false, newArrival: true, collections: [], imageUrl: "", variantEnabled: false, variantTitles: [], variantCombinations: [] },
       category: { create: true, name: "", description: "", sortOrder: Math.max(0, ...data.categories.map((item) => Number(item.sortOrder || 0))) + 1, collections: [], active: true, archived: false },
       subcategory: { create: true, kind: "subcategory", categoryId: data.categories[0]?.categoryId || "", name: "", description: "", sortOrder: data.subcategories.filter((item) => item.categoryId === data.categories[0]?.categoryId).length + 1, collections: [], active: true, archived: false },
       subSubcategory: { create: true, kind: "subSubcategory", categoryId: data.categories[0]?.categoryId || "", subcategoryId: "", name: "", description: "", sortOrder: 1, collections: [], active: true, archived: false },
@@ -190,7 +190,7 @@ function AdminPortal() {
       setting: { create: true, key: settingKeys.find((key) => !data.settings[key]) || "STORE_NAME", value: "", description: "" },
       expense: { amount: "", category: "Operating expense", description: "", paymentMethod: "cash" },
     };
-    setEditor({ type, data: { ...(item ? { ...item, create: false, ...(type === "product" ? { barcodeAdditions: "", archiveBarcodes: [], multipleBarcodes: item.multipleBarcodes === true || activeBarcodes(item).length > 1, ...editorVariantState(item, data.products) } : {}) } : defaults[type]), acknowledgeOverlap: false } });
+    setEditor({ type, data: { ...(item ? { ...item, create: false, ...(type === "product" ? { barcodeAdditions: "", archiveBarcodes: [], deleteBarcodes: [], multipleBarcodes: item.multipleBarcodes === true || activeBarcodes(item).length > 1, ...editorVariantState(item, data.products) } : {}) } : defaults[type]), acknowledgeOverlap: false } });
   }
 
   function updateEditor(key, value) {
