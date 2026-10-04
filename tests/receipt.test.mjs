@@ -23,7 +23,14 @@ test("80 mm receipt preserves exact variant and saved tender totals without cost
 test("receipt omits zero discount and wraps long item data within four columns", () => {
   const text = formatReceiptText({ staffName: "Ama", discount: 0, items: [{ name: "Extra Long Cartoon Pencil Case", sku: "PAM-VERY-LONG-PENCIL-CASE-SKU", quantity: 12, unitPrice: 123456.78, lineTotal: 1481481.36 }] });
   assert.doesNotMatch(text, /Discount:/);
-  assert.match(text, /Extra Long Cartoon/);
+  assert.match(text, /Extra Long\s*\nCartoon Pencil\s*\nCase\s+12\s+123456\.78\s+1481481\.36/);
   assert.doesNotMatch(text, /PAM-VERY-LONG|SKU:/);
+  assert.ok(text.split("\n").every((line) => line.length <= 40));
+});
+
+test("receipt keeps long pickup and customer details within 80 mm paper", () => {
+  const text = formatReceiptText({ salesChannel: "website", customerName: "An exceptionally long customer name for pickup", orderReference: "PAM-ONLINE-2026-VERY-LONG-REFERENCE", fulfilmentSnapshot: { deliveryMethod: "delivery-self", originAddress: "Atlas Bus Station, 37 Atankpa Tettey Street, Awoshie, Accra" } });
+  assert.match(text, /Shop address: Atlas Bus Station/);
+  assert.match(text, /Awoshie, Accra/);
   assert.ok(text.split("\n").every((line) => line.length <= 40));
 });
