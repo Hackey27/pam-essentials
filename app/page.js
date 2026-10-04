@@ -101,7 +101,9 @@ export default function Storefront() {
   useEffect(() => {
     try {
       const saved = JSON.parse(sessionStorage.getItem("pam-listing-return") || "null");
-      if (!saved || saved.path !== window.location.pathname + window.location.search || Date.now() - saved.at > 15 * 60 * 1000) { if (window.matchMedia("(max-width: 767px)").matches) setPageSize(30); return; }
+      const returnUrl = new URL(window.location.href);
+      returnUrl.searchParams.delete("quick");
+      if (!saved || saved.path !== returnUrl.pathname + returnUrl.search || Date.now() - saved.at > 15 * 60 * 1000) { if (window.matchMedia("(max-width: 767px)").matches) setPageSize(30); return; }
       listingRestore.current = saved;
       setQuery(saved.query || ""); setCategory(saved.category || "All categories");
       setSelectedSubcategories(saved.subcategories || []); setSelectedSubSubcategories(saved.subSubcategories || []);

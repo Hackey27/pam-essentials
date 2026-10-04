@@ -120,7 +120,22 @@ export default function ProductPage() {
   return <div className="product-page store-shell">
     <header className="product-page-header"><a className="brand" href="/" aria-label="PAM Essentials home"><BrandLogo /></a><a href={cartUrl} onClick={rememberCartPosition}>View cart</a></header>
     <main className="product-page-main">
-      <a className="detail-back" href={quickReturnId ? `/?quick=${encodeURIComponent(quickReturnId)}` : "/#catalogue"} onClick={(event) => { try { const saved = JSON.parse(sessionStorage.getItem("pam-listing-return") || "null"); if (saved && Date.now() - saved.at < 15 * 60 * 1000 && window.history.length > 1) { event.preventDefault(); window.history.back(); } } catch {} }}>← Back {quickReturnId ? "to Quick View" : "to products"}</a>
+      <a className="detail-back" href={quickReturnId ? `/?quick=${encodeURIComponent(quickReturnId)}` : "/#catalogue"} onClick={(event) => {
+        try {
+          const saved = JSON.parse(sessionStorage.getItem("pam-listing-return") || "null");
+          const recent = saved && Date.now() - saved.at < 15 * 60 * 1000;
+          if (quickReturnId) {
+            event.preventDefault();
+            const path = recent && saved.path?.startsWith("/") && !saved.path.startsWith("//") ? saved.path : "/";
+            const target = new URL(path, window.location.origin);
+            target.searchParams.set("quick", quickReturnId);
+            window.location.assign(target.pathname + target.search);
+          } else if (recent && window.history.length > 1) {
+            event.preventDefault();
+            window.history.back();
+          }
+        } catch {}
+      }}>← Back {quickReturnId ? "to Quick View" : "to products"}</a>
       {loading && <div className="empty-state">Loading product…</div>}
       {(error || !loading && !product) && <div className="empty-state"><h1>Product unavailable</h1><p>{error || "This product is no longer in the storefront."}</p><a href="/">Shop products</a></div>}
       {product && <>
