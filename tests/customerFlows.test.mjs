@@ -43,7 +43,7 @@ test("guest order, claim, account isolation and exact variant totals", async () 
   assert.equal(created.status, 200);
   assert.match(created.body.orderId, /^ORD-[A-Z0-9]+-[A-Z0-9]+$/);
   assert.deepEqual([created.body.subtotal, created.body.discount, created.body.total], [105, 5.25, 99.75]);
-  assert.deepEqual(created.body.items[0], { name: "Cartoon Water Bottle", sku: "PAM-WB001-PNK-500", colour: "Pink", size: "500ml", quantity: 3, unitPrice: 35, lineTotal: 99.75 });
+  assert.deepEqual(created.body.items[0], { name: "Cartoon Water Bottle", sku: "PAM-WB001-PNK-500", colour: "Pink", size: "500ml", variantOptions: {}, quantity: 3, unitPrice: 35, lineTotal: 99.75 });
   assert.equal(store.inspect("orders", created.body.orderId).customerUid, null);
   assert.equal(store.inspect("orders", created.body.orderId).notes, "Please send pink");
   assert.match(whatsappOrderMessage(created.body, "Ada", "+233 20 701 5198"), /Notes: Please send pink/);
@@ -54,6 +54,16 @@ test("guest order, claim, account isolation and exact variant totals", async () 
   assert.equal((await json(await getOrders(request("/api/orders", "customer-a")))).body.orders[0].orderId, created.body.orderId);
   assert.equal((await json(await getOrders(request(`/api/orders?reference=${created.body.orderId}`, "customer-b")))).status, 404);
   assert.equal((await json(await claimOrder(request("/api/customer/orders/claim", "customer-b", { reference: created.body.orderId, phone: "+233207015198" })))).status, 404);
+});
+
+test("custom variant values survive checkout and WhatsApp formatting", async () => {
+  const store = setup();
+  await store.collection("products").doc("PAM-WB001-PNK-500").update({ variantOptions: { colour: "Pink", size: "500ml", finish: "Matte" }, sku: "PAM-WB001-PNK-500" });
+  const response = await json(await createOrder(request("/api/orders", null, { customer: "Ada", phone: "+233207015198", deliveryMethod: "pickup", items: [{ id: "PAM-WB001-PNK-500", quantity: 1 }] })));
+  assert.equal(response.status, 200);
+  assert.deepEqual(response.body.items[0].variantOptions, { colour: "Pink", size: "500ml", finish: "Matte" });
+  assert.deepEqual(store.inspect("orders", response.body.orderId).items[0].variantOptions, response.body.items[0].variantOptions);
+  assert.match(whatsappOrderMessage(response.body, "Ada", "+233207015198"), /Finish: Matte/);
 });
 
 test("wishlist is private and staff accounts cannot use customer routes", async () => {

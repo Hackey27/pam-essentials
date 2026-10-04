@@ -19,4 +19,8 @@ test("variant combinations and image precedence are deterministic", () => {
   assert.equal(detailImageSource(product, blue).path, product.variantImages[variantCombinationKey(blue)].imagePath);
   assert.deepEqual(galleryImagePaths(product, blue), product.variantImages[variantCombinationKey(blue)].galleryImagePaths);
   assert.equal(detailImageSource({ ...red, imageUrl: red.imageUrl }, red).url, red.imageUrl);
+  assert.equal(detailImageSource(product, { ...blue, cardPreviewImagePath: "products/blue/card-preview/blue.jpg" }).path, product.variantImages[variantCombinationKey(blue)].imagePath);
+  assert.equal(detailImageSource(red, { ...blue, cardPreviewImagePath: "products/blue/card-preview/blue.jpg" }).path, "products/blue/card-preview/blue.jpg");
+  assert.equal(detailImageSource(product, { ...blue, imageUrl: "https://legacy.example/blue.jpg", variantImages: {} }).path, product.variantImages[variantCombinationKey(blue)].imagePath);
+  assert.equal(detailImageSource({ ...red, cardPreviewImagePath: "products/red/card-preview/card.jpg" }, blue).url, blue.imageUrl);
 });

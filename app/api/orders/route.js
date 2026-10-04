@@ -18,7 +18,7 @@ export async function GET(request) {
   const snaps = orderId ? [await store.collection("orders").doc(orderId).get()] : (await store.collection("orders").where("customerUid", "==", account.uid).get()).docs;
   const orders = snaps.filter((snap) => snap.exists && snap.data().customerUid === account.uid).map((snap) => {
     const order = snap.data();
-    return { orderId: snap.id, status: order.status, paymentStatus: order.paymentStatus, deliveryMethod: order.deliveryMethod, originAddress: order.originAddress || "", deliveryAddress: order.deliveryAddress || "", total: Number(order.total || 0), pickupCode: order.pickupCode || null, items: (order.items || []).map(({ name, quantity, sku, colour, size }) => ({ name, quantity, sku, colour, size })), createdAt: order.createdAt?.toDate?.()?.toISOString?.() || null, updatedAt: order.updatedAt?.toDate?.()?.toISOString?.() || null };
+    return { orderId: snap.id, status: order.status, paymentStatus: order.paymentStatus, deliveryMethod: order.deliveryMethod, originAddress: order.originAddress || "", deliveryAddress: order.deliveryAddress || "", total: Number(order.total || 0), pickupCode: order.pickupCode || null, items: (order.items || []).map(({ name, quantity, sku, colour, size, variantOptions }) => ({ name, quantity, sku, colour, size, variantOptions: variantOptions || {} })), createdAt: order.createdAt?.toDate?.()?.toISOString?.() || null, updatedAt: order.updatedAt?.toDate?.()?.toISOString?.() || null };
   }).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
   if (orderId) return orders[0] ? NextResponse.json({ order: orders[0] }) : NextResponse.json({ error: "This order is not linked to your account." }, { status: 404 });
   return NextResponse.json({ orders });
@@ -74,9 +74,10 @@ export async function POST(request) {
       productId: product.id,
       productGroupId: product.productGroupId || "",
       variantId: product.productGroupId ? product.id : "",
-      sku: product.id,
+      sku: product.sku || product.id,
       colour: product.colour || "",
       size: product.size || "",
+      variantOptions: product.variantOptions || {},
       name: product.name,
       quantity,
       unitPrice: Number(product.price),
@@ -109,6 +110,6 @@ export async function POST(request) {
     createdAt: FieldValue.serverTimestamp(),
   };
   await store.collection("orders").doc(orderId).create(orderSnapshot);
-  return NextResponse.json({ orderId, subtotal: orderSnapshot.subtotal, discount: orderSnapshot.discount, total, items: items.map(({ name, sku, colour, size, quantity, unitPrice, lineTotal }) => ({ name, sku, colour, size, quantity, unitPrice, lineTotal })), deliveryMethod, originAddress: CURRENT_SHOP_ADDRESS, deliveryAddress: orderSnapshot.deliveryAddress, notes });
+  return NextResponse.json({ orderId, subtotal: orderSnapshot.subtotal, discount: orderSnapshot.discount, total, items: items.map(({ name, sku, colour, size, variantOptions, quantity, unitPrice, lineTotal }) => ({ name, sku, colour, size, variantOptions, quantity, unitPrice, lineTotal })), deliveryMethod, originAddress: CURRENT_SHOP_ADDRESS, deliveryAddress: orderSnapshot.deliveryAddress, notes });
 }
 

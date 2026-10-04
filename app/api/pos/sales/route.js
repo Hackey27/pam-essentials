@@ -96,6 +96,7 @@ export async function POST(request) {
           sku: product.sku || product.id,
           colour: product.colour || "",
           size: product.size || "",
+          variantOptions: product.variantOptions || {},
           name: product.name,
           quantity,
           unitPrice: Number(product.price),

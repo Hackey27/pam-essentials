@@ -4,7 +4,7 @@ import { adminDb, requireRole } from "@/lib/admin";
 import { auditPayload, nullableNumber, text } from "@/lib/serverData";
 import { isProductImagePath, productImageFolder, variantCombinationKey } from "@/lib/productImages.mjs";
 import { allBarcodeCodes, normalizeBarcode, planBarcodes } from "@/lib/barcodes.mjs";
-import { planVariantGroup } from "@/lib/adminVariants.mjs";
+import { planVariantGroup, remapVariantImages } from "@/lib/adminVariants.mjs";
 
 export async function POST(request) {
   const access = await requireRole(request, ["owner", "admin"]);
@@ -122,6 +122,9 @@ export async function POST(request) {
     product.variantTitles = variantPlan.titles || [];
     if (!variantPlan.enabled) product.variantOptions = {};
     else product.variantOptions = variantPlan.members.find((item) => item.product.id === id)?.options || {};
+    product.colour = product.variantOptions.colour || "";
+    product.size = product.variantOptions.size || "";
+    if (variantPlan.enabled) product.variantImages = remapVariantImages(variantPlan, variantImages);
   }
   if (existing.exists) batch.update(ref, product);
   else batch.create(ref, { ...product, stock: openingStock, createdAt: FieldValue.serverTimestamp() });
@@ -129,7 +132,7 @@ export async function POST(request) {
   for (const code of archiveCodes) batch.set(store.collection("barcode_registry").doc(encodeURIComponent(normalizeBarcode(code))), { code: normalizeBarcode(code), productId: id, sku: oldValue?.sku || id, archived: true, archivedAt: FieldValue.serverTimestamp() }, { merge: true });
   if (groupId && body.variantImages !== undefined) for (const sibling of groupDocs) if (sibling.ref.path !== ref.path) batch.update(sibling.ref, { variantImages, updatedAt: FieldValue.serverTimestamp() });
   if (variantPlan?.enabled) for (const member of variantPlan.members) if (member.product.id !== id) {
-    batch.update(store.collection("products").doc(encodeURIComponent(member.product.id)), { productGroupId: variantPlan.groupId, variantEnabled: true, variantManaged: true, variantTitles: variantPlan.titles, variantOptions: member.options, updatedAt: FieldValue.serverTimestamp() });
+    batch.update(store.collection("products").doc(encodeURIComponent(member.product.id)), { productGroupId: variantPlan.groupId, variantEnabled: true, variantManaged: true, variantTitles: variantPlan.titles, variantOptions: member.options, colour: member.options.colour || "", size: member.options.size || "", variantImages: product.variantImages, updatedAt: FieldValue.serverTimestamp() });
   }
   if (variantPlan) for (const member of variantPlan.removed) if (member.id !== id) {
     batch.update(store.collection("products").doc(encodeURIComponent(member.id)), { productGroupId: "", variantEnabled: false, variantManaged: true, variantTitles: [], variantOptions: {}, updatedAt: FieldValue.serverTimestamp() });

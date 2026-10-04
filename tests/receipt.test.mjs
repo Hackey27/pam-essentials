@@ -36,3 +36,10 @@ test("receipt keeps long pickup and customer details within 80 mm paper", () => 
   assert.match(text, /Awoshie, Accra/);
   assert.ok(text.split("\n").every((line) => line.length <= 40));
 });
+
+test("receipt prints every selected custom variant value", () => {
+  const text = formatReceiptText({ items: [{ name: "Bottle", sku: "B-1", variantOptions: { colour: "Lemon Green", size: "700ml", finish: "Matte" }, quantity: 1, unitPrice: 45, lineTotal: 45 }] });
+  assert.match(text, /Lemon Green \/ 700ml/);
+  assert.match(text, /Matte/);
+  assert.doesNotMatch(text, /B-1|SKU:/);
+});

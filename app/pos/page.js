@@ -289,7 +289,7 @@ function Till() {
   }, [products, categoryList]);
   const visible = useMemo(() => products.filter((product) => {
     const matchesCategory = category === "All" || product.category === category;
-    const matchesQuery = `${product.name} ${product.id} ${product.sku || ""} ${(product.barcodeEntries || []).filter((entry) => !entry.archived).map((entry) => entry.code).join(" ")} ${product.barcode || ""}`.toLowerCase().includes(query.trim().toLowerCase());
+    const matchesQuery = `${product.name} ${product.id} ${product.sku || ""} ${Object.values(product.variantOptions || {}).join(" ")} ${(product.barcodeEntries || []).filter((entry) => !entry.archived).map((entry) => entry.code).join(" ")} ${product.barcode || ""}`.toLowerCase().includes(query.trim().toLowerCase());
     const threshold = Number(product.lowStockLevel ?? 8);
     const matchesStock = stockFilter === "all" || (stockFilter === "high" && (product.pinned || product.purchaseCount >= 3)) || (stockFilter === "low" && product.stock > 0 && product.stock < threshold) || (stockFilter === "out" && product.stock <= 0);
     return matchesCategory && matchesQuery && matchesStock;

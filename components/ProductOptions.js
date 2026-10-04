@@ -7,6 +7,7 @@ import { quantityOfferMessage } from "@/lib/quantityOffer.mjs";
 import { promotionPrice } from "@/lib/catalogueBrowse.mjs";
 import { priceCart } from "@/lib/cartPricing.mjs";
 import { cardImageSource, detailImageSource, getProductImageUrl } from "@/lib/productImages.mjs";
+import { productOptions, selectVariant, variantDetail, variantTitles } from "@/lib/variantDisplay.mjs";
 
 const money = new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS" });
 
@@ -60,31 +61,24 @@ export default function ProductOptions({ initialProduct, products, discountRules
   useEffect(() => { onSelectionChange?.(selected); }, [selected.id]);
   const variants = useMemo(() => productVariants(initialProduct, products), [initialProduct, products]);
   const hasVariants = variants.length > 1;
-  const sizes = [...new Set(variants.map((item) => item.size).filter(Boolean))];
-  const colours = [...new Set(variants.filter((item) => item.size === selected.size).map((item) => item.colour).filter(Boolean))];
-  const chooseSize = (size) => {
-    const matching = variants.filter((item) => item.size === size && item.stock > 0);
-    const next = matching.find((item) => item.colour === selected.colour) || matching[0];
-    if (next) { setSelectedId(next.id); setQuantity(1); }
-  };
-  const chooseColour = (colour) => {
-    const next = variants.find((item) => item.size === selected.size && item.colour === colour && item.stock > 0);
+  const titles = useMemo(() => variantTitles(variants), [variants]);
+  const chooseOption = (key, value) => {
+    const next = selectVariant(variants, selected, key, value, key === "colour" && Boolean(productOptions(selected).size));
     if (next) { setSelectedId(next.id); setQuantity(1); }
   };
   const optionPricing = priceCart([{ ...selected, quantity }], discountRules);
-  const whatsappText = `Hello PAM Essentials & More 👋\n\nI'd like to order:\n1. ${selected.name}\n${[selected.colour && `Colour: ${selected.colour}`, selected.size && `Size: ${selected.size}`].filter(Boolean).join("\n")}\nSKU: ${selected.id}\nQty: ${quantity}\nPrice: ${money.format(selected.price)}\nSubtotal: ${money.format(optionPricing.subtotal)}\n${optionPricing.discount > 0 ? `Discount: ${money.format(optionPricing.discount)}\n` : ""}Total: ${money.format(optionPricing.total)}\n\nName:\nPhone:\nDelivery/Pickup:\n${selected.randomColours ? "Preferred colour/notes:" : "Notes:"}`;
+  const whatsappText = `Hello PAM Essentials & More 👋\n\nI'd like to order:\n1. ${selected.name}\n${titles.map(({ title, key }) => productOptions(selected)[key] && `${title}: ${productOptions(selected)[key]}`).filter(Boolean).join("\n")}\nSKU: ${selected.sku || selected.id}\nQty: ${quantity}\nPrice: ${money.format(selected.price)}\nSubtotal: ${money.format(optionPricing.subtotal)}\n${optionPricing.discount > 0 ? `Discount: ${money.format(optionPricing.discount)}\n` : ""}Total: ${money.format(optionPricing.total)}\n\nName:\nPhone:\nDelivery/Pickup:\n${selected.randomColours ? "Preferred colour/notes:" : "Notes:"}`;
   return <div className={`product-options ${compact ? "compact" : ""}`}>
     <ProductPreview product={selected} source={displayedSource} onOpenGallery={onOpenGallery} />
     <div className="product-option-body">
       <div className="product-option-top">{compact && <button type="button" className="icon-button" onClick={onClose} aria-label="Close Quick View">×</button>}</div>
       <h2>{selected.name}</h2><p className="detail-price">{promotionPrice(selected, discountRules) != null ? <><del>{money.format(selected.price)}</del> <strong>{money.format(promotionPrice(selected, discountRules))}</strong></> : money.format(selected.price)}</p>
       <p className={selected.stock <= 0 ? "stock-label out" : selected.stock < Number(selected.lowStockLevel ?? 8) ? "stock-label low" : "stock-label"}>{selected.stock > 0 ? `✓ In stock${selected.stock < Number(selected.lowStockLevel ?? 8) ? " · Low stock" : ""}` : "Out of Stock"}</p>
-      <p className="sku">SKU: {selected.id}</p>
+      <p className="sku">SKU: {selected.sku || selected.id}</p>
       {selected.randomColours && <p className="colour-note">Random colours unless you indicate a choice in checkout notes.</p>}
       {hasVariants && <div className="variant-controls">
-        <div className="selection-summary"><b>Your selection</b><span>{[selected.size, selected.colour].filter(Boolean).join(" · ") || selected.name}</span>{selected.id !== initialProduct.id && <button type="button" onClick={() => { setSelectedId(initialProduct.id); setQuantity(1); }}>Back to original selection</button>}</div>
-        {colours.length > 0 && <fieldset><legend>Other colours for this size</legend><div className="variant-choice-list">{colours.map((colour) => { const item = variants.find((entry) => entry.size === selected.size && entry.colour === colour); return <button type="button" key={colour} className={item?.id === selected.id ? "variant-choice selected" : "variant-choice"} disabled={!item || item.stock <= 0} title={item?.stock > 0 ? "" : "Out of Stock"} onClick={() => chooseColour(colour)}>{colour}{item?.stock <= 0 && <small>Out of Stock</small>}</button>; })}</div></fieldset>}
-        {sizes.length > 0 && <fieldset><legend>Other sizes for this product</legend><div className="variant-choice-list">{sizes.map((size) => { const inStock = variants.some((item) => item.size === size && item.stock > 0); return <button type="button" key={size} className={size === selected.size ? "variant-choice selected" : "variant-choice"} disabled={!inStock} title={inStock ? "Available colours for this size" : "Out of Stock"} onClick={() => chooseSize(size)}>{size}{!inStock && <small>Out of Stock</small>}</button>; })}</div><small>Choose a size to see available colours for this size.</small></fieldset>}
+        <div className="selection-summary"><b>Your selection</b><span>{variantDetail(selected, titles) || selected.name}</span>{selected.id !== initialProduct.id && <button type="button" onClick={() => { setSelectedId(initialProduct.id); setQuantity(1); }}>Back to original selection</button>}</div>
+        {titles.map(({ title, key }) => { const values = [...new Set(variants.map((item) => productOptions(item)[key]).filter(Boolean))]; const otherTitles = key === "colour" && titles.some((item) => item.key === "size") ? "size" : ""; const strict = key === "colour" && Boolean(productOptions(selected).size); return <fieldset key={key}><legend>Other {title.toLowerCase()}{/s$/i.test(title) ? "" : "s"}{otherTitles ? ` for this ${otherTitles}` : " available for this product"}</legend><div className="variant-choice-list">{values.map((value) => { const next = selectVariant(variants, selected, key, value, strict); const active = productOptions(selected)[key] === value; return <button type="button" key={value} className={active ? "variant-choice selected" : "variant-choice"} disabled={!next && !active} title={next || active ? "" : "Out of Stock"} onClick={() => chooseOption(key, value)}>{value}{!next && !active && <small>Out of Stock</small>}</button>; })}</div>{key === "size" && titles.some((item) => item.key === "colour") && <small>Choose a size to see available colours for this size.</small>}</fieldset>; })}
       </div>}
       <label className="quantity-control">Quantity <span className="stepper"><button type="button" onClick={() => setQuantity(Math.max(1, quantity - 1))} aria-label="Decrease quantity">−</button><input type="number" min="1" max={selected.stock} value={quantity} onChange={(event) => setQuantity(Math.max(1, Math.min(selected.stock, Number(event.target.value) || 1)))} aria-label={`Quantity of ${selected.name}`} /><button type="button" onClick={() => setQuantity(Math.min(selected.stock, quantity + 1))} aria-label="Increase quantity" disabled={quantity >= selected.stock}>+</button></span></label>
       {quantityOfferMessage(selected, quantity, discountRules) && <p className="quantity-offer-note">{quantityOfferMessage(selected, quantity, discountRules)}</p>}

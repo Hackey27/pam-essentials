@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { editorVariantState, planVariantGroup } from "../lib/adminVariants.mjs";
+import { editorVariantState, planVariantGroup, remapVariantImages } from "../lib/adminVariants.mjs";
 
 const products = [
   { id: "A", categoryId: "C", subcategoryId: "S", subSubcategoryId: "L", name: "Bottle Black", sku: "A", price: 35, stock: 3 },
@@ -33,4 +33,10 @@ test("legacy colour and size groups open with populated titles and combinations"
   assert.equal(state.variantEnabled, true);
   assert.deepEqual(state.variantTitles, [{ title: "colour", values: ["Black", "White"] }, { title: "size", values: ["500ml"] }]);
   assert.equal(state.variantCombinations[1].options.colour, "White");
+});
+
+test("changing an option retains its previously assigned combination image", () => {
+  const old = { ...products[0], colour: "Black", size: "500ml", variantImages: { "colour=Black|size=500ml": { imagePath: "products/a/variants/black/main/photo.jpg" } } };
+  const plan = planVariantGroup({ variantEnabled: true, variantTitles: [{ title: "Colour", values: ["Graphite"] }], variantCombinations: [{ productId: "A", options: { colour: "Graphite" } }] }, old, [old]);
+  assert.equal(remapVariantImages(plan, old.variantImages)["colour=Graphite"].imagePath, old.variantImages["colour=Black|size=500ml"].imagePath);
 });

@@ -13,7 +13,7 @@ test("finalized offline sale preserves receipt ID, syncs once and exposes confli
     users: { cashier: { role: "cashier", active: true } },
     categories: { school: { name: "School", active: true } }, subcategories: {}, sub_subcategories: {},
     discount_rules: {}, deal_bundles: {}, settings: {},
-    products: { A: { id: "A", name: "Pen", categoryId: "school", category: "School", price: 10, stock: 5, active: true } },
+    products: { A: { id: "A", sku: "PEN-A", name: "Pen", categoryId: "school", category: "School", productGroupId: "PENS", variantOptions: { ink: "Blue", pack: "Single" }, price: 10, stock: 5, active: true } },
     shifts: { S1: { shiftId: "S1", staffId: "cashier", status: "open" } },
     sales: {}, stock_movements: {}, receipt_sequences: {},
   });
@@ -23,6 +23,8 @@ test("finalized offline sale preserves receipt ID, syncs once and exposes confli
   assert.equal(first.status, 200);
   assert.equal((await first.json()).receiptId, offlineReceiptId(id));
   assert.equal(store.inspect("products", "A").stock, 3);
+  assert.deepEqual(store.inspect("sales", id).items[0].variantOptions, { ink: "Blue", pack: "Single" });
+  assert.equal(store.inspect("sales", id).items[0].sku, "PEN-A");
   const duplicate = await POST(post(payload));
   assert.equal((await duplicate.json()).duplicate, true);
   assert.equal(store.inspect("products", "A").stock, 3);

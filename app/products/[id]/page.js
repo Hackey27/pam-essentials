@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import ProductOptions, { ProductImage, productVariants } from "@/components/ProductOptions";
 import { addToCart, readCart, saveCart } from "@/lib/storeCart";
 import { detailImageSource, galleryImagePaths, getProductImageUrl } from "@/lib/productImages.mjs";
 import BrandLogo from "@/components/BrandLogo";
 import { readCompare, toggleCompare } from "@/lib/compare.mjs";
+import { productOptions, variantDetail, variantTitles } from "@/lib/variantDisplay.mjs";
 
 export default function ProductPage() {
   const { id } = useParams();
@@ -87,7 +88,7 @@ export default function ProductPage() {
     add(detailImageSource(product, selected), "Main image");
     const assignedGallery = galleryImagePaths(product, selected);
     for (const path of assignedGallery) add({ path, url: getProductImageUrl(path, 1000) }, "Gallery image");
-    if (!assignedGallery.length && !product.galleryImagePaths?.length) for (const variant of variants) if (variant.imageUrl) add({ path: "", url: variant.imageUrl }, [variant.colour, variant.size].filter(Boolean).join(" · ") || variant.name);
+    if (!assignedGallery.length && !selected?.galleryImagePaths?.length) for (const variant of variants) if (variant.imageUrl) add({ path: "", url: variant.imageUrl }, variantDetail(variant) || variant.name);
     return images;
   }, [product, selected, variants]);
   useEffect(() => {
@@ -145,7 +146,7 @@ export default function ProductPage() {
           {gallery.length > 0 && <section className="product-gallery"><h2>Explore the details</h2><div className="product-gallery-grid">{gallery.map((item, index) => <button type="button" className={(previewSource || detailImageSource(product, selected)).url === item.source.url ? "selected" : ""} key={`${item.source.url}-${index}`} onClick={() => { setPreviewSource(item.source); setLightboxIndex(index); }} aria-label={`View ${item.label} full screen`}><ProductImage product={selected} source={item.source} width={240} /><span>{item.label}</span></button>)}</div></section>}
           <div className="detail-section">
             <section className="detail-info-card"><h2>Description</h2><p>{product.description || product.name}</p></section>
-            <section className="detail-info-card"><h2>Product details</h2><dl><dt>SKU</dt><dd>{product.id}</dd>{product.productGroupId && <><dt>Product ID</dt><dd>{product.productGroupId}</dd><dt>Variant ID</dt><dd>{product.id}</dd></>}{product.size && <><dt>Size</dt><dd>{product.size}</dd></>}{product.colour && <><dt>Colour</dt><dd>{product.colour}</dd></>}</dl></section>
+            <section className="detail-info-card"><h2>Product details</h2><dl><dt>SKU</dt><dd>{selected.sku || selected.id}</dd>{selected.productGroupId && <><dt>Product ID</dt><dd>{selected.productGroupId}</dd><dt>Variant ID</dt><dd>{selected.id}</dd></>}{variantTitles(variants).map(({ title, key }) => productOptions(selected)[key] && <Fragment key={key}><dt>{title}</dt><dd>{productOptions(selected)[key]}</dd></Fragment>)}</dl></section>
             <section className="detail-info-card delivery-card"><h2><span className="delivery-truck-icon" aria-hidden="true"><svg viewBox="0 0 32 32" width="25" height="25" fill="none"><path d="M3 8h16v14H3zM19 13h5l5 5v4H19z" fill="#FFD166"/><path d="M23 15v4h5" stroke="#00235B" strokeWidth="1.5"/><circle cx="9" cy="23" r="3" fill="#fff"/><circle cx="24" cy="23" r="3" fill="#fff"/><circle cx="9" cy="23" r="1" fill="#00235B"/><circle cx="24" cy="23" r="1" fill="#00235B"/></svg></span> Delivery &amp; pickup</h2><p>Choose delivery or pickup when you order. Need help deciding? Our team is a message away.</p></section>
           </div>
         </div>
@@ -154,7 +155,7 @@ export default function ProductPage() {
         </div>
       </>}
     </main>
-    {added && <div className="modal-backdrop" role="presentation"><div className="modal" role="dialog" aria-modal="true" aria-label="Added to cart"><h2>Added to cart</h2><p>{added.quantity} × {added.name}</p><p>SKU: {added.id}{added.colour && ` · ${added.colour}`}{added.size && ` · ${added.size}`}</p><div className="added-actions"><button className="button secondary" onClick={() => setAdded(null)}>Continue shopping</button><a className="button primary" href={cartUrl} onClick={rememberCartPosition}>View cart</a></div></div></div>}
+    {added && <div className="modal-backdrop" role="presentation"><div className="modal" role="dialog" aria-modal="true" aria-label="Added to cart"><h2>Added to cart</h2><p>{added.quantity} × {added.name}</p><p>SKU: {added.sku || added.id}{variantDetail(added) && ` · ${variantDetail(added)}`}</p><div className="added-actions"><button className="button secondary" onClick={() => setAdded(null)}>Continue shopping</button><a className="button primary" href={cartUrl} onClick={rememberCartPosition}>View cart</a></div></div></div>}
     {lightboxIndex >= 0 && gallery.length > 0 && <div className="image-lightbox" role="dialog" aria-modal="true" aria-label="Product image gallery" onClick={(event) => { if (gesture.current.dragged) { gesture.current.dragged = false; return; } if (event.target === event.currentTarget) setLightboxIndex(-1); }} onPointerDown={(event) => { gesture.current.x = event.clientX; gesture.current.y = event.clientY; gesture.current.dragged = false; }} onPointerUp={(event) => { const dx = event.clientX - gesture.current.x; const dy = event.clientY - gesture.current.y; if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy)) { gesture.current.dragged = true; setLightboxIndex((index) => (index + (dx < 0 ? 1 : -1) + gallery.length) % gallery.length); } }} onWheel={(event) => { if (Math.abs(event.deltaX) > 35 && Math.abs(event.deltaX) > Math.abs(event.deltaY) && Date.now() - gesture.current.lastWheel > 450) { gesture.current.lastWheel = Date.now(); setLightboxIndex((index) => (index + (event.deltaX > 0 ? 1 : -1) + gallery.length) % gallery.length); } }}><button type="button" className="image-lightbox-close" onClick={() => setLightboxIndex(-1)} aria-label="Close gallery">×</button><button type="button" className="image-lightbox-nav" onClick={(event) => { event.stopPropagation(); setLightboxIndex((index) => (index - 1 + gallery.length) % gallery.length); }} aria-label="Previous image">‹</button><div className="image-lightbox-frame" onClick={(event) => event.stopPropagation()}><div className="image-lightbox-slide" key={lightboxIndex}><ProductImage product={selected} source={gallery[lightboxIndex]?.source} width={2200} eager /></div><span>{lightboxIndex + 1} / {gallery.length}</span></div><button type="button" className="image-lightbox-nav" onClick={(event) => { event.stopPropagation(); setLightboxIndex((index) => (index + 1) % gallery.length); }} aria-label="Next image">›</button></div>}
   </div>;
 }
