@@ -215,8 +215,9 @@ input, select { min-height: 44px; border: 1px solid var(--line); border-radius: 
 .footer-brand p, .footer-grid div > p { color: #d2dff0; line-height: 1.5; }
 .footer-payment { font-size: .8rem; }
 .footer-bottom { max-width: 1480px; margin: 2rem auto 0; border-top: 1px solid #ffffff44; padding-top: 1rem; color: #d2dff0; font-size: .8rem; }
-.footer-return { position: fixed; z-index: 90; top: 1rem; right: 1rem; display: inline-flex; align-items: center; min-height: 44px; border: 1px solid #c9d7e8; border-radius: 9px; padding: .55rem .9rem; color: var(--navy); background: white; box-shadow: var(--shadow); font-weight: 900; }
+.footer-return { position: fixed; z-index: 90; top: .75rem; right: .75rem; display: grid; width: 44px; height: 44px; place-items: center; border: 1px solid #c9d7e8; border-radius: 9px; color: var(--navy); background: white; box-shadow: var(--shadow); font-size: 1.5rem; font-weight: 900; line-height: 1; }
 #store-footer { scroll-margin-top: 1.5rem; }
+html:has(#store-footer:target) { scroll-behavior: auto; }
 .info-page { max-width: 800px; min-height: 70vh; margin: 0 auto; padding: 4rem 1.5rem; }
 .info-page h1 { color: var(--navy); font-size: clamp(2rem, 5vw, 3.4rem); }
 .info-page p { color: var(--ink); line-height: 1.7; }
@@ -283,19 +284,16 @@ input, select { min-height: 44px; border: 1px solid var(--line); border-radius: 
 .added-quantity { width: max-content; margin: .5rem 0; }
 .compare-main { width: 100%; max-width: 2700px; margin: auto; padding: 2rem clamp(1rem, 2.2vw, 3rem) 4rem; }
 .compare-title { display: flex; justify-content: space-between; align-items: start; gap: 1rem; }
-.compare-table-wrap { overflow: hidden; margin: 1.5rem 0; border: 1px solid var(--line); border-radius: 12px; background: white; }
-.compare-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-.compare-table th { padding: .9rem; color: var(--navy); background: var(--soft-blue); text-align: left; font-size: .82rem; text-transform: uppercase; letter-spacing: .035em; }
-.compare-table td { min-width: 0; padding: 1rem .9rem; vertical-align: top; overflow-wrap: anywhere; }
-.compare-table tbody tr:nth-child(even) { background: #f5f8fc; }
-.compare-table tbody tr + tr { border-top: 1px solid var(--line); }
-.compare-table th:first-child { width: 25%; }
-.compare-table th:nth-child(2) { width: 11%; }
-.compare-table th:nth-child(3) { width: 13%; }
-.compare-table th:nth-child(4) { width: 11%; }
-.compare-table th:nth-child(5) { width: 11%; }
-.compare-table th:nth-child(6) { width: 20%; }
-.compare-table th:last-child { width: 9%; }
+.compare-table-wrap { max-width: 100%; overflow-x: auto; margin: 1.5rem 0; border: 1px solid var(--line); border-radius: 12px; background: white; }
+.compare-table { width: 100%; min-width: 760px; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
+.compare-table th, .compare-table td { min-width: 0; padding: 1rem; vertical-align: top; overflow-wrap: anywhere; text-align: left; }
+.compare-table thead th { color: var(--navy); background: var(--soft-blue); }
+.compare-table thead th:first-child, .compare-table tbody th { width: clamp(130px, 15vw, 210px); }
+.compare-table tbody th { color: var(--navy); font-size: .82rem; font-weight: 900; text-transform: uppercase; letter-spacing: .035em; }
+.compare-table tbody tr:nth-child(even) > * { background: #f5f8fc; }
+.compare-table tbody tr:nth-child(odd) > * { background: white; }
+.compare-table tbody tr + tr > * { border-top: 1px solid var(--line); }
+.compare-attribute-head { font-size: .82rem; text-transform: uppercase; letter-spacing: .035em; }
 .compare-product { display: flex; align-items: start; gap: .8rem; }
 .compare-product .product-photo, .compare-product .product-art { flex: 0 0 76px; width: 76px; height: 76px; object-fit: contain; }
 .compare-product strong { display: block; color: var(--navy); }
@@ -309,9 +307,9 @@ input, select { min-height: 44px; border: 1px solid var(--line); border-radius: 
 .compare-actions a, .compare-actions button { border: 0; padding: .25rem 0; color: var(--navy); background: transparent; text-align: left; font-weight: 900; text-decoration: underline; }
 .compare-actions button { color: var(--red); }
 .compare-more { margin-top: 1rem; }
-@media (max-width: 900px) { .compare-table thead { display: none; } .compare-table, .compare-table tbody, .compare-table tr, .compare-table td { display: block; width: 100%; } .compare-table tbody tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .2rem 1rem; padding: .9rem; } .compare-table td { padding: .35rem 0; } .compare-table td::before { content: attr(data-label); display: block; margin-bottom: .2rem; color: var(--muted); font-size: .72rem; font-weight: 900; text-transform: uppercase; } .compare-table td:first-child, .compare-table td:nth-child(6), .compare-table td:last-child { grid-column: 1 / -1; } }
-@media (max-width: 500px) { .compare-main { padding: 1.2rem 1rem 3rem; } .compare-title { align-items: stretch; flex-direction: column; } .compare-table tbody tr { grid-template-columns: 1fr; } .compare-table td { grid-column: 1 / -1; } .footer-return { top: auto; right: 1rem; bottom: 1rem; left: 1rem; justify-content: center; } }
-@media print { .compare-page .product-page-header, .compare-title button, .compare-actions, .compare-more, .footer-return { display: none !important; } .compare-main { max-width: none; padding: 0; } .compare-table-wrap { border: 0; } .compare-table th, .compare-table td { padding: .45rem; } }
+@media (max-width: 900px) { .compare-table { min-width: 760px; } .compare-table thead th:first-child, .compare-table tbody th { position: sticky; left: 0; z-index: 1; width: 130px; box-shadow: 2px 0 0 var(--line); } .compare-table thead th:first-child { z-index: 2; } .compare-table th, .compare-table td { padding: .7rem; } .compare-product { flex-direction: column; } }
+@media (max-width: 500px) { .compare-main { padding: 1.2rem 1rem 3rem; } .compare-title { align-items: stretch; flex-direction: column; } }
+@media print { .compare-page .product-page-header, .compare-title button, .compare-actions, .compare-more, .footer-return { display: none !important; } .compare-main { max-width: none; padding: 0; } .compare-table-wrap { border: 0; overflow: visible; } .compare-table { min-width: 0; } .compare-table th, .compare-table td { padding: .45rem; } }
 .drawer-title, .panel-title { display: flex; align-items: center; justify-content: space-between; gap: 1rem; border-bottom: 1px solid var(--line); padding-bottom: 1rem; }
 .drawer-title h2, .panel-title h2 { margin-bottom: 0; color: var(--navy); }
 .icon-button, .text-button { border: 0; color: var(--navy); background: transparent; font-weight: 900; }

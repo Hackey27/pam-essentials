@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { priceCart } from "@/lib/commerce";
 import { curatedSearches, hasCollection, inCollection, isBestSeller, isNewArrival, isOnSale, isPromotion, matchesSearch, promotionPrice } from "@/lib/catalogueBrowse.mjs";
 import ProductOptions, { ProductImage, variantPrice } from "@/components/ProductOptions";
@@ -136,7 +136,8 @@ export default function Storefront() {
   useEffect(() => { setCookieVisible(localStorage.getItem("pam-cookie-notice") !== "accepted"); }, []);
   useEffect(() => { if (Math.max(heroWebImages.length, heroMobileImages.length) < 2) return; const timer = setInterval(() => setHeroIndex((index) => index + 1), 6000); return () => clearInterval(timer); }, [heroWebImages.length, heroMobileImages.length]);
   useEffect(() => { setCompareIds(readCompare(localStorage)); }, []);
-  useEffect(() => { if (!loading && window.location.hash === "#store-footer") document.getElementById("store-footer")?.scrollIntoView(); }, [loading]);
+  useLayoutEffect(() => { if (new URLSearchParams(window.location.search).has("returnToFooter")) document.getElementById("store-footer")?.scrollIntoView({ behavior: "instant", block: "start" }); }, []);
+  useEffect(() => { if (loading) return; const returning = new URLSearchParams(window.location.search).has("returnToFooter"); if (returning || window.location.hash === "#store-footer") { document.getElementById("store-footer")?.scrollIntoView({ behavior: "instant", block: "start" }); if (returning) window.history.replaceState({}, "", "/#store-footer"); } }, [loading]);
   useEffect(() => {
     if (!user || role) { setWishlistIds([]); return; }
     user.getIdToken().then((token) => fetch("/api/customer/wishlist", { headers: { authorization: `Bearer ${token}` } })).then((response) => response.json()).then((data) => setWishlistIds(data.wishlist || [])).catch(() => {});
@@ -557,7 +558,7 @@ export default function Storefront() {
       <footer className="store-footer" id="delivery">
         <div className="footer-grid" id="store-footer">
           <div className="footer-brand"><BrandLogo background="navy" /><p>School, home, gifts and daily essentials in one simple shop.</p><p className="footer-payment">Secured payment: Online payment is coming soon. Pay on pickup or delivery is available.</p></div>
-          <nav aria-label="Shop links"><h2>Shop</h2><a href="/#catalogue">All Products</a><a href="/#catalogue">Categories</a>{dealsActive && <a href="/?browse=deals#catalogue">Deals</a>}<a href="/?browse=new#catalogue">New Arrivals</a></nav>
+          <nav aria-label="Shop links"><h2>Shop</h2><a href="/?from=footer#catalogue">All Products</a><a href="/?from=footer#catalogue">Categories</a>{dealsActive && <a href="/?browse=deals&from=footer#catalogue">Deals</a>}<a href="/?browse=new&from=footer#catalogue">New Arrivals</a></nav>
           <nav aria-label="Customer service links"><h2>Customer Service</h2><a href="/info/contact?from=footer">Contact Us</a><a href={`https://wa.me/${PRIMARY_WHATSAPP}`} target="_blank" rel="noreferrer">WhatsApp</a><a href="/account?from=footer#orders">Track My Order</a><a href="/info/delivery?from=footer">Delivery Information</a><a href="/info/returns?from=footer">Returns &amp; Exchanges</a><a href="/info/privacy?from=footer">Privacy Policy</a><a href="/info/faqs?from=footer">FAQs</a></nav>
           <div className="footer-contact"><h2>Contact</h2><p>{storeLocation}</p>{mapsUrl && <a href={mapsUrl} target="_blank" rel="noreferrer">View on Google Maps</a>}<a href="tel:+233596661439">{PRIMARY_PHONE_LABEL}</a><a href="tel:+233207015198">{SECONDARY_PHONE_LABEL}</a></div>
           <nav aria-label="About PAM links"><h2>About PAM</h2><a href="/info/about?from=footer">About Us</a><a href="/info/story?from=footer">Our Story</a></nav>
