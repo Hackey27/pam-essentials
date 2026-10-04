@@ -31,6 +31,9 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .num, .price, td, .metric-card strong { font-variant-numeric: tabular-nums; }
 .full { width: 100%; }
 .muted { color: var(--muted); }
+.access-denied { width: 100%; max-width: 520px; margin: 7vh auto; padding: 2rem; }
+.access-denied h1 { color: var(--navy); }
+.access-recovery-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .75rem; margin-top: 1.25rem; }
 
 .button { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; gap: .45rem; border: 1px solid transparent; border-radius: 8px; padding: .72rem 1.1rem; font-weight: 800; transition: transform .15s ease, box-shadow .15s ease; }
 .button:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 8px 18px rgba(0, 35, 91, .14); }
