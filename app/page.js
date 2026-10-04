@@ -33,7 +33,7 @@ function Dropdown({ label, children, active = false, utility = false }) {
     cancelClose();
     closeTimer.current = setTimeout(() => {
       if (detailsRef.current) detailsRef.current.open = false;
-    }, 3000);
+    }, 1000);
   };
   return <details ref={detailsRef} className={`${utility ? "utility-dropdown" : "nav-dropdown"}${active ? " active" : ""}`} onMouseEnter={cancelClose} onMouseLeave={scheduleClose}><summary>{label}<span aria-hidden="true">▾</span></summary><div className="dropdown-menu" onClick={(event) => { if (event.target.closest("a,button")) { cancelClose(); event.currentTarget.parentElement.open = false; } }}>{children}</div></details>;
 }

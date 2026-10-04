@@ -14,6 +14,8 @@ test("80 mm receipt preserves exact variant and saved tender totals without cost
   assert.match(text, /Cashier: Gloria/);
   assert.match(text, /Discount:\s+GH₵2\.50/);
   assert.match(text, /Your Trusted Neighbourhood Mall/);
+  assert.match(text, /Atlas Station - Awoshie, Accra/);
+  assert.match(text, /Tel: 0596 661 439/);
   assert.match(text, /Customer Type: Walk-In/);
   assert.ok(text.split("\n").every((line) => line.length <= 40));
   assert.equal("cost" in sale, false);
