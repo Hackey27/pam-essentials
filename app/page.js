@@ -87,6 +87,7 @@ export default function Storefront() {
   const [cartOpen, setCartOpen] = useState(false);
   const [servicesOpen, setServicesOpen] = useState(false);
   const [announcements, setAnnouncements] = useState([]);
+  const crawlerAnnouncements = announcements.filter((item) => item.style === "crawler");
   const [announcementOpen, setAnnouncementOpen] = useState(false);
   const [announcementOptOut, setAnnouncementOptOut] = useState(false);
   const announcementOptOutRef = useRef(false);
@@ -454,9 +455,12 @@ export default function Storefront() {
   }
 
   return (
-    <div className={`store-shell${mobileTabsHidden || mobileFiltersOpen ? " mobile-tabs-hidden" : ""}`}>
+    <div className={`store-shell${crawlerAnnouncements.length ? " has-top-announcements" : ""}${mobileTabsHidden || mobileFiltersOpen ? " mobile-tabs-hidden" : ""}`}>
       <div className="utility-bar"><span>Opening hours: {openingHours}</span><div><Dropdown label="Store Location" utility><a href="/info/contact#location">Address and opening hours</a>{mapsUrl && <a href={mapsUrl} target="_blank" rel="noreferrer">Open Google Maps</a>}</Dropdown><Dropdown label="Contact Us" utility><a href={`https://wa.me/${PRIMARY_WHATSAPP}`} target="_blank" rel="noreferrer"><WhatsAppIcon size={16} /> WhatsApp us</a><a href="tel:+233596661439">Call {PRIMARY_PHONE_LABEL}</a><a href="/info/contact#contact">All contact details</a></Dropdown><Dropdown label="Track Order" utility><a href="/account#orders">View my orders</a><a href="/account?mode=signin">Sign in to track</a></Dropdown><Dropdown label="Wishlist" utility><a href="/account#wishlist">View wishlist</a><a href="/compare">Compare products</a></Dropdown><Dropdown label={user && !role ? "My Account" : "Sign In"} utility><a href="/account?mode=signin">Sign in</a>{(!user || role) && <a href="/account?mode=register">Create account</a>}</Dropdown></div></div>
-      <div className="mobile-contact-crawler" aria-label={`Opening hours: ${openingHours}. WhatsApp: ${PRIMARY_PHONE_LABEL}`}><div className="mobile-contact-track"><span>Opening hours: {openingHours} <span aria-hidden="true">•</span> <a href={`https://wa.me/${PRIMARY_WHATSAPP}`} target="_blank" rel="noreferrer"><WhatsAppIcon size={14} /> WhatsApp: {PRIMARY_PHONE_LABEL}</a></span><span aria-hidden="true">Opening hours: {openingHours} <span>•</span> <a href={`https://wa.me/${PRIMARY_WHATSAPP}`} tabIndex={-1}><WhatsAppIcon size={14} /> WhatsApp: {PRIMARY_PHONE_LABEL}</a></span></div></div>
+      <div className="store-top-bar">
+        <div className="mobile-opening-hours">Opening hours: {openingHours}</div>
+        {crawlerAnnouncements.length > 0 && <section className="top-announcement-crawler" aria-label="Store announcements"><div className="top-announcement-track" style={{ animationDuration: `${Math.max(20, crawlerAnnouncements.reduce((length, item) => length + item.title.length + item.body.length, 0) / 10)}s` }}>{crawlerAnnouncements.map((item) => <span key={item.announcementId}><strong>{item.title}:</strong> {item.body}{item.actionLabel && item.actionUrl && <a href={item.actionUrl}>{item.actionLabel}</a>}</span>)}</div></section>}
+      </div>
       <header className={`store-header${mobileTabsHidden || mobileFiltersOpen ? " mobile-tabs-hidden" : ""}`}>
         <div className="header-main">
           <a className="brand" href="/" aria-label="PAM Essentials home"><BrandLogo background="white" mobileBackground="navy" /></a>
