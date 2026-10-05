@@ -1277,3 +1277,40 @@ body > div > main h1 { color: var(--navy); }
   .admin-product-result-count { justify-self: start; padding: .6rem 0 0; }
   .store-shell .catalogue-heading h2.footer-return-title { display: block; min-height: 44px; margin-bottom: .4rem; font-size: 1.15rem; }
 }
+
+
+/* Persistent Admin/POS scanner with one scroll area and fixed actions. */
+.scanner-workspace-backdrop { z-index: 75; }
+.scanner-workspace { display: flex; flex-direction: column; width: min(760px, 100%); height: min(90dvh, 860px); max-height: 95dvh; padding: 0; overflow: hidden; }
+.scanner-workspace > .drawer-title { flex: 0 0 auto; padding: .9rem 1rem; margin: 0; border-bottom: 1px solid var(--line); }
+.scanner-workspace h2 { margin: 0; font-size: 1.15rem; }
+.scanner-workspace h3 { margin: 1rem 0 .6rem; color: var(--navy); font-size: 1rem; }
+.scanner-workspace-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 1rem; }
+.scanner-workspace-scroll > video { display: block; width: 100%; height: min(30dvh, 260px); border-radius: 10px; background: #00152c; object-fit: contain; }
+.scanner-workspace-scroll > .muted { margin: .6rem 0; font-size: .8rem; }
+.scanner-workspace-scroll .notice { margin: .6rem 0; background: var(--soft-blue); color: var(--navy); }
+.scanner-workspace-actions { display: flex; flex: 0 0 auto; gap: .7rem; border-top: 1px solid var(--line); padding: .85rem 1rem; background: white; }
+.scanner-workspace-actions .button { flex: 1; min-height: 48px; }
+.scanner-code-entry { display: flex; align-items: end; gap: .6rem; margin: .8rem 0; }
+.scanner-code-entry label, .scanner-manual-search > label { display: grid; flex: 1; min-width: 0; gap: .35rem; color: var(--navy); font-weight: 800; font-size: .8rem; }
+.scanner-code-entry input, .scanner-manual-search input { width: 100%; }
+.scanner-search-results { display: grid; gap: .4rem; margin: .6rem 0; }
+.scanner-search-results > button { display: grid; gap: .2rem; padding: .75rem; border: 1px solid var(--line); border-radius: 8px; color: var(--navy); background: white; text-align: left; min-height: 48px; }
+.scanner-search-results small { color: var(--muted); }
+.scanner-basket-list { display: grid; gap: .6rem; }
+.scanner-basket-list > article { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: .7rem; border: 1px solid var(--line); border-radius: 9px; padding: .75rem; background: white; }
+.scanner-basket-list > article > div:first-child { display: grid; min-width: 0; overflow-wrap: anywhere; }
+.scanner-basket-list small { color: var(--muted); }
+.scanner-basket-list > article > .text-button { justify-self: start; }
+.scanner-basket-list .pos-quantity-stepper button, .scanner-basket-list .pos-quantity-stepper input { height: 42px; min-height: 42px; }
+.scanner-prompt-backdrop { z-index: 110; }
+.scanner-prompt { width: min(480px, 100%); }
+.scanner-prompt h2 { color: var(--navy); font-size: 1.3rem; }
+.scanner-prompt-actions { display: flex; justify-content: end; gap: .75rem; }
+@media (max-width: 600px) {
+  .scanner-workspace-backdrop { padding: .4rem; }
+  .scanner-workspace { height: 96dvh; max-height: 96dvh; }
+  .scanner-workspace-scroll { padding: .8rem; }
+  .scanner-code-entry { flex-wrap: wrap; }
+  .scanner-code-entry label { flex-basis: 100%; }
+}

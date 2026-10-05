@@ -9,7 +9,7 @@ import PosTill from "@/components/PosTill";
 import PosReceipts from "@/components/PosReceipts";
 import PosExpenses from "@/components/PosExpenses";
 import PosOrders from "@/components/PosOrders";
-import { matchingProducts } from "@/lib/scanCode.mjs";
+import { planPosScan, planScannedProduct } from "@/lib/scannerWorkflow.mjs";
 import ReceiptPanel from "@/components/ReceiptPanel";
 import { priceCart } from "@/lib/commerce";
 import BrandLogo from "@/components/BrandLogo";
@@ -49,6 +49,9 @@ function Till() {
   const [query, setQuery] = useState("");
   const [barcode, setBarcode] = useState("");
   const [scanMatches, setScanMatches] = useState([]);
+  const [scanPrompt, setScanPrompt] = useState(null);
+  const [scanFeedback, setScanFeedback] = useState("");
+  const scanPendingRef = useRef(null);
   const [stockFilter, setStockFilter] = useState("all");
   const [category, setCategory] = useState("All");
   const [cart, setCart] = useState([]);
@@ -315,13 +318,32 @@ function Till() {
     });
   }
 
-  function resolveScannedCode(value) {
-    const matches = matchingProducts(products, value);
+  function showScanPlan(plan) {
+    setError("");
+    setBarcode("");
     setScanMatches([]);
-    if (!matches.length) setError("No product found for this code.");
-    else if (matches.length > 1) { setError(""); setScanMatches(matches); }
-    else if (matches[0].stock <= 0) setError(`${matches[0].name} is out of stock.`);
-    else { add(matches[0]); setError(""); setBarcode(""); }
+    if (plan.type === "choices") { setScanMatches(plan.products); setScanFeedback("Choose the scanned product below."); }
+    else if (plan.type === "add") { add(plan.product); setScanFeedback(`${plan.product.name} added. Quantity in basket: 1.`); }
+    else { scanPendingRef.current = plan; setScanPrompt(plan); if (plan.message) setScanFeedback(plan.message); }
+  }
+  function chooseScannedProduct(product) { showScanPlan(planScannedProduct(product, cart)); }
+  function resolveScannedCode(value) {
+    if (scanPendingRef.current || scanMatches.length) return;
+    showScanPlan(planPosScan(products, cart, value));
+  }
+  function dismissScanPrompt() { scanPendingRef.current = null; setScanPrompt(null); barcodeInput.current?.focus(); }
+  function confirmScanIncrease() {
+    const pending = scanPendingRef.current;
+    if (pending?.type !== "increase") return;
+    scanPendingRef.current = null;
+    setScanPrompt(null);
+    const product = products.find((item) => item.id === pending.product.id);
+    const item = cart.find((line) => line.id === pending.product.id);
+    if (!product || !item) { showScanPlan({ type: "notice", message: "This item is no longer available in the basket. Scan it again to refresh your selection." }); return; }
+    const refreshed = planScannedProduct(product, cart);
+    if (refreshed.type !== "increase") { showScanPlan(refreshed); return; }
+    add(product);
+    setScanFeedback(`${product.name}: quantity in basket is now ${item.quantity + 1}.`);
   }
 
   function scanBarcode(event) {
@@ -500,8 +522,8 @@ function Till() {
     {error && <div className="pos-global-error notice error-notice" role="alert">{error}</div>}
     {offlineNotice && <div className="pos-global-error notice success-notice" role="status"><span>{offlineNotice}</span><button type="button" onClick={() => setOfflineNotice("")} aria-label="Dismiss offline notice">×</button></div>}
     {orderNotice && view !== "orders" && <div className="pos-global-error notice success-notice pos-order-notice" role="status"><span>{orderNotice}</span><button type="button" onClick={() => { setView("orders"); setOrderNotice(""); }}>View orders</button></div>}
-    {view === "dashboard" ? <PosDashboard user={user} role={role} onNewSale={() => setView("sale")} onScan={() => { setView("sale"); setTimeout(() => barcodeInput.current?.focus(), 0); }} onOrders={() => setView("orders")} onInventory={() => setView("inventory")} onExpense={() => setView("expenses")} /> : view === "inventory" ? <main className="pos-simple-view"><h1>Inventory</h1><p>Current priced products and stock status.</p><div className="data-table-wrap"><table className="data-table"><thead><tr><th>Product</th><th>SKU</th><th>Stock</th><th>Status</th></tr></thead><tbody>{products.map((product) => <tr key={product.id}><td>{product.name}</td><td>{product.id}</td><td>{product.stock}</td><td><span className={product.stock <= 0 ? "badge danger" : product.stock < Number(product.lowStockLevel ?? 8) ? "badge warning" : "badge success"}>{product.stock <= 0 ? "Out of stock" : product.stock < Number(product.lowStockLevel ?? 8) ? "Low stock" : "In stock"}</span></td></tr>)}</tbody></table></div></main> : view === "expenses" ? <PosExpenses user={user} shift={shift} /> : view === "receipts" ? <PosReceipts user={user} onNewSale={() => setView("sale")} /> : view === "sale" ? 
-      <PosTill shift={shift} role={role} query={query} setQuery={setQuery} barcode={barcode} setBarcode={setBarcode} barcodeInput={barcodeInput} scanBarcode={scanBarcode} onScannedCode={resolveScannedCode} scanMatches={scanMatches} setScanMatches={setScanMatches} category={category} setCategory={setCategory} categories={categories} stockFilter={stockFilter} setStockFilter={setStockFilter} visible={visible} add={add} cart={cart} setCart={setCart} cartNotice={cartNotice} setCartNotice={setCartNotice} change={change} setQuantity={setQuantity} pricing={pricing} discountRules={discountRules} orderReference={orderReference} setOrderReference={setOrderReference} orderChannel={orderChannel} setOrderChannel={setOrderChannel} customerName={customerName} setCustomerName={setCustomerName} customerPhone={customerPhone} setCustomerPhone={setCustomerPhone} paymentMethod={paymentMethod} setPaymentMethod={setPaymentMethod} amountPaid={amountPaid} setAmountPaid={setAmountPaid} transactionVerified={transactionVerified} setTransactionVerified={setTransactionVerified} changeDue={changeDue} paymentReady={paymentReady} referenceReady={referenceReady} online={online} busy={busy} setConfirmSale={setConfirmSale} /> : <PosOrders role={role} orders={orders} products={products} visibleOrders={visibleOrders} orderQuery={orderQuery} setOrderQuery={setOrderQuery} orderStatus={orderStatus} setOrderStatus={setOrderStatus} busy={busy} error={error} openOrderAtTill={openOrderAtTill} updateOrder={updateOrder} confirmOrderItem={confirmOrderItem} newOrderNotice={orderNotice} clearNewOrderNotice={() => setOrderNotice("")} />}
+    {view === "dashboard" ? <PosDashboard user={user} role={role} onNewSale={() => setView("sale")} onScan={() => { setView("sale"); setTimeout(() => barcodeInput.current?.focus(), 0); }} onOrders={() => setView("orders")} onInventory={() => setView("inventory")} onExpense={() => setView("expenses")} /> : view === "inventory" ? <main className="pos-simple-view"><h1>Inventory</h1><p>Current priced products and stock status.</p><div className="data-table-wrap"><table className="data-table"><thead><tr><th>Product</th><th>SKU</th><th>Stock</th><th>Status</th></tr></thead><tbody>{products.map((product) => <tr key={product.id}><td>{product.name}</td><td>{product.id}</td><td>{product.stock}</td><td><span className={product.stock <= 0 ? "badge danger" : product.stock < Number(product.lowStockLevel ?? 8) ? "badge warning" : "badge success"}>{product.stock <= 0 ? "Out of stock" : product.stock < Number(product.lowStockLevel ?? 8) ? "Low stock" : "In stock"}</span></td></tr>)}</tbody></table></div></main> : view === "expenses" ? <PosExpenses user={user} shift={shift} /> : view === "receipts" ? <PosReceipts user={user} onNewSale={() => setView("sale")} /> : view === "sale" ?
+      <PosTill products={products} scanPrompt={scanPrompt} scanFeedback={scanFeedback} dismissScanPrompt={dismissScanPrompt} confirmScanIncrease={confirmScanIncrease} onSelectScannedProduct={chooseScannedProduct} shift={shift} role={role} query={query} setQuery={setQuery} barcode={barcode} setBarcode={setBarcode} barcodeInput={barcodeInput} scanBarcode={scanBarcode} onScannedCode={resolveScannedCode} scanMatches={scanMatches} setScanMatches={setScanMatches} category={category} setCategory={setCategory} categories={categories} stockFilter={stockFilter} setStockFilter={setStockFilter} visible={visible} add={add} cart={cart} setCart={setCart} cartNotice={cartNotice} setCartNotice={setCartNotice} change={change} setQuantity={setQuantity} pricing={pricing} discountRules={discountRules} orderReference={orderReference} setOrderReference={setOrderReference} orderChannel={orderChannel} setOrderChannel={setOrderChannel} customerName={customerName} setCustomerName={setCustomerName} customerPhone={customerPhone} setCustomerPhone={setCustomerPhone} paymentMethod={paymentMethod} setPaymentMethod={setPaymentMethod} amountPaid={amountPaid} setAmountPaid={setAmountPaid} transactionVerified={transactionVerified} setTransactionVerified={setTransactionVerified} changeDue={changeDue} paymentReady={paymentReady} referenceReady={referenceReady} online={online} busy={busy} setConfirmSale={setConfirmSale} /> : <PosOrders role={role} orders={orders} products={products} visibleOrders={visibleOrders} orderQuery={orderQuery} setOrderQuery={setOrderQuery} orderStatus={orderStatus} setOrderStatus={setOrderStatus} busy={busy} error={error} openOrderAtTill={openOrderAtTill} updateOrder={updateOrder} confirmOrderItem={confirmOrderItem} newOrderNotice={orderNotice} clearNewOrderNotice={() => setOrderNotice("")} />}
     {receipt && !receipt.shiftSummary && <ReceiptPanel sale={receipt} onClose={() => setReceipt(null)} onNewSale={() => { setReceipt(null); setView("sale"); }} />}
     {confirmEndShift && <div className="modal-backdrop"><div className="modal" role="dialog" aria-modal="true" aria-label="Confirm end shift"><h2>End this shift?</h2><p>Sales and payment totals will be recorded. This action cannot be undone.</p><div className="editor-actions"><button className="button secondary" onClick={() => setConfirmEndShift(false)} disabled={busy}>Keep shift open</button><button className="button primary" onClick={toggleShift} disabled={busy}>{busy ? "Ending shift…" : "Confirm End Shift"}</button></div></div></div>}
     {confirmSale && <div className="modal-backdrop"><div className="modal" role="dialog" aria-modal="true" aria-label="Confirm sale"><h2>Complete this sale?</h2><p>{cart.reduce((count, item) => count + item.quantity, 0)} items · {money.format(total)} · {paymentMethod.replaceAll("-", " ")}</p><p>{online ? "Check the amount paid and customer details before saving." : "This sale becomes final at this till now, using cached prices and stock. Server sync may require manager reconciliation if they changed elsewhere."}</p><div className="editor-actions"><button className="button secondary" onClick={() => setConfirmSale(false)} disabled={busy}>Review cart</button><button className="button primary" onClick={checkout} disabled={busy}>{busy ? "Saving sale…" : online ? "Confirm Complete Sale" : "Finalize Offline Sale"}</button></div></div></div>}

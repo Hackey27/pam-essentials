@@ -83,3 +83,59 @@ test("closing during native decode discards a late result", async () => {
   assert.deepEqual(f.codes, []);
   assert.equal(f.stops(), 1);
 });
+
+
+test("continuous native scanning keeps the stream, pauses for a popup, and rearms after removal", async () => {
+  const f = fixture();
+  let time = 0;
+  let paused = false;
+  const values = ["111", "111", "", "111", "222"];
+  class Detector { async detect() { const rawValue = values.shift(); return rawValue ? [{ rawValue }] : []; } }
+  const camera = startBarcodeCamera(f.video, (code) => f.codes.push(code), { ...f.env, Detector, now: () => time }, { continuous: true, isPaused: () => paused });
+  await camera.ready;
+  await f.frames.at(-1)();
+  paused = true;
+  await f.frames.at(-1)();
+  paused = false;
+  await f.frames.at(-1)();
+  assert.deepEqual(f.codes, ["111"]);
+  assert.equal(f.stops(), 0);
+  assert.equal(f.video.srcObject, f.stream);
+  await f.frames.at(-1)();
+  time = 800;
+  await f.frames.at(-1)();
+  await f.frames.at(-1)();
+  assert.deepEqual(f.codes, ["111", "111", "222"]);
+  camera.stop();
+  assert.equal(f.stops(), 1);
+});
+
+test("continuous fallback remains open and suppresses repeated frames while prompts are acknowledged", async () => {
+  const f = fixture();
+  let callback;
+  let stopped = 0;
+  let paused = false;
+  let time = 0;
+  const controls = { stop: () => stopped++ };
+  class NoNativeFormats { static async getSupportedFormats() { return []; } }
+  class Reader { async decodeFromStream(_stream, _video, listener) { callback = listener; return controls; } }
+  const camera = startBarcodeCamera(f.video, (code) => f.codes.push(code), { ...f.env, Detector: NoNativeFormats, now: () => time, loadReader: async () => ({ BrowserMultiFormatReader: Reader }) }, { continuous: true, isPaused: () => paused });
+  await camera.ready;
+  const result = (code) => ({ getText: () => code });
+  callback(result("111"), null, controls);
+  paused = true;
+  callback(result("222"), null, controls);
+  paused = false;
+  callback(result("111"), null, controls);
+  assert.deepEqual(f.codes, ["111"]);
+  callback(null, new Error("No barcode"), controls);
+  time = 800;
+  callback(result("111"), null, controls);
+  callback(result("222"), null, controls);
+  assert.deepEqual(f.codes, ["111", "111", "222"]);
+  assert.equal(stopped, 0);
+  assert.equal(f.stops(), 0);
+  camera.stop();
+  assert.equal(stopped, 1);
+  assert.equal(f.stops(), 1);
+});
