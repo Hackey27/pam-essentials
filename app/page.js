@@ -45,8 +45,8 @@ function Dropdown({ label, children, active = false, utility = false }) {
   return <details ref={detailsRef} className={`${utility ? "utility-dropdown" : "nav-dropdown"}${active ? " active" : ""}`} onMouseEnter={cancelClose} onMouseLeave={scheduleClose}><summary>{label}<span aria-hidden="true">▾</span></summary><div className="dropdown-menu" onClick={(event) => { if (event.target.closest("a,button")) { cancelClose(); event.currentTarget.parentElement.open = false; } }}>{children}</div></details>;
 }
 
-function FilterSection({ title, collapsible, children }) {
-  return collapsible ? <details className="mobile-menu-section"><summary>{title}<span aria-hidden="true">▾</span></summary><div className="mobile-menu-section-content">{children}</div></details> : <div className="filter-section"><h2>{title}</h2>{children}</div>;
+function FilterSection({ title, collapsible, children, actions }) {
+  return collapsible ? <details className={`mobile-menu-section${actions ? " mobile-category-section" : ""}`}><summary>{title}<span aria-hidden="true">▾</span></summary><div className="mobile-menu-section-content"><div className="mobile-menu-section-scroll">{children}</div>{actions}</div></details> : <div className="filter-section"><h2>{title}</h2>{children}</div>;
 }
 
 export default function Storefront() {
@@ -81,6 +81,7 @@ export default function Storefront() {
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [mobileTabsHidden, setMobileTabsHidden] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [compactSearchOpen, setCompactSearchOpen] = useState(false);
   const closeMobileMenu = useCallback(() => setMobileMenuOpen(false), []);
   const [category, setCategory] = useState("All categories");
   const [sort, setSort] = useState("categories");
@@ -115,13 +116,17 @@ export default function Storefront() {
   const clickSession = useRef({ id: "", seen: new Set() });
   const orderRequest = useRef(false);
   const searchRef = useRef(null);
+  const compactSearchRef = useRef(null);
+  const fullHeaderRef = useRef(null);
+  const compactHeaderRef = useRef(null);
+  const paginationScroll = useRef(false);
   const storeShellRef = useRef(null);
   const storeHeaderRef = useRef(null);
   const storeTopBarRef = useRef(null);
   const catalogueControlsRef = useRef(null);
   useLayoutEffect(() => {
     const measure = () => {
-      const height = (storeHeaderRef.current?.getBoundingClientRect().height || 0) + (storeTopBarRef.current?.getBoundingClientRect().height || 0);
+      const height = window.innerWidth <= 767 ? (mobileTabsHidden ? compactHeaderRef.current?.getBoundingClientRect().height || 62 : 0) : (storeHeaderRef.current?.getBoundingClientRect().height || 0) + (storeTopBarRef.current?.getBoundingClientRect().height || 0);
       storeShellRef.current?.style.setProperty("--mobile-header-stack", `${height}px`);
       storeShellRef.current?.style.setProperty("--mobile-topbar-height", `${storeTopBarRef.current?.getBoundingClientRect().height || 0}px`);
       storeShellRef.current?.style.setProperty("--mobile-controls-height", `${catalogueControlsRef.current?.getBoundingClientRect().height || 0}px`);
@@ -130,9 +135,10 @@ export default function Storefront() {
     if (storeHeaderRef.current) observer.observe(storeHeaderRef.current);
     if (storeTopBarRef.current) observer.observe(storeTopBarRef.current);
     if (catalogueControlsRef.current) observer.observe(catalogueControlsRef.current);
+    if (compactHeaderRef.current) observer.observe(compactHeaderRef.current);
     measure();
     return () => observer.disconnect();
-  }, []);
+  }, [mobileTabsHidden, compactSearchOpen]);
   const cartReturn = useRef("");
   const listingRestore = useRef(null);
   const previousLayer = useRef("");
@@ -203,42 +209,31 @@ export default function Storefront() {
     user.getIdToken().then((token) => fetch("/api/customer/wishlist", { headers: { authorization: `Bearer ${token}` } })).then((response) => response.json()).then((data) => setWishlistIds(data.wishlist || [])).catch(() => {});
   }, [user, role]);
   useEffect(() => { setCart(readCart()); const params = new URLSearchParams(window.location.search); if (params.has("cart")) setCartOpen(true); const source = params.get("returnTo"); if (source?.startsWith("/products/") && !source.startsWith("//")) cartReturn.current = source; }, []);
-  useEffect(() => { const close = (event) => { if (!searchRef.current?.contains(event.target)) setSearchOpen(false); }; document.addEventListener("pointerdown", close); return () => document.removeEventListener("pointerdown", close); }, []);
+  useEffect(() => { const close = (event) => { if (!searchRef.current?.contains(event.target) && !compactSearchRef.current?.contains(event.target) && !event.target.closest(".compact-search-toggle")) setSearchOpen(false); }; document.addEventListener("pointerdown", close); return () => document.removeEventListener("pointerdown", close); }, []);
   useEffect(() => {
-    let lastY = window.scrollY, travel = 0, frame = 0;
     const update = () => {
-      frame = 0;
-      if (window.innerWidth > 767) { setMobileTabsHidden(false); travel = 0; lastY = window.scrollY; return; }
-      const previousY = lastY;
-      const currentY = Math.max(0, Math.min(window.scrollY, Math.max(0, document.documentElement.scrollHeight - window.innerHeight)));
-      const delta = currentY - previousY;
-      lastY = currentY;
-      if (window.scrollY < 90) { setMobileTabsHidden(false); travel = 0; return; }
-      const maximumY = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
-      if (delta < 0 && previousY > maximumY + 1) { travel = 0; return; }
-      if (Math.abs(delta) < .5) return;
-      if (Math.sign(delta) !== Math.sign(travel)) travel = 0;
-      travel = Math.max(-60, Math.min(60, travel + delta));
-      if (travel > 42 && window.scrollY > 200) { setMobileTabsHidden(true); travel = 0; }
-      if (travel < -42) { setMobileTabsHidden(false); travel = 0; }
+      const hidden = window.innerWidth <= 767 && (fullHeaderRef.current?.getBoundingClientRect().bottom || 0) <= 0;
+      setMobileTabsHidden(hidden);
+      if (!hidden) { setCompactSearchOpen(false); setMobileMenuOpen(false); }
     };
-    const queue = () => { if (!frame) frame = requestAnimationFrame(update); };
-    window.addEventListener("scroll", queue, { passive: true });
-    window.addEventListener("resize", queue);
-    return () => { window.removeEventListener("scroll", queue); window.removeEventListener("resize", queue); cancelAnimationFrame(frame); };
+    const observer = new IntersectionObserver(update, { threshold: 0 });
+    if (fullHeaderRef.current) observer.observe(fullHeaderRef.current);
+    window.addEventListener("resize", update);
+    update();
+    return () => { observer.disconnect(); window.removeEventListener("resize", update); };
   }, []);
   useEffect(() => {
     const dismissUntypedSearch = (event) => {
       if (window.innerWidth > 767 || query.trim() || !searchOpen) return;
-      if (searchRef.current?.querySelector(".popular-searches")?.contains(event.target)) return;
-      const input = searchRef.current?.querySelector("input");
+      if (event.target.closest?.(".popular-searches, .compact-search-panel")) return;
+      const input = (mobileTabsHidden ? compactSearchRef : searchRef).current?.querySelector("input");
       if (document.activeElement === input) { input.blur(); setSearchOpen(false); }
     };
     // A keyboard opening can itself scroll the viewport; only a user scroll gesture should dismiss it.
     window.addEventListener("touchmove", dismissUntypedSearch, { passive: true });
     window.addEventListener("wheel", dismissUntypedSearch, { passive: true });
     return () => { window.removeEventListener("touchmove", dismissUntypedSearch); window.removeEventListener("wheel", dismissUntypedSearch); };
-  }, [query, searchOpen]);
+  }, [query, searchOpen, mobileTabsHidden]);
   useEffect(() => {
     if (window.innerWidth > 767) return;
     if (leavingStore.current) return;
@@ -318,6 +313,16 @@ export default function Storefront() {
   const dealPercent = Math.max(0, ...discountRules.filter((rule) => rule.discountType === "PERCENT" && Number(rule.value) <= 20 && rule.scopeType !== "GLOBAL" && dealProducts.some((product) => rule.scopeType === "PRODUCT" ? rule.scopeId === product.id : rule.scopeType === "CATEGORY" && rule.scopeId === product.categoryId)).map((rule) => Number(rule.value || 0)));
   const pageCount = Math.max(1, Math.ceil(visible.length / pageSize));
   const pagedProducts = visible.slice((page - 1) * pageSize, page * pageSize);
+  useLayoutEffect(() => {
+    if (!paginationScroll.current) return;
+    paginationScroll.current = false;
+    const target = document.getElementById("catalogue-products");
+    if (!target) return;
+    const offset = window.innerWidth <= 767 ? compactHeaderRef.current?.getBoundingClientRect().height || 62 : storeHeaderRef.current?.getBoundingClientRect().height || 0;
+    window.scrollTo({ top: Math.max(0, target.getBoundingClientRect().top + window.scrollY - offset - 12), behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
+  }, [page]);
+  const changeProductPage = (next) => { paginationScroll.current = true; setPage(Math.max(1, Math.min(pageCount, next))); };
+
 
   useEffect(() => {
     if (loading || !listingRestore.current) return;
@@ -359,12 +364,16 @@ export default function Storefront() {
     setQuery(term);
     setSearchOpen(false);
     searchRef.current?.querySelector("input")?.blur();
+    compactSearchRef.current?.querySelector("input")?.blur();
+    setCompactSearchOpen(false);
     document.getElementById("catalogue")?.scrollIntoView({ behavior: "smooth" });
   }
 
   function submitSearch() {
     setSearchOpen(false);
     searchRef.current?.querySelector("input")?.blur();
+    compactSearchRef.current?.querySelector("input")?.blur();
+    setCompactSearchOpen(false);
     setPage(1);
     document.getElementById("catalogue")?.scrollIntoView({ behavior: "smooth" });
   }
@@ -520,18 +529,18 @@ export default function Storefront() {
     setConfirmation(data); setCart([]); saveCart([]); setCheckout(false);
   }
 
-  const navigationItems = (compact = false) => <>
+  const navigationItems = (compact = false, section = "all") => <>
             {!compact && <Dropdown label="Products" active={browseMode === "products"}><button type="button" onClick={() => browse("products")}>All products</button><button type="button" onClick={() => { browse("products"); document.getElementById("catalogue")?.scrollIntoView(); }}>Categories and filters</button></Dropdown>}
-            <Dropdown label="Services"><button type="button" onClick={() => setServicesOpen(true)}>All services and contact</button><a href="/services/secretarial">Secretarial services</a><a href="/services/printing">Printing</a><a href="/services/communication">Communication consultancy</a><a href="/services/laptop-repairs">Laptop repairs and purchases</a></Dropdown>
+            {section !== "secondary" && <Dropdown label="Services"><button type="button" onClick={() => setServicesOpen(true)}>All services and contact</button><a href="/services/secretarial">Secretarial services</a><a href="/services/printing">Printing</a><a href="/services/communication">Communication consultancy</a><a href="/services/laptop-repairs">Laptop repairs and purchases</a></Dropdown>}
             {!compact && <Dropdown label={<><span className="nav-full">New Arrivals</span><span className="nav-short">New</span></>} active={browseMode === "new"}><button type="button" onClick={() => browse("new")}>Shop new arrivals</button></Dropdown>}
             {!compact && <Dropdown label={<><span className="nav-full">Promotions</span><span className="nav-short">Promos</span></>} active={browseMode === "promotions"}><button type="button" onClick={() => browse("promotions")}>Shop promotions</button></Dropdown>}
             {!compact && dealsActive && <Dropdown label="Deals" active={browseMode === "deals"}><button type="button" onClick={() => browse("deals")}>Shop PAM Deals</button></Dropdown>}
-            <Dropdown label={<><span className="nav-full">Payment &amp; Delivery</span><span className="nav-short">Delivery</span></>}><a href="/info/delivery">Payment and delivery information</a><a href="/info/contact#location">Pickup location</a></Dropdown>
-            {!compact && <div className="mobile-extra-nav"><Dropdown label="Contact"><a href="/info/contact#location">Store location</a><a href={`https://wa.me/${PRIMARY_WHATSAPP}`} target="_blank" rel="noreferrer"><WhatsAppIcon size={16} /> WhatsApp us</a><a href="/info/contact#contact">Contact details</a></Dropdown></div>}<div className="mobile-extra-nav"><Dropdown label="Account"><a href="/account#orders">Track order</a><a href="/account#wishlist">Wishlist</a><a href="/compare">Compare products</a><a href="/account?mode=signin">Sign in</a><a href="/account?mode=register">Create account</a></Dropdown></div>
+            {section !== "services" && <Dropdown label={<><span className="nav-full">Payment &amp; Delivery</span><span className="nav-short">Delivery</span></>}><a href="/info/delivery">Payment and delivery information</a><a href="/info/contact#location">Pickup location</a></Dropdown>}
+            {!compact && <div className="mobile-extra-nav"><Dropdown label="Contact"><a href="/info/contact#location">Store location</a><a href={`https://wa.me/${PRIMARY_WHATSAPP}`} target="_blank" rel="noreferrer"><WhatsAppIcon size={16} /> WhatsApp us</a><a href="/info/contact#contact">Contact details</a></Dropdown></div>}{section !== "services" && <div className="mobile-extra-nav"><Dropdown label="Account"><a href="/account#orders">Track order</a><a href="/account#wishlist">Wishlist</a><a href="/compare">Compare products</a><a href="/account?mode=signin">Sign in</a><a href="/account?mode=register">Create account</a></Dropdown></div>}
           </>;
-  const renderFilters = (collapsible = false) => <>
+  const renderFilters = (collapsible = false, section = "all") => <>
     {!collapsible && <FilterSection title="Price range" collapsible={false}><MobilePriceRange showLabel={false} minimum={priceMin} maximum={priceMax} upperLimit={Math.max(1, ...products.map((item) => Math.ceil(Number(item.price) || 0)), Number(priceMin) || 0, Number(priceMax) || 0)} onChange={(minimum, maximum) => { setPriceMin(minimum); setPriceMax(maximum); }} /></FilterSection>}
-    <FilterSection title="Categories" collapsible={collapsible}>
+    {section !== "offers" && <FilterSection title={collapsible ? "Filter" : "Categories"} collapsible={collapsible} actions={collapsible ? <div className="mobile-filter-actions"><button type="button" className="button primary" onClick={closeMobileMenu}><span>Apply filters</span><b>{visible.length}</b><span className="sr-only">results</span></button><button type="button" className="table-action" onClick={clearFilters}>Clear filters</button></div> : null}>
           <button type="button" className={category === "All categories" ? "filter active" : "filter"} onClick={() => selectCategory("All categories")}>
             <span>All categories</span><small>{products.length}</small>
           </button>
@@ -564,37 +573,48 @@ export default function Storefront() {
             </div>;
           })}
           {!categoryList.length && categories.slice(1).map((name) => <button type="button" className={category === name ? "filter active" : "filter"} key={name} onClick={() => selectCategory(name)}>{name}</button>)}
-</FilterSection>
+</FilterSection>}
           {!collapsible && <FilterSection title="Availability" collapsible={collapsible}><div className="facet-group" role="group" aria-label="Availability">{[["all", "All"], ["in", "In Stock"], ["out", "Out of Stock"]].map(([value, label]) => <label key={value}><input type="radio" name={collapsible ? "menu-availability" : "availability"} checked={availability === value} onChange={() => setAvailability(value)} /> {label}</label>)}</div></FilterSection>}
-          <FilterSection title="Offers" collapsible={collapsible}><div className="facet-group" role="group" aria-label="Offers">{[["all", "All"], ["sale", "On Sale"], ["promotions", "Promotions"]].map(([value, label]) => <label key={value}><input type="radio" name={collapsible ? "menu-offer" : "offer"} checked={offer === value} onChange={() => setOffer(value)} /> {label}</label>)}</div></FilterSection>
+          {section !== "categories" && <FilterSection title="Offers" collapsible={collapsible}><div className="facet-group" role="group" aria-label="Offers">{[["all", "All"], ["sale", "On Sale"], ["promotions", "Promotions"]].map(([value, label]) => <label key={value}><input type="radio" name={collapsible ? "menu-offer" : "offer"} checked={offer === value} onChange={() => setOffer(value)} /> {label}</label>)}</div></FilterSection>}
           {!collapsible && <FilterSection title="Collections" collapsible={collapsible}><div className="facet-group" role="group" aria-label="Collections"><label><input type="radio" name={collapsible ? "menu-collection" : "collection"} checked={!collection} onChange={() => setCollection("")} /> All</label>{["New Arrivals", "Best Sellers", "Back to School", "Promotion", ...(dealsActive ? ["PAM Deals"] : [])].map((name) => <label key={name}><input type="radio" name={collapsible ? "menu-collection" : "collection"} checked={collection === name} onChange={() => setCollection(name)} /> {name}</label>)}</div></FilterSection>}
-    <button type="button" className="table-action" onClick={clearFilters}>Clear filters</button>
+    {!collapsible && <button type="button" className="table-action" onClick={clearFilters}>Clear filters</button>}
   </>;
 
+  const renderSearch = (compact = false) => <div className={`header-search${searchOpen && !query.trim() ? " search-active" : ""}`} ref={compact ? compactSearchRef : searchRef}>
+            <div className="search-field"><input type="search" aria-label="Search products, categories, or brands" aria-expanded={searchOpen && query.trim().length > 0 && (compact || !mobileTabsHidden)} aria-controls={compact ? "compact-search-suggestions" : "search-suggestions"} placeholder="Search products, categories, or brands" value={query} onFocus={() => setSearchOpen(true)} onKeyDown={(event) => { if (event.key === "Escape") setSearchOpen(false); if (event.key === "Enter") { event.preventDefault(); submitSearch(); } }} onChange={(event) => { setBrowseMode("products"); setQuery(event.target.value); setSearchOpen(true); }} /><button type="button" aria-label="Show matching products" onClick={submitSearch}>⌕</button></div>
+            {searchOpen && query.trim() && (compact || !mobileTabsHidden) && <div id={compact ? "compact-search-suggestions" : "search-suggestions"} className="search-suggestions" role="listbox" aria-label="Matching products">{suggestions.length ? <><p>Suggested products</p>{suggestions.map((item) => <button type="button" role="option" aria-selected="false" key={item.id} onClick={() => { recordClick(item); setQuickProduct(item); setSearchOpen(false); }}><span><b>{item.name}</b><small>{item.category} · {item.id}</small></span><strong>{money.format(item.price)}</strong></button>)}</> : <p>No matching products. Try another name or keyword.</p>}</div>}
+            <div className="popular-searches" role="region" aria-label="Popular searches, scroll left or right" tabIndex={0}><span><span className="popular-full">Popular Searches:</span><span className="popular-short">Popular:</span></span>{[...curatedSearches, ...popularProducts.map((product) => product.name)].map((term) => <button key={term} type="button" onClick={() => searchPopular(term)}>{term}</button>)}</div>
+          </div>;
+
   return (
-    <div ref={storeShellRef} className={`store-shell${crawlerAnnouncements.length ? " has-top-announcements" : ""}${mobileTabsHidden || mobileFiltersOpen || mobileMenuOpen ? " mobile-tabs-hidden" : ""}`}>
+    <div ref={storeShellRef} className={`store-shell${crawlerAnnouncements.length ? " has-top-announcements" : ""}${mobileTabsHidden ? " mobile-tabs-hidden" : ""}`}>
       <div className="utility-bar"><span>Opening hours: {openingHours}</span><div><Dropdown label="Store Location" utility><a href="/info/contact#location">Address and opening hours</a>{mapsUrl && <a href={mapsUrl} target="_blank" rel="noreferrer">Open Google Maps</a>}</Dropdown><Dropdown label="Contact Us" utility><a href={`https://wa.me/${PRIMARY_WHATSAPP}`} target="_blank" rel="noreferrer"><WhatsAppIcon size={16} /> WhatsApp us</a><a href="tel:+233596661439">Call {PRIMARY_PHONE_LABEL}</a><a href="/info/contact#contact">All contact details</a></Dropdown><Dropdown label="Track Order" utility><a href="/account#orders">View my orders</a><a href="/account?mode=signin">Sign in to track</a></Dropdown><Dropdown label="Wishlist" utility><a href="/account#wishlist">View wishlist</a><a href="/compare">Compare products</a></Dropdown><Dropdown label={user && !role ? "My Account" : "Sign In"} utility><a href="/account?mode=signin">Sign in</a>{(!user || role) && <a href="/account?mode=register">Create account</a>}</Dropdown></div></div>
-      <div className="store-header-stack">
+      <div ref={fullHeaderRef} className="store-header-stack" inert={mobileTabsHidden} aria-hidden={mobileTabsHidden}>
       <div ref={storeTopBarRef} className="store-top-bar">
         <div className="mobile-opening-hours">Opening hours: {openingHours}</div>
         {crawlerAnnouncements.length > 0 && <section className="top-announcement-crawler" aria-label="Store announcements"><div className="top-announcement-track" style={{ animationDuration: `${Math.max(20, crawlerAnnouncements.reduce((length, item) => length + item.title.length + item.body.length, 0) / 10)}s` }}>{crawlerAnnouncements.map((item) => <span key={item.announcementId}><strong>{item.title}:</strong> {item.body}{item.actionLabel && item.actionUrl && <a href={item.actionUrl}>{item.actionLabel}</a>}</span>)}</div></section>}
       </div>
-      <header ref={storeHeaderRef} className={`store-header${mobileTabsHidden || mobileFiltersOpen || mobileMenuOpen ? " mobile-tabs-hidden" : ""}`}>
+      <header ref={storeHeaderRef} className={`store-header${mobileTabsHidden ? " mobile-tabs-hidden" : ""}`}>
         <div className="header-main">
-          <button type="button" className="mobile-browse-toggle" aria-label="Open navigation and product filters" aria-expanded={mobileMenuOpen} aria-controls="mobile-browse-menu" onClick={() => setMobileMenuOpen((open) => !open)}><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" /></svg></button>
+
           <a className="brand" href="/" aria-label="PAM Essentials home"><BrandLogo background="white" mobileBackground="navy" /></a>
           <nav className="store-nav" aria-label="Primary navigation">{navigationItems()}</nav>
-          <div className={`header-search${searchOpen && !query.trim() ? " search-active" : ""}`} ref={searchRef}>
-            <div className="search-field"><input type="search" aria-label="Search products, categories, or brands" aria-expanded={searchOpen && query.trim().length > 0} aria-controls="search-suggestions" placeholder="Search products, categories, or brands" value={query} onFocus={() => setSearchOpen(true)} onKeyDown={(event) => { if (event.key === "Escape") setSearchOpen(false); if (event.key === "Enter") { event.preventDefault(); submitSearch(); } }} onChange={(event) => { setBrowseMode("products"); setQuery(event.target.value); setSearchOpen(true); }} /><button type="button" aria-label="Show matching products" onClick={submitSearch}>⌕</button></div>
-            {searchOpen && query.trim() && <div id="search-suggestions" className="search-suggestions" role="listbox" aria-label="Matching products">{suggestions.length ? <><p>Suggested products</p>{suggestions.map((item) => <button type="button" role="option" aria-selected="false" key={item.id} onClick={() => { recordClick(item); setQuickProduct(item); setSearchOpen(false); }}><span><b>{item.name}</b><small>{item.category} · {item.id}</small></span><strong>{money.format(item.price)}</strong></button>)}</> : <p>No matching products. Try another name or keyword.</p>}</div>}
-            <div className="popular-searches" role="region" aria-label="Popular searches, scroll left or right" tabIndex={0}><span><span className="popular-full">Popular Searches:</span><span className="popular-short">Popular:</span></span>{[...curatedSearches, ...popularProducts.map((product) => product.name)].map((term) => <button key={term} type="button" onClick={() => searchPopular(term)}>{term}</button>)}</div>
-          </div>
+          {renderSearch()}
 
           <button className="cart-button" onClick={() => setCartOpen(true)} aria-label={`View cart, ${cartCount} items`}><span className="cart-text">Cart</span><svg className="cart-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 4h2l2.1 10.4a2 2 0 0 0 2 1.6H19a2 2 0 0 0 2-1.6L22 8H6"/><circle cx="10" cy="20" r="1"/><circle cx="19" cy="20" r="1"/></svg><b>{cartCount}</b></button>
         </div>
       </header>
       </div>
-      {mobileMenuOpen && <MobileBrowseMenu onClose={closeMobileMenu} navigation={navigationItems(true)} filters={renderFilters(true)} />}
+      <div ref={compactHeaderRef} className={`compact-store-header${mobileTabsHidden ? " visible" : ""}`} inert={!mobileTabsHidden} aria-hidden={!mobileTabsHidden}>
+        <div className="compact-header-row">
+          <button type="button" className="mobile-browse-toggle" aria-label="Open navigation and product filters" aria-expanded={mobileMenuOpen} aria-controls="mobile-browse-menu" onClick={() => { setCompactSearchOpen(false); setMobileMenuOpen((open) => !open); }}><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" /></svg></button>
+          <a className="compact-brand" href="/" aria-label="PAM Essentials home"><BrandLogo background="navy" /></a>
+          <button type="button" className="compact-search-toggle" aria-label={compactSearchOpen ? "Close product search" : "Open product search"} aria-expanded={compactSearchOpen} aria-controls="compact-search-panel" onClick={() => { setMobileMenuOpen(false); setCompactSearchOpen((open) => !open); setSearchOpen(true); requestAnimationFrame(() => compactSearchRef.current?.querySelector("input")?.focus({ preventScroll: true })); }}><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></svg></button>
+          <button className="cart-button" onClick={() => setCartOpen(true)} aria-label={`View cart, ${cartCount} items`}><svg className="cart-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 4h2l2.1 10.4a2 2 0 0 0 2 1.6H19a2 2 0 0 0 2-1.6L22 8H6"/><circle cx="10" cy="20" r="1"/><circle cx="19" cy="20" r="1"/></svg><b>{cartCount}</b></button>
+        </div>
+        {compactSearchOpen && <div id="compact-search-panel" className="compact-search-panel">{renderSearch(true)}</div>}
+      </div>
+      {mobileMenuOpen && <MobileBrowseMenu onClose={closeMobileMenu} services={navigationItems(true, "services")} navigation={navigationItems(true, "secondary")} filters={renderFilters(true, "categories")} offers={renderFilters(true, "offers")} />}
 
       <section className={`hero${webHeroUrl ? " has-web-image" : ""}${mobileHeroUrl ? " has-mobile-image" : ""}`}><div className={`hero-flyer hero-flyer-web${webHeroUrl ? " uploaded" : ""}`} aria-hidden="true" style={heroBackground(webHeroUrl)} /><div className={`hero-flyer hero-flyer-mobile${mobileHeroUrl ? " uploaded" : ""}`} aria-hidden="true" style={heroBackground(mobileHeroUrl)} /><div className="hero-content"><p className="eyebrow">Everyday Essentials, thoughtfully selected.</p><h1>Find what you need.<br />Pick up or get it delivered.</h1><p>School, home, gifts and daily essentials in one simple shop.</p><div className="hero-actions"><a className="button primary" href="#catalogue">Shop products</a><a className="button whatsapp" href={`https://wa.me/${PRIMARY_WHATSAPP}`} target="_blank" rel="noreferrer"><WhatsAppIcon size={18} /> WhatsApp us</a></div></div><div className="hero-panel" aria-hidden="true"><span>P</span><span>A</span><span>M</span></div></section>
       {dealsActive && (dealProducts.length > 0 || dealBundles.length > 0) && <section className="deals-feature"><div><p className="eyebrow">Selected for you</p><h2>PAM Deals</h2><p>{dealPercent > 0 ? `Up to ${dealPercent}% off selected products` : "Selected everyday offers"}</p></div><a className="button accent" href="/?browse=deals#catalogue">Shop deals</a></section>}
@@ -618,7 +638,7 @@ export default function Storefront() {
           {error && !products.length && <div className="empty-state error-panel"><h3>Catalogue unavailable</h3><p>{error}</p></div>}
           {!loading && !error && !visible.length && !(dealsActive && browseMode === "deals" && dealBundles.length) && <div className="empty-state"><h3>No matching products</h3><p>Try another search, category or collection.</p></div>}
           {dealsActive && browseMode === "deals" && dealBundles.length > 0 && <section className="deal-bundle-grid" aria-label="PAM Deals bundles">{dealBundles.map((deal) => <article className="deal-bundle-card" key={deal.dealId}><div className="deal-bundle-art"><span aria-hidden="true">PAM</span><span className="promo-ribbon">PAM Deal</span></div><div className="deal-bundle-body"><span className={deal.available ? "badge success" : "badge danger"}>{deal.available ? "✓ In stock" : "Out of stock"}</span><h3>{deal.name}</h3><p>{deal.productIds.length} products together</p><p className="deal-bundle-price"><del>{money.format(deal.aggregatePrice)}</del> <strong>{money.format(deal.finalPrice)}</strong></p><details className="deal-bundle-details"><summary>View deal details</summary><ul>{deal.productIds.map((id) => <li key={id}>{products.find((product) => product.id === id)?.name || id}</li>)}</ul>{deal.aggregatePrice > deal.finalPrice && <p>You save {money.format(deal.aggregatePrice - deal.finalPrice)}</p>}</details><button type="button" className="button add-cart-action" disabled={!deal.available} onClick={() => addBundle(deal)}>{deal.available ? "Add deal to cart" : "Out of stock"}</button></div></article>)}</section>}
-          <div className={`product-grid${gridDensity === "compact" ? " compact" : ""}`}>{pagedProducts.map((product) => {
+          <div id="catalogue-products" className={`product-grid${gridDensity === "compact" ? " compact" : ""}`}>{pagedProducts.map((product) => {
             const variants = product.productGroupId ? products.filter((item) => item.productGroupId === product.productGroupId) : [product];
             const hasVariants = variants.length > 1;
             return <article className="product-card" key={product.id}>
@@ -631,7 +651,7 @@ export default function Storefront() {
               {product.stock > 0 && <button type="button" className="button add-cart-action full" aria-label="Add to cart" onClick={() => add(product)}><span className="add-cart-label">Add to cart</span><svg className="add-cart-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M2 3h2l2 11h10l2-7H5"/><circle cx="8" cy="20" r="1"/><circle cx="16" cy="20" r="1"/><path d="M18 4h5M20.5 1.5v5"/></svg></button>}</div>
             </div></article>;
           })}</div>
-          {visible.length > pageSize && <div className="pagination"><button disabled={page === 1} onClick={() => setPage((current) => current - 1)}>Previous</button><span>Page {page} of {pageCount}</span><button disabled={page === pageCount} onClick={() => setPage((current) => current + 1)}>Next</button></div>}
+          {visible.length > pageSize && <div className="pagination"><button disabled={page === 1} onClick={() => changeProductPage(page - 1)}>Previous</button><span>Page {page} of {pageCount}</span><button disabled={page === pageCount} onClick={() => changeProductPage(page + 1)}>Next</button></div>}
         </main>
       </section>
 

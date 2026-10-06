@@ -165,7 +165,7 @@ export default function ProductDetailView({ id, initialCatalogue, embedded = fal
       </>}
     </main>
     {embedded && <CustomerFooter storeLocation={catalogue.storeLocation} mapsUrl={catalogue.mapsUrl} dealsActive={catalogue.dealsActive} idPrefix="product-detail" />}
-    {deliveryOpen && <DeliveryInformationDialog storeLocation={catalogue.storeLocation || CURRENT_SHOP_ADDRESS} onClose={closeDelivery} />}
+    {deliveryOpen && <DeliveryInformationDialog storeLocation={catalogue.storeLocation || CURRENT_SHOP_ADDRESS} openingHours={catalogue.openingHours} mapsUrl={catalogue.mapsUrl} onClose={closeDelivery} />}
     {added && <div className="modal-backdrop" role="presentation"><div className="modal" role="dialog" aria-modal="true" aria-label="Added to cart"><h2>Added to cart</h2><p>{added.quantity} × {added.name}</p><p>SKU: {added.sku || added.id}{variantDetail(added) && ` · ${variantDetail(added)}`}</p><div className="added-actions"><button className="button secondary" onClick={() => setAdded(null)}>Continue shopping</button><a className="button primary" href={cartUrl} onClick={rememberCartPosition}>View cart</a></div></div></div>}
     {lightboxIndex >= 0 && gallery.length > 0 && <ProductImageLightbox product={selected} images={gallery} index={Math.min(lightboxIndex, gallery.length - 1)} onIndexChange={(index) => { setLightboxIndex(index); setPreviewSource(gallery[index].source); }} onClose={() => setLightboxIndex(-1)} />}
   </div>;

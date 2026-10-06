@@ -1,8 +1,11 @@
 import Link from "next/link";
+import FulfilmentInformation from "@/components/FulfilmentInformation";
+import WhatsAppIcon from "@/components/WhatsAppIcon";
 import { notFound } from "next/navigation";
 import { adminDb } from "@/lib/admin";
 import { isGoogleMapsUrl } from "@/lib/location.mjs";
-import { SHOP_ADDRESS, PRIMARY_WHATSAPP, PRIMARY_PHONE_LABEL, SECONDARY_PHONE_LABEL, MOMO_NUMBER, MOMO_MERCHANT_ID, OPENING_HOURS } from "@/lib/shop";
+import { CURRENT_SHOP_ADDRESS, currentShopAddress } from "@/lib/shopAddress.mjs";
+import { PRIMARY_WHATSAPP, PRIMARY_PHONE_LABEL, SECONDARY_PHONE_LABEL, OPENING_HOURS } from "@/lib/shop";
 
 export const dynamic = "force-dynamic";
 const whatsapp = `https://wa.me/${PRIMARY_WHATSAPP}`;
@@ -31,14 +34,20 @@ export default async function InfoPage({ params }) {
   const { slug } = await params;
   const page = pages[slug];
   if (!page) notFound();
-  let location = SHOP_ADDRESS, mapsUrl = "", hours = OPENING_HOURS;
+  let location = CURRENT_SHOP_ADDRESS, mapsUrl = "", hours = OPENING_HOURS;
   try {
     const store = adminDb();
     const [addressSnap, mapsSnap, hoursSnap] = await Promise.all(["STORE_LOCATION", "GOOGLE_MAPS_URL", "OPENING_HOURS"].map((key) => store.collection("settings").doc(key).get()));
-    location = String(addressSnap.data()?.value || SHOP_ADDRESS);
+    location = currentShopAddress(addressSnap.data()?.value);
     mapsUrl = isGoogleMapsUrl(mapsSnap.data()?.value) ? String(mapsSnap.data()?.value || "") : "";
     hours = String(hoursSnap.data()?.value || OPENING_HOURS);
   } catch { /* Keep contact information available if settings are temporarily unavailable. */ }
-  return <main className="info-page"><Link className="info-back" href="/">← Back to shop</Link><p className="eyebrow">PAM Essentials &amp; More</p><h1>{page.title}</h1>{page.body.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}{slug === "contact" && <section id="location"><h2>Store Location</h2><p>{location}</p><p>Opening hours: {hours}</p>{mapsUrl && <a className="button secondary" href={mapsUrl} target="_blank" rel="noreferrer">Open in Google Maps</a>}</section>}{slug === "delivery" && <section><h2>Mobile Money details</h2><p>Number: {MOMO_NUMBER} · Merchant ID: {MOMO_MERCHANT_ID}</p><p>Confirm the amount and recipient with us before sending payment.</p><p>Courier collection: {location}</p></section>}<div className="info-contact" id="contact"><a className="button whatsapp" href={whatsapp} target="_blank" rel="noreferrer">WhatsApp {PRIMARY_PHONE_LABEL}</a><a href="tel:+233596661439">Call {PRIMARY_PHONE_LABEL}</a><a href="tel:+233207015198">Call {SECONDARY_PHONE_LABEL}</a></div></main>;
+  const fulfilmentPage = slug === "delivery" || slug === "contact";
+  return <main className={`info-page${fulfilmentPage ? " fulfilment-page" : ""}`}>
+    <Link className="info-back" href="/">← Back to shop</Link>
+    <header className={fulfilmentPage ? "info-hero" : "info-heading"}><p className="eyebrow">PAM Essentials &amp; More</p><h1>{page.title}</h1>{page.body.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}</header>
+    {fulfilmentPage && <FulfilmentInformation storeLocation={location} openingHours={hours} mapsUrl={mapsUrl} pickupOnly={slug === "contact"} />}
+    {fulfilmentPage && <p className="fulfilment-help">Need help deciding? Message or call our team before you order.</p>}
+    <div className="info-contact" id="contact"><a className="button whatsapp" href={whatsapp} target="_blank" rel="noreferrer"><WhatsAppIcon size={18} /> WhatsApp {PRIMARY_PHONE_LABEL}</a><a className={fulfilmentPage ? "button secondary" : ""} href="tel:+233596661439">Call {PRIMARY_PHONE_LABEL}</a><a className={fulfilmentPage ? "button secondary" : ""} href="tel:+233207015198">Call {SECONDARY_PHONE_LABEL}</a></div>
+  </main>;
 }
-

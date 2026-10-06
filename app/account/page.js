@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { signOut, useAuth } from "@/components/AuthProvider";
 import BrandLogo from "@/components/BrandLogo";
@@ -48,12 +48,14 @@ export default function CustomerAccount() {
   }, [loading, user, role, request, refresh]);
 
   async function handleAuth(event) {
-    event.preventDefault(); setBusy(true); setError("");
+    event.preventDefault(); if (busy) return; setBusy(true); setError(""); setNotice("");
     try {
-      if (mode === "register") await createUserWithEmailAndPassword(auth, email.trim(), password);
+      if (mode === "reset") { await sendPasswordResetEmail(auth, email.trim()); setNotice("If an account uses this email, you will receive a password reset link. Check your inbox and spam folder."); }
+      else if (mode === "register") await createUserWithEmailAndPassword(auth, email.trim(), password);
       else await signInWithEmailAndPassword(auth, email.trim(), password);
     } catch (reason) {
-      setError(reason.code === "auth/email-already-in-use" ? "An account already uses this email. Choose Sign in." : reason.code === "auth/weak-password" ? "Choose a stronger password." : "Account access failed. Check your email and password.");
+      if (mode === "reset") { if (reason.code === "auth/user-not-found") setNotice("If an account uses this email, you will receive a password reset link. Check your inbox and spam folder."); else setError(reason.code === "auth/too-many-requests" ? "Too many attempts. Please wait before trying again." : "Could not send the reset link. Check the email address and try again."); }
+      else setError(reason.code === "auth/email-already-in-use" ? "An account already uses this email. Choose Sign in." : reason.code === "auth/weak-password" ? "Choose a stronger password." : "Account access failed. Check your email and password.");
     } finally { setBusy(false); }
   }
 
@@ -73,7 +75,7 @@ export default function CustomerAccount() {
   return <div className="customer-account"><header className="product-page-header"><a className="brand" href="/" aria-label="PAM Essentials home"><BrandLogo /></a><a href="/">Continue shopping</a></header><main className="account-main">
     <p className="eyebrow">PAM Essentials &amp; More</p><h1>Customer account</h1><p>Browse and check out as a guest whenever you like. Create an account to save products and track orders.</p>
     {error && <p className="notice error-notice">{error}</p>}{notice && <p className="notice">{notice}</p>}
-    {loading ? <p>Checking account…</p> : role ? <div className="panel account-panel"><h2>Staff session active</h2><p>Customer accounts are separate from staff access.</p><button className="button secondary" onClick={() => signOut()}>Sign out of staff account</button></div> : !user ? <form className="panel account-panel" onSubmit={handleAuth}><div className="account-tabs"><button type="button" className={mode === "register" ? "active" : ""} onClick={() => setMode("register")}>Create account</button><button type="button" className={mode === "signin" ? "active" : ""} onClick={() => setMode("signin")}>Sign in</button></div><label>Email<input required type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} /></label><label>Password<input required type="password" minLength={6} autoComplete={mode === "register" ? "new-password" : "current-password"} value={password} onChange={(event) => setPassword(event.target.value)} /></label><button className="button primary" disabled={busy}>{busy ? "Please wait…" : mode === "register" ? "Create account" : "Sign in"}</button></form> : <>
+    {loading ? <p>Checking account…</p> : role ? <div className="panel account-panel"><h2>Staff session active</h2><p>Customer accounts are separate from staff access.</p><button className="button secondary" onClick={() => signOut()}>Sign out of staff account</button></div> : !user ? <form className="panel account-panel" onSubmit={handleAuth}><div className="account-tabs"><button type="button" className={mode === "register" ? "active" : ""} disabled={busy} onClick={() => { setMode("register"); setError(""); setNotice(""); }}>Create account</button><button type="button" className={mode === "signin" ? "active" : ""} disabled={busy} onClick={() => { setMode("signin"); setError(""); setNotice(""); }}>Sign in</button></div>{mode === "reset" && <h2>Reset your password</h2>}<label>Email<input required type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} /></label>{mode !== "reset" && <label>Password<input required type="password" minLength={6} autoComplete={mode === "register" ? "new-password" : "current-password"} value={password} onChange={(event) => setPassword(event.target.value)} /></label>}<button className="button primary" disabled={busy}>{busy ? "Please wait…" : mode === "reset" ? "Send reset link" : mode === "register" ? "Create account" : "Sign in"}</button>{mode !== "register" && <button type="button" className="account-recovery" disabled={busy} onClick={() => { setMode(mode === "reset" ? "signin" : "reset"); setError(""); setNotice(""); }}>{mode === "reset" ? "Back to sign in" : "Forgot password?"}</button>}{mode === "reset" && <p>Enter your account email to request a password reset link.</p>}</form> : <>
       <div className="account-hero"><div><p className="eyebrow">Welcome back</p><h2>Your PAM account</h2><p>{user.email}</p></div><div className="account-hero-stats"><a href="#orders"><strong>{orders.length}</strong><span>Orders</span></a><a href="#wishlist"><strong>{wishlist.length}</strong><span>Saved products</span></a></div></div>
       <div className="account-heading"><nav aria-label="Account sections"><a href="#orders">My orders</a><a href="#wishlist">Wishlist</a><a href="/#catalogue">Shop more</a></nav><button type="button" onClick={() => signOut()}>Sign out</button></div>
       <section className="panel account-panel" id="orders"><h2>My orders</h2>{orders.length ? <div className="account-orders">{orders.map((order) => <article key={order.orderId}><div><b>{order.orderId}</b><span className="badge warning">{order.status}</span></div><p>{order.items.map((item) => `${item.quantity} × ${item.name}`).join(", ")}</p><p>{order.deliveryMethod} · {order.paymentStatus}{order.pickupCode && ` · Pickup code ${order.pickupCode}`}</p><strong>{money.format(order.total)}</strong></article>)}</div> : <p>No orders are linked to this account yet.</p>}
