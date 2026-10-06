@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import ProductOptions, { ProductImage, productVariants } from "@/components/ProductOptions";
+import ProductOptions, { ProductImage, ProductImageLightbox, productVariants } from "@/components/ProductOptions";
 import { addToCart, readCart, saveCart } from "@/lib/storeCart";
 import { detailImageSource, productGallery } from "@/lib/productImages.mjs";
 import BrandLogo from "@/components/BrandLogo";
@@ -37,7 +37,6 @@ export default function ProductDetailView({ id, initialCatalogue, embedded = fal
   const [selectedVariant, setSelectedVariant] = useState(null);
   const [previewSource, setPreviewSource] = useState(null);
   const [lightboxIndex, setLightboxIndex] = useState(-1);
-  const gesture = useRef({ x: 0, y: 0, lastWheel: 0, dragged: false });
   const activeOverlay = deliveryOpen ? "delivery" : lightboxIndex >= 0 ? "gallery" : added ? "added" : "";
   const overlayRef = useRef("");
   const previousOverlay = useRef("");
@@ -109,16 +108,6 @@ export default function ProductDetailView({ id, initialCatalogue, embedded = fal
   const variants = useMemo(() => productVariants(product, products), [product, products]);
   const selected = selectedVariant && variants.find((item) => item.id === selectedVariant.id) || product;
   const gallery = useMemo(() => product ? productGallery(product, selected, variants) : [], [product, selected, variants]);
-  useEffect(() => {
-    if (lightboxIndex < 0) return;
-    const handleKey = (event) => {
-      if (event.key === "Escape") setLightboxIndex(-1);
-      if (event.key === "ArrowRight") setLightboxIndex((index) => (index + 1) % gallery.length);
-      if (event.key === "ArrowLeft") setLightboxIndex((index) => (index - 1 + gallery.length) % gallery.length);
-    };
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, [lightboxIndex, gallery.length]);
   const related = useMemo(() => products.filter((item) => item.id !== product?.id && (!product?.productGroupId || item.productGroupId !== product.productGroupId) && item.categoryId === product?.categoryId).sort((a, b) => Number(b.subcategoryId === product?.subcategoryId) - Number(a.subcategoryId === product?.subcategoryId)).slice(0, 4), [product, products]);
   function add(selected, quantity) {
     saveCart(addToCart(readCart(), selected, quantity));
@@ -163,7 +152,6 @@ export default function ProductDetailView({ id, initialCatalogue, embedded = fal
         <nav className="breadcrumb"><a href="/">Home</a> / {selected.category} / {selected.name}</nav>
         <div className="product-detail-hero">
           <ProductOptions key={product.id} initialProduct={product} products={variants} discountRules={discountRules} onAdd={add} onSelectionChange={(variant) => { setSelectedVariant(variant); setPreviewSource(null); }} previewSource={previewSource} onPreviewChange={setPreviewSource} onOpenGallery={() => setLightboxIndex(Math.max(0, gallery.findIndex((image) => image.source.url === (previewSource || detailImageSource(product, selected)).url)))} footer={<div className="product-utilities"><button type="button" onClick={share} aria-label="Share product"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V3m0 0L7 8m5-5 5 5M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/></svg>Share</button>{shared && <span>Link copied</span>}<a href={`/account?wishlist=${encodeURIComponent(selected.id)}`} aria-label="Add to wishlist"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.8 8.5c0 4.2-8.8 10.1-8.8 10.1S3.2 12.7 3.2 8.5a4.4 4.4 0 0 1 8.8-.5 4.4 4.4 0 0 1 8.8-.5Z"/></svg>Add to wishlist</a><button type="button" onClick={compareProduct} aria-label="Compare products"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h15m0 0-3-3m3 3-3 3M20 17H5m0 0 3-3m-3 3 3 3"/></svg>Compare</button>{compareNotice && <span role="status">{compareNotice}</span>}</div>} />
-          {gallery.length > 0 && <section className="product-gallery"><h2>Explore the details</h2><div className="product-gallery-grid">{gallery.map((item, index) => <button type="button" className={(previewSource || detailImageSource(product, selected)).url === item.source.url ? "selected" : ""} key={`${item.source.url}-${index}`} onClick={() => { setPreviewSource(item.source); setLightboxIndex(index); }} aria-label={`View ${item.label} full screen`}><ProductImage product={selected} source={item.source} width={240} /><span>{item.label}</span></button>)}</div></section>}
           <div className="detail-section">
             <section className="detail-info-card"><h2>Description</h2><p>{selected.description || selected.name}</p></section>
             <section className="detail-info-card"><h2>Product details</h2><dl><dt>SKU</dt><dd>{selected.sku || selected.id}</dd>{selected.productGroupId && <><dt>Product ID</dt><dd>{selected.productGroupId}</dd><dt>Variant ID</dt><dd>{selected.id}</dd></>}{variantTitles(variants).map(({ title, key }) => productOptions(selected)[key] && <Fragment key={key}><dt>{title}</dt><dd>{productOptions(selected)[key]}</dd></Fragment>)}</dl></section>
@@ -179,7 +167,7 @@ export default function ProductDetailView({ id, initialCatalogue, embedded = fal
     {embedded && <CustomerFooter storeLocation={catalogue.storeLocation} mapsUrl={catalogue.mapsUrl} dealsActive={catalogue.dealsActive} idPrefix="product-detail" />}
     {deliveryOpen && <DeliveryInformationDialog storeLocation={catalogue.storeLocation || CURRENT_SHOP_ADDRESS} onClose={closeDelivery} />}
     {added && <div className="modal-backdrop" role="presentation"><div className="modal" role="dialog" aria-modal="true" aria-label="Added to cart"><h2>Added to cart</h2><p>{added.quantity} × {added.name}</p><p>SKU: {added.sku || added.id}{variantDetail(added) && ` · ${variantDetail(added)}`}</p><div className="added-actions"><button className="button secondary" onClick={() => setAdded(null)}>Continue shopping</button><a className="button primary" href={cartUrl} onClick={rememberCartPosition}>View cart</a></div></div></div>}
-    {lightboxIndex >= 0 && gallery.length > 0 && <div className="image-lightbox" role="dialog" aria-modal="true" aria-label="Product image gallery" onClick={(event) => { if (gesture.current.dragged) { gesture.current.dragged = false; return; } if (event.target === event.currentTarget) setLightboxIndex(-1); }} onPointerDown={(event) => { gesture.current.x = event.clientX; gesture.current.y = event.clientY; gesture.current.dragged = false; }} onPointerUp={(event) => { const dx = event.clientX - gesture.current.x; const dy = event.clientY - gesture.current.y; if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy)) { gesture.current.dragged = true; setLightboxIndex((index) => (index + (dx < 0 ? 1 : -1) + gallery.length) % gallery.length); } }} onWheel={(event) => { if (Math.abs(event.deltaX) > 35 && Math.abs(event.deltaX) > Math.abs(event.deltaY) && Date.now() - gesture.current.lastWheel > 450) { gesture.current.lastWheel = Date.now(); setLightboxIndex((index) => (index + (event.deltaX > 0 ? 1 : -1) + gallery.length) % gallery.length); } }}><button type="button" className="image-lightbox-close" onClick={() => setLightboxIndex(-1)} aria-label="Close gallery">×</button><button type="button" className="image-lightbox-nav" onClick={(event) => { event.stopPropagation(); setLightboxIndex((index) => (index - 1 + gallery.length) % gallery.length); }} aria-label="Previous image">‹</button><div className="image-lightbox-frame" onClick={(event) => event.stopPropagation()}><div className="image-lightbox-slide" key={lightboxIndex}><ProductImage product={selected} source={gallery[lightboxIndex]?.source} width={2200} eager /></div><span>{lightboxIndex + 1} / {gallery.length}</span></div><button type="button" className="image-lightbox-nav" onClick={(event) => { event.stopPropagation(); setLightboxIndex((index) => (index + 1) % gallery.length); }} aria-label="Next image">›</button></div>}
+    {lightboxIndex >= 0 && gallery.length > 0 && <ProductImageLightbox product={selected} images={gallery} index={Math.min(lightboxIndex, gallery.length - 1)} onIndexChange={(index) => { setLightboxIndex(index); setPreviewSource(gallery[index].source); }} onClose={() => setLightboxIndex(-1)} />}
   </div>;
 }
 

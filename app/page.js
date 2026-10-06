@@ -112,6 +112,14 @@ export default function Storefront() {
   const previousLayer = useRef("");
   const closingOverlay = useRef(false);
   const leavingStore = useRef(false);
+  const quickImageOverlay = useRef({ open: false, dismiss: null });
+  const handleQuickImageOverlayChange = useCallback((open, dismiss) => {
+    const previous = quickImageOverlay.current.open;
+    quickImageOverlay.current = { open, dismiss };
+    if (window.innerWidth > 767) return;
+    if (open && !previous) window.history.pushState({ ...window.history.state, pamQuickImageOverlay: true }, "", window.location.href);
+    else if (!open && previous && window.history.state?.pamQuickImageOverlay) { closingOverlay.current = true; window.history.back(); }
+  }, []);
   const detailChildOverlay = useRef({ layer: "", dismiss: null });
   const handleDetailOverlayChange = useCallback((layer, dismiss) => {
     const previous = detailChildOverlay.current.layer;
@@ -214,7 +222,7 @@ export default function Storefront() {
         else if (layer === "confirmation") setConfirmation(null);
         else if (layer === "added") setAddedProduct(null);
         else if (layer === "detail") { if (detailChildOverlay.current.layer) detailChildOverlay.current.dismiss?.(); else setDetailProduct(null); }
-        else if (layer === "quick") setQuickProduct(null);
+        else if (layer === "quick") { if (quickImageOverlay.current.open) quickImageOverlay.current.dismiss?.(); else setQuickProduct(null); }
         else if (layer === "filters") setMobileFiltersOpen(false);
         else if (layer === "services") setServicesOpen(false);
         else if (layer === "announcement") dismissAnnouncement();
@@ -586,7 +594,7 @@ export default function Storefront() {
 
       <CustomerFooter storeLocation={storeLocation} mapsUrl={mapsUrl} dealsActive={dealsActive} />
 
-      {quickProduct && <div className="modal-backdrop" style={{ display: detailProduct ? "none" : undefined }} role="presentation" onMouseDown={() => setQuickProduct(null)}><div className="modal quick-view-modal" role="dialog" aria-modal="true" aria-label={`Quick View ${quickProduct.name}`} onMouseDown={(event) => event.stopPropagation()}><ProductOptions key={quickProduct.id} initialProduct={quickProduct} products={products} discountRules={discountRules} compact onClose={() => setQuickProduct(null)} onAdd={add} onNavigateDetail={(event, selected) => { if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) { rememberListingContext(); return; } event.preventDefault(); window.history.pushState({ ...window.history.state, pamQuickDetail: true, pamStoreOverlay: "detail" }, "", window.location.href); setDetailProduct(selected); }} /></div></div>}
+      {quickProduct && <div className="modal-backdrop" style={{ display: detailProduct ? "none" : undefined }} role="presentation" onMouseDown={() => setQuickProduct(null)}><div className="modal quick-view-modal" role="dialog" aria-modal="true" aria-label={`Quick View ${quickProduct.name}`} onMouseDown={(event) => event.stopPropagation()}><ProductOptions key={quickProduct.id} initialProduct={quickProduct} products={products} discountRules={discountRules} compact onImageOverlayChange={handleQuickImageOverlayChange} onClose={() => setQuickProduct(null)} onAdd={add} onNavigateDetail={(event, selected) => { if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) { rememberListingContext(); return; } event.preventDefault(); window.history.pushState({ ...window.history.state, pamQuickDetail: true, pamStoreOverlay: "detail" }, "", window.location.href); setDetailProduct(selected); }} /></div></div>}
       {detailProduct && <div className="quick-detail-overlay" role="dialog" aria-modal="true" aria-label={`Product details ${detailProduct.name}`}><ProductDetailView id={detailProduct.id} initialCatalogue={{ products, discountRules, storeLocation, mapsUrl, dealsActive }} embedded onBack={closeDetailView} onOverlayChange={handleDetailOverlayChange} onCartChange={() => setCart(readCart())} /></div>}
       {saveNotice && <div className="save-toast" role="status"><span>{saveNotice}</span><button type="button" onClick={() => setSaveNotice("")} aria-label="Dismiss notification">×</button></div>}
       {announcementOpen && <div className="modal-backdrop announcement-backdrop" role="presentation"><div className="modal announcement-modal" role="dialog" aria-modal="true" aria-label="Store announcements"><div className="drawer-title"><div><p className="eyebrow">PAM Essentials &amp; More</p><h2>Announcements</h2></div><button type="button" className="icon-button" onClick={dismissAnnouncement} aria-label="Close announcements">×</button></div><div className="announcement-list">{announcements.map((item) => <article key={item.announcementId} className={item.style === "crawler" ? "announcement-crawler" : "announcement-static"}><h3>{item.title}</h3><div className="announcement-message"><p>{item.body}</p></div>{item.actionLabel && item.actionUrl && <a className="button secondary" href={item.actionUrl} onClick={dismissAnnouncement}>{item.actionLabel}</a>}</article>)}</div><label className="announcement-optout"><input type="checkbox" checked={announcementOptOut} onChange={(event) => { announcementOptOutRef.current = event.target.checked; setAnnouncementOptOut(event.target.checked); }} /> Do not show announcements again</label><button type="button" className="button primary full" onClick={dismissAnnouncement}>Continue to shop</button></div></div>}
