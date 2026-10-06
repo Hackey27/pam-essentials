@@ -107,6 +107,20 @@ export default function Storefront() {
   const clickSession = useRef({ id: "", seen: new Set() });
   const orderRequest = useRef(false);
   const searchRef = useRef(null);
+  const storeShellRef = useRef(null);
+  const storeHeaderRef = useRef(null);
+  const storeTopBarRef = useRef(null);
+  useLayoutEffect(() => {
+    const measure = () => {
+      const height = (storeHeaderRef.current?.getBoundingClientRect().height || 0) + (storeTopBarRef.current?.getBoundingClientRect().height || 0);
+      storeShellRef.current?.style.setProperty("--mobile-header-stack", `${height}px`);
+    };
+    const observer = new ResizeObserver(measure);
+    if (storeHeaderRef.current) observer.observe(storeHeaderRef.current);
+    if (storeTopBarRef.current) observer.observe(storeTopBarRef.current);
+    measure();
+    return () => observer.disconnect();
+  }, []);
   const cartReturn = useRef("");
   const listingRestore = useRef(null);
   const previousLayer = useRef("");
@@ -179,18 +193,20 @@ export default function Storefront() {
   useEffect(() => { setCart(readCart()); const params = new URLSearchParams(window.location.search); if (params.has("cart")) setCartOpen(true); const source = params.get("returnTo"); if (source?.startsWith("/products/") && !source.startsWith("//")) cartReturn.current = source; }, []);
   useEffect(() => { const close = (event) => { if (!searchRef.current?.contains(event.target)) setSearchOpen(false); }; document.addEventListener("pointerdown", close); return () => document.removeEventListener("pointerdown", close); }, []);
   useEffect(() => {
-    let lastY = window.scrollY, travel = 0, frame = 0, ignoreUntil = 0;
+    let lastY = window.scrollY, travel = 0, frame = 0;
     const update = () => {
       frame = 0;
       if (window.innerWidth > 767) { setMobileTabsHidden(false); travel = 0; lastY = window.scrollY; return; }
-      const delta = window.scrollY - lastY;
+      const previousY = lastY;
+      const delta = window.scrollY - previousY;
       lastY = window.scrollY;
-      if (performance.now() < ignoreUntil) return;
       if (window.scrollY < 90) { setMobileTabsHidden(false); travel = 0; return; }
+      const maximumY = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+      if (delta < 0 && previousY > maximumY + 1) { travel = 0; return; }
       if (Math.sign(delta) !== Math.sign(travel)) travel = 0;
       travel = Math.max(-60, Math.min(60, travel + delta));
-      if (travel > 32 && window.scrollY > 200) { setMobileTabsHidden(true); travel = 0; ignoreUntil = performance.now() + 450; }
-      if (travel < -28) { setMobileTabsHidden(false); travel = 0; ignoreUntil = performance.now() + 450; }
+      if (travel > 32 && window.scrollY > 200) { setMobileTabsHidden(true); travel = 0; }
+      if (travel < -28) { setMobileTabsHidden(false); travel = 0; }
     };
     const queue = () => { if (!frame) frame = requestAnimationFrame(update); };
     window.addEventListener("scroll", queue, { passive: true });
@@ -489,13 +505,13 @@ export default function Storefront() {
   }
 
   return (
-    <div className={`store-shell${crawlerAnnouncements.length ? " has-top-announcements" : ""}${mobileTabsHidden || mobileFiltersOpen ? " mobile-tabs-hidden" : ""}`}>
+    <div ref={storeShellRef} className={`store-shell${crawlerAnnouncements.length ? " has-top-announcements" : ""}${mobileTabsHidden || mobileFiltersOpen ? " mobile-tabs-hidden" : ""}`}>
       <div className="utility-bar"><span>Opening hours: {openingHours}</span><div><Dropdown label="Store Location" utility><a href="/info/contact#location">Address and opening hours</a>{mapsUrl && <a href={mapsUrl} target="_blank" rel="noreferrer">Open Google Maps</a>}</Dropdown><Dropdown label="Contact Us" utility><a href={`https://wa.me/${PRIMARY_WHATSAPP}`} target="_blank" rel="noreferrer"><WhatsAppIcon size={16} /> WhatsApp us</a><a href="tel:+233596661439">Call {PRIMARY_PHONE_LABEL}</a><a href="/info/contact#contact">All contact details</a></Dropdown><Dropdown label="Track Order" utility><a href="/account#orders">View my orders</a><a href="/account?mode=signin">Sign in to track</a></Dropdown><Dropdown label="Wishlist" utility><a href="/account#wishlist">View wishlist</a><a href="/compare">Compare products</a></Dropdown><Dropdown label={user && !role ? "My Account" : "Sign In"} utility><a href="/account?mode=signin">Sign in</a>{(!user || role) && <a href="/account?mode=register">Create account</a>}</Dropdown></div></div>
-      <div className="store-top-bar">
+      <div ref={storeTopBarRef} className="store-top-bar">
         <div className="mobile-opening-hours">Opening hours: {openingHours}</div>
         {crawlerAnnouncements.length > 0 && <section className="top-announcement-crawler" aria-label="Store announcements"><div className="top-announcement-track" style={{ animationDuration: `${Math.max(20, crawlerAnnouncements.reduce((length, item) => length + item.title.length + item.body.length, 0) / 10)}s` }}>{crawlerAnnouncements.map((item) => <span key={item.announcementId}><strong>{item.title}:</strong> {item.body}{item.actionLabel && item.actionUrl && <a href={item.actionUrl}>{item.actionLabel}</a>}</span>)}</div></section>}
       </div>
-      <header className={`store-header${mobileTabsHidden || mobileFiltersOpen ? " mobile-tabs-hidden" : ""}`}>
+      <header ref={storeHeaderRef} className={`store-header${mobileTabsHidden || mobileFiltersOpen ? " mobile-tabs-hidden" : ""}`}>
         <div className="header-main">
           <a className="brand" href="/" aria-label="PAM Essentials home"><BrandLogo background="white" mobileBackground="navy" /></a>
           <nav className="store-nav" aria-label="Primary navigation">
