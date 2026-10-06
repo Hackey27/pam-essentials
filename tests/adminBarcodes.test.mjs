@@ -113,3 +113,15 @@ test("concurrent product edit cancels deletion and audit atomically", async () =
   assert.equal(store.inspect("barcode_registry", "111").productId, "P1");
   assert.equal((await store.collection("admin_audit").get()).docs.length, 0);
 });
+
+test("random shapes is additive, survives old-client edits and can be turned off", async () => {
+  const store = setup();
+  assert.equal((await POST(post({ ...base, create: false, randomShapes: true }))).status, 200);
+  assert.equal(store.inspect("products", "P1").randomShapes, true);
+  assert.equal(store.inspect("products", "P1").sku, base.sku);
+  assert.equal(store.inspect("products", "P1").price, base.price);
+  assert.equal((await POST(post({ ...base, create: false, description: "Updated description" }))).status, 200);
+  assert.equal(store.inspect("products", "P1").randomShapes, true);
+  assert.equal((await POST(post({ ...base, create: false, randomShapes: false }))).status, 200);
+  assert.equal(store.inspect("products", "P1").randomShapes, false);
+});

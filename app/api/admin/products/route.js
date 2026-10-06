@@ -103,6 +103,7 @@ export async function POST(request) {
     costPrice,
     pinned: Boolean(body.pinned),
     randomColours: Boolean(body.randomColours),
+    ...(typeof body.randomShapes === "boolean" ? { randomShapes: body.randomShapes } : {}),
     newArrival: Boolean(body.newArrival),
     collections: collections.map((value) => text(value, 80)).filter(Boolean).slice(0, 12),
     active: body.active !== false,

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { cardImageSource, detailImageSource, galleryImagePaths, getProductImageUrl, isProductImagePath, productImageFolder, variantCombinationKey } from "../lib/productImages.mjs";
+import { cardImageSource, detailImageSource, galleryImagePaths, getProductImageUrl, isProductImagePath, productImageFolder, productGallery, variantCombinationKey } from "../lib/productImages.mjs";
 
 test("image paths stay inside the product image namespace", () => {
   const folder = productImageFolder("SKU 123");
@@ -23,4 +23,19 @@ test("variant combinations and image precedence are deterministic", () => {
   assert.equal(detailImageSource(red, { ...blue, cardPreviewImagePath: "products/blue/card-preview/blue.jpg" }).path, "products/blue/card-preview/blue.jpg");
   assert.equal(detailImageSource(product, { ...blue, imageUrl: "https://legacy.example/blue.jpg", variantImages: {} }).path, product.variantImages[variantCombinationKey(blue)].imagePath);
   assert.equal(detailImageSource({ ...red, cardPreviewImagePath: "products/red/card-preview/card.jpg" }, blue).url, blue.imageUrl);
+});
+
+test("inline galleries deduplicate images and honor the chosen variant's gallery", () => {
+  const origin = { id: "A", colour: "Red", cardPreviewImagePath: "products/red/card-preview/main.jpg", galleryImagePaths: ["products/red/gallery/side.jpg"] };
+  const blue = { id: "B", colour: "Blue", cardPreviewImagePath: "products/blue/card-preview/main.jpg", galleryImagePaths: ["products/blue/card-preview/main.jpg", "products/blue/gallery/side.jpg"] };
+  const images = productGallery(origin, blue, [origin, blue]);
+  assert.deepEqual(images.map((item) => item.source.path), [blue.cardPreviewImagePath, blue.galleryImagePaths[1]]);
+  assert.equal(images.some((item) => item.source.path.includes("red")), false);
+  assert.equal(productGallery({}).length, 0);
+});
+
+test("legacy galleries remain usable without requiring new image fields", () => {
+  const product = { id: "A", imageUrl: "https://example.test/main.jpg", images: ["https://example.test/main.jpg", "https://example.test/side.jpg", "javascript:invalid"] };
+  assert.deepEqual(productGallery(product).map((item) => item.source.url), [product.imageUrl, product.images[1]]);
+  assert.equal(productGallery({ imageUrl: product.imageUrl, images: "not-an-array" }).length, 1);
 });
