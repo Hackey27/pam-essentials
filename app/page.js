@@ -228,8 +228,9 @@ export default function Storefront() {
     return () => { window.removeEventListener("scroll", queue); window.removeEventListener("resize", queue); cancelAnimationFrame(frame); };
   }, []);
   useEffect(() => {
-    const dismissUntypedSearch = () => {
+    const dismissUntypedSearch = (event) => {
       if (window.innerWidth > 767 || query.trim() || !searchOpen) return;
+      if (searchRef.current?.querySelector(".popular-searches")?.contains(event.target)) return;
       const input = searchRef.current?.querySelector("input");
       if (document.activeElement === input) { input.blur(); setSearchOpen(false); }
     };
@@ -586,7 +587,7 @@ export default function Storefront() {
           <div className={`header-search${searchOpen && !query.trim() ? " search-active" : ""}`} ref={searchRef}>
             <div className="search-field"><input type="search" aria-label="Search products, categories, or brands" aria-expanded={searchOpen && query.trim().length > 0} aria-controls="search-suggestions" placeholder="Search products, categories, or brands" value={query} onFocus={() => setSearchOpen(true)} onKeyDown={(event) => { if (event.key === "Escape") setSearchOpen(false); if (event.key === "Enter") { event.preventDefault(); submitSearch(); } }} onChange={(event) => { setBrowseMode("products"); setQuery(event.target.value); setSearchOpen(true); }} /><button type="button" aria-label="Show matching products" onClick={submitSearch}>⌕</button></div>
             {searchOpen && query.trim() && <div id="search-suggestions" className="search-suggestions" role="listbox" aria-label="Matching products">{suggestions.length ? <><p>Suggested products</p>{suggestions.map((item) => <button type="button" role="option" aria-selected="false" key={item.id} onClick={() => { recordClick(item); setQuickProduct(item); setSearchOpen(false); }}><span><b>{item.name}</b><small>{item.category} · {item.id}</small></span><strong>{money.format(item.price)}</strong></button>)}</> : <p>No matching products. Try another name or keyword.</p>}</div>}
-            <div className="popular-searches"><span><span className="popular-full">Popular Searches:</span><span className="popular-short">Popular:</span></span>{[...curatedSearches, ...popularProducts.map((product) => product.name)].map((term) => <button key={term} type="button" onClick={() => searchPopular(term)}>{term}</button>)}</div>
+            <div className="popular-searches" role="region" aria-label="Popular searches, scroll left or right" tabIndex={0}><span><span className="popular-full">Popular Searches:</span><span className="popular-short">Popular:</span></span>{[...curatedSearches, ...popularProducts.map((product) => product.name)].map((term) => <button key={term} type="button" onClick={() => searchPopular(term)}>{term}</button>)}</div>
           </div>
 
           <button className="cart-button" onClick={() => setCartOpen(true)} aria-label={`View cart, ${cartCount} items`}><span className="cart-text">Cart</span><svg className="cart-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 4h2l2.1 10.4a2 2 0 0 0 2 1.6H19a2 2 0 0 0 2-1.6L22 8H6"/><circle cx="10" cy="20" r="1"/><circle cx="19" cy="20" r="1"/></svg><b>{cartCount}</b></button>
