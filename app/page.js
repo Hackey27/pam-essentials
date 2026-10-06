@@ -14,6 +14,7 @@ import { getHeroImageUrl } from "@/lib/heroImages.mjs";
 import BrandLogo from "@/components/BrandLogo";
 import CustomerFooter from "@/components/CustomerFooter";
 import MobileBrowseMenu from "@/components/MobileBrowseMenu";
+import MobilePriceRange from "@/components/MobilePriceRange";
 import ProductDetailView from "@/components/ProductDetailView";
 import { loadStorefrontCatalogue } from "@/lib/storefrontCatalogue";
 import { randomSelectionNote } from "@/lib/randomSelection.mjs";
@@ -513,22 +514,23 @@ export default function Storefront() {
     setConfirmation(data); setCart([]); saveCart([]); setCheckout(false);
   }
 
-  const navigationItems = <>
-            <Dropdown label="Products" active={browseMode === "products"}><button type="button" onClick={() => browse("products")}>All products</button><button type="button" onClick={() => { browse("products"); document.getElementById("catalogue")?.scrollIntoView(); }}>Categories and filters</button></Dropdown>
+  const navigationItems = (compact = false) => <>
+            {!compact && <Dropdown label="Products" active={browseMode === "products"}><button type="button" onClick={() => browse("products")}>All products</button><button type="button" onClick={() => { browse("products"); document.getElementById("catalogue")?.scrollIntoView(); }}>Categories and filters</button></Dropdown>}
             <Dropdown label="Services"><button type="button" onClick={() => setServicesOpen(true)}>All services and contact</button><a href="/services/secretarial">Secretarial services</a><a href="/services/printing">Printing</a><a href="/services/communication">Communication consultancy</a><a href="/services/laptop-repairs">Laptop repairs and purchases</a></Dropdown>
-            <Dropdown label={<><span className="nav-full">New Arrivals</span><span className="nav-short">New</span></>} active={browseMode === "new"}><button type="button" onClick={() => browse("new")}>Shop new arrivals</button></Dropdown>
-            <Dropdown label={<><span className="nav-full">Promotions</span><span className="nav-short">Promos</span></>} active={browseMode === "promotions"}><button type="button" onClick={() => browse("promotions")}>Shop promotions</button></Dropdown>
-            {dealsActive && <Dropdown label="Deals" active={browseMode === "deals"}><button type="button" onClick={() => browse("deals")}>Shop PAM Deals</button></Dropdown>}
+            {!compact && <Dropdown label={<><span className="nav-full">New Arrivals</span><span className="nav-short">New</span></>} active={browseMode === "new"}><button type="button" onClick={() => browse("new")}>Shop new arrivals</button></Dropdown>}
+            {!compact && <Dropdown label={<><span className="nav-full">Promotions</span><span className="nav-short">Promos</span></>} active={browseMode === "promotions"}><button type="button" onClick={() => browse("promotions")}>Shop promotions</button></Dropdown>}
+            {!compact && dealsActive && <Dropdown label="Deals" active={browseMode === "deals"}><button type="button" onClick={() => browse("deals")}>Shop PAM Deals</button></Dropdown>}
             <Dropdown label={<><span className="nav-full">Payment &amp; Delivery</span><span className="nav-short">Delivery</span></>}><a href="/info/delivery">Payment and delivery information</a><a href="/info/contact#location">Pickup location</a></Dropdown>
-            <div className="mobile-extra-nav"><Dropdown label="Contact"><a href="/info/contact#location">Store location</a><a href={`https://wa.me/${PRIMARY_WHATSAPP}`} target="_blank" rel="noreferrer"><WhatsAppIcon size={16} /> WhatsApp us</a><a href="/info/contact#contact">Contact details</a></Dropdown></div><div className="mobile-extra-nav"><Dropdown label="Account"><a href="/account#orders">Track order</a><a href="/account#wishlist">Wishlist</a><a href="/compare">Compare products</a><a href="/account?mode=signin">Sign in</a><a href="/account?mode=register">Create account</a></Dropdown></div>
+            {!compact && <div className="mobile-extra-nav"><Dropdown label="Contact"><a href="/info/contact#location">Store location</a><a href={`https://wa.me/${PRIMARY_WHATSAPP}`} target="_blank" rel="noreferrer"><WhatsAppIcon size={16} /> WhatsApp us</a><a href="/info/contact#contact">Contact details</a></Dropdown></div>}<div className="mobile-extra-nav"><Dropdown label="Account"><a href="/account#orders">Track order</a><a href="/account#wishlist">Wishlist</a><a href="/compare">Compare products</a><a href="/account?mode=signin">Sign in</a><a href="/account?mode=register">Create account</a></Dropdown></div>
           </>;
   const renderFilters = (collapsible = false) => <>
-    <FilterSection title="Price range" collapsible={collapsible}>          <div className="price-filter"><label>Minimum<input type="number" min="0" placeholder="Min price" value={priceMin} onChange={(event) => setPriceMin(event.target.value)} /></label><label>Maximum<input type="number" min="0" placeholder="Max price" value={priceMax} onChange={(event) => setPriceMax(event.target.value)} /></label></div>
-</FilterSection>
+    {!collapsible && <FilterSection title="Price range" collapsible={collapsible}>          <div className="price-filter"><label>Minimum<input type="number" min="0" placeholder="Min price" value={priceMin} onChange={(event) => setPriceMin(event.target.value)} /></label><label>Maximum<input type="number" min="0" placeholder="Max price" value={priceMax} onChange={(event) => setPriceMax(event.target.value)} /></label></div>
+</FilterSection>}
     <FilterSection title="Categories" collapsible={collapsible}>
           <button type="button" className={category === "All categories" ? "filter active" : "filter"} onClick={() => selectCategory("All categories")}>
             <span>All categories</span><small>{products.length}</small>
           </button>
+          {collapsible && <MobilePriceRange minimum={priceMin} maximum={priceMax} upperLimit={Math.max(1, ...products.map((item) => Math.ceil(Number(item.price) || 0)), Number(priceMin) || 0, Number(priceMax) || 0)} onChange={(minimum, maximum) => { setPriceMin(minimum); setPriceMax(maximum); }} />}
           {categoryList.map((item) => {
             const id = item.categoryId || item.id;
             const children = subcategoryList.filter((child) => child.categoryId === id);
@@ -558,9 +560,9 @@ export default function Storefront() {
           })}
           {!categoryList.length && categories.slice(1).map((name) => <button type="button" className={category === name ? "filter active" : "filter"} key={name} onClick={() => selectCategory(name)}>{name}</button>)}
 </FilterSection>
-          <FilterSection title="Availability" collapsible={collapsible}><div className="facet-group" role="group" aria-label="Availability">{[["all", "All"], ["in", "In Stock"], ["out", "Out of Stock"]].map(([value, label]) => <label key={value}><input type="radio" name={collapsible ? "menu-availability" : "availability"} checked={availability === value} onChange={() => setAvailability(value)} /> {label}</label>)}</div></FilterSection>
+          {!collapsible && <FilterSection title="Availability" collapsible={collapsible}><div className="facet-group" role="group" aria-label="Availability">{[["all", "All"], ["in", "In Stock"], ["out", "Out of Stock"]].map(([value, label]) => <label key={value}><input type="radio" name={collapsible ? "menu-availability" : "availability"} checked={availability === value} onChange={() => setAvailability(value)} /> {label}</label>)}</div></FilterSection>}
           <FilterSection title="Offers" collapsible={collapsible}><div className="facet-group" role="group" aria-label="Offers">{[["all", "All"], ["sale", "On Sale"], ["promotions", "Promotions"]].map(([value, label]) => <label key={value}><input type="radio" name={collapsible ? "menu-offer" : "offer"} checked={offer === value} onChange={() => setOffer(value)} /> {label}</label>)}</div></FilterSection>
-          <FilterSection title="Collections" collapsible={collapsible}><div className="facet-group" role="group" aria-label="Collections"><label><input type="radio" name={collapsible ? "menu-collection" : "collection"} checked={!collection} onChange={() => setCollection("")} /> All</label>{["New Arrivals", "Best Sellers", "Back to School", "Promotion", ...(dealsActive ? ["PAM Deals"] : [])].map((name) => <label key={name}><input type="radio" name={collapsible ? "menu-collection" : "collection"} checked={collection === name} onChange={() => setCollection(name)} /> {name}</label>)}</div></FilterSection>
+          {!collapsible && <FilterSection title="Collections" collapsible={collapsible}><div className="facet-group" role="group" aria-label="Collections"><label><input type="radio" name={collapsible ? "menu-collection" : "collection"} checked={!collection} onChange={() => setCollection("")} /> All</label>{["New Arrivals", "Best Sellers", "Back to School", "Promotion", ...(dealsActive ? ["PAM Deals"] : [])].map((name) => <label key={name}><input type="radio" name={collapsible ? "menu-collection" : "collection"} checked={collection === name} onChange={() => setCollection(name)} /> {name}</label>)}</div></FilterSection>}
     <button type="button" className="table-action" onClick={clearFilters}>Clear filters</button>
   </>;
 
@@ -575,7 +577,7 @@ export default function Storefront() {
         <div className="header-main">
           <button type="button" className="mobile-browse-toggle" aria-label="Open navigation and product filters" aria-expanded={mobileMenuOpen} aria-controls="mobile-browse-menu" onClick={() => setMobileMenuOpen((open) => !open)}><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" /></svg></button>
           <a className="brand" href="/" aria-label="PAM Essentials home"><BrandLogo background="white" mobileBackground="navy" /></a>
-          <nav className="store-nav" aria-label="Primary navigation">{navigationItems}</nav>
+          <nav className="store-nav" aria-label="Primary navigation">{navigationItems()}</nav>
           <div className={`header-search${searchOpen && !query.trim() ? " search-active" : ""}`} ref={searchRef}>
             <div className="search-field"><input type="search" aria-label="Search products, categories, or brands" aria-expanded={searchOpen && query.trim().length > 0} aria-controls="search-suggestions" placeholder="Search products, categories, or brands" value={query} onFocus={() => setSearchOpen(true)} onKeyDown={(event) => { if (event.key === "Escape") setSearchOpen(false); if (event.key === "Enter") { event.preventDefault(); submitSearch(); } }} onChange={(event) => { setBrowseMode("products"); setQuery(event.target.value); setSearchOpen(true); }} /><button type="button" aria-label="Show matching products" onClick={submitSearch}>⌕</button></div>
             {searchOpen && query.trim() && <div id="search-suggestions" className="search-suggestions" role="listbox" aria-label="Matching products">{suggestions.length ? <><p>Suggested products</p>{suggestions.map((item) => <button type="button" role="option" aria-selected="false" key={item.id} onClick={() => { recordClick(item); setQuickProduct(item); setSearchOpen(false); }}><span><b>{item.name}</b><small>{item.category} · {item.id}</small></span><strong>{money.format(item.price)}</strong></button>)}</> : <p>No matching products. Try another name or keyword.</p>}</div>}
@@ -585,7 +587,7 @@ export default function Storefront() {
           <button className="cart-button" onClick={() => setCartOpen(true)} aria-label={`View cart, ${cartCount} items`}><span className="cart-text">Cart</span><svg className="cart-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 4h2l2.1 10.4a2 2 0 0 0 2 1.6H19a2 2 0 0 0 2-1.6L22 8H6"/><circle cx="10" cy="20" r="1"/><circle cx="19" cy="20" r="1"/></svg><b>{cartCount}</b></button>
         </div>
       </header>
-      {mobileMenuOpen && <MobileBrowseMenu onClose={closeMobileMenu} navigation={navigationItems} filters={renderFilters(true)} />}
+      {mobileMenuOpen && <MobileBrowseMenu onClose={closeMobileMenu} navigation={navigationItems(true)} filters={renderFilters(true)} />}
 
       <section className={`hero${webHeroUrl ? " has-web-image" : ""}${mobileHeroUrl ? " has-mobile-image" : ""}`}><div className={`hero-flyer hero-flyer-web${webHeroUrl ? " uploaded" : ""}`} aria-hidden="true" style={heroBackground(webHeroUrl)} /><div className={`hero-flyer hero-flyer-mobile${mobileHeroUrl ? " uploaded" : ""}`} aria-hidden="true" style={heroBackground(mobileHeroUrl)} /><div className="hero-content"><p className="eyebrow">Everyday Essentials, thoughtfully selected.</p><h1>Find what you need.<br />Pick up or get it delivered.</h1><p>School, home, gifts and daily essentials in one simple shop.</p><div className="hero-actions"><a className="button primary" href="#catalogue">Shop products</a><a className="button whatsapp" href={`https://wa.me/${PRIMARY_WHATSAPP}`} target="_blank" rel="noreferrer"><WhatsAppIcon size={18} /> WhatsApp us</a></div></div><div className="hero-panel" aria-hidden="true"><span>P</span><span>A</span><span>M</span></div></section>
       {dealsActive && (dealProducts.length > 0 || dealBundles.length > 0) && <section className="deals-feature"><div><p className="eyebrow">Selected for you</p><h2>PAM Deals</h2><p>{dealPercent > 0 ? `Up to ${dealPercent}% off selected products` : "Selected everyday offers"}</p></div><a className="button accent" href="/?browse=deals#catalogue">Shop deals</a></section>}

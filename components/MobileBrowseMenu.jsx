@@ -32,7 +32,7 @@ export default function MobileBrowseMenu({ navigation, filters, onClose }) {
       <div className="mobile-menu-heading"><h2>Browse PAM</h2><button type="button" aria-label="Close navigation and product filters" onClick={onClose}>×</button></div>
       <nav aria-label="Mobile navigation" onClick={(event) => { if (event.target.closest("a,button")) onClose(); }}>{navigation}</nav>
       <div className="mobile-menu-filters">{filters}</div>
-      <button type="button" className="button primary full" onClick={onClose}>Apply filters and browse</button>
+      <button type="button" className="button primary full" onClick={onClose}>Apply filters</button>
     </section>
   </div>;
 }
