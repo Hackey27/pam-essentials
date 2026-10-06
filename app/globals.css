@@ -1455,3 +1455,16 @@ body > div > main h1 { color: var(--navy); }
   .mobile-browse-backdrop { pointer-events: none; }
   .mobile-browse-menu { pointer-events: auto; }
 }
+
+/* Lighter price slider; smaller desktop sidebar typography. */
+.mobile-price-track::before, .mobile-price-fill { top: 21px; height: 2px; }
+.mobile-price-fill { background: #52779f; }
+.mobile-price-track input::-webkit-slider-thumb { border: 1.5px solid #52779f; background: white; box-shadow: none; }
+.mobile-price-track input::-moz-range-thumb { border: 1.5px solid #52779f; background: white; box-shadow: none; }
+@media (min-width: 768px) {
+  #store-filters { font-size: .8rem; }
+  #store-filters .subcategory-row label, #store-filters .sub-subcategory-tree label, #store-filters .facet-group label { font-size: .672rem; }
+  #store-filters .service-note p { font-size: .68rem; }
+  #store-filters .mobile-price-range { font-size: .6rem; }
+  #store-filters .mobile-price-values { font-size: .56rem; }
+}
