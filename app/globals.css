@@ -1437,6 +1437,11 @@ body > div > main h1 { color: var(--navy); }
   .mobile-browse-menu .filter > span { min-width: 0; overflow-wrap: anywhere; }
   .mobile-browse-menu .subcategory-row label, .mobile-browse-menu .sub-subcategory-tree label { font-size: .76rem; }
   .mobile-browse-menu .dropdown-menu a, .mobile-browse-menu .dropdown-menu button { padding-inline: .4rem; font-size: .76rem; }
+
+}
+@media (prefers-reduced-motion: reduce) { .store-header .header-search { transition: none !important; } }
+
+/* Shared price slider for desktop, general mobile filters and the floating menu. */
   .mobile-price-range { padding: .65rem .2rem .3rem; border-bottom: 1px solid var(--line); color: var(--navy); font-size: .75rem; }
   .mobile-price-values { display: flex; justify-content: space-between; gap: .5rem; margin-top: .4rem; font-size: .7rem; }
   .mobile-price-track { position: relative; height: 44px; }
@@ -1446,5 +1451,7 @@ body > div > main h1 { color: var(--navy); }
   .mobile-price-track input::-webkit-slider-thumb { width: 20px; height: 20px; border: 2px solid white; border-radius: 50%; appearance: none; background: var(--navy); box-shadow: 0 0 0 1px var(--navy); pointer-events: auto; cursor: grab; }
   .mobile-price-track input::-moz-range-thumb { width: 16px; height: 16px; border: 2px solid white; border-radius: 50%; background: var(--navy); box-shadow: 0 0 0 1px var(--navy); pointer-events: auto; cursor: grab; }
   .mobile-price-track input:focus-visible { outline: 2px solid var(--navy); outline-offset: 2px; border-radius: 8px; }
+@media (max-width: 767px) {
+  .mobile-browse-backdrop { pointer-events: none; }
+  .mobile-browse-menu { pointer-events: auto; }
 }
-@media (prefers-reduced-motion: reduce) { .store-header .header-search { transition: none !important; } }

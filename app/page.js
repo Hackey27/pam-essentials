@@ -524,8 +524,7 @@ export default function Storefront() {
             {!compact && <div className="mobile-extra-nav"><Dropdown label="Contact"><a href="/info/contact#location">Store location</a><a href={`https://wa.me/${PRIMARY_WHATSAPP}`} target="_blank" rel="noreferrer"><WhatsAppIcon size={16} /> WhatsApp us</a><a href="/info/contact#contact">Contact details</a></Dropdown></div>}<div className="mobile-extra-nav"><Dropdown label="Account"><a href="/account#orders">Track order</a><a href="/account#wishlist">Wishlist</a><a href="/compare">Compare products</a><a href="/account?mode=signin">Sign in</a><a href="/account?mode=register">Create account</a></Dropdown></div>
           </>;
   const renderFilters = (collapsible = false) => <>
-    {!collapsible && <FilterSection title="Price range" collapsible={collapsible}>          <div className="price-filter"><label>Minimum<input type="number" min="0" placeholder="Min price" value={priceMin} onChange={(event) => setPriceMin(event.target.value)} /></label><label>Maximum<input type="number" min="0" placeholder="Max price" value={priceMax} onChange={(event) => setPriceMax(event.target.value)} /></label></div>
-</FilterSection>}
+    {!collapsible && <FilterSection title="Price range" collapsible={false}><MobilePriceRange showLabel={false} minimum={priceMin} maximum={priceMax} upperLimit={Math.max(1, ...products.map((item) => Math.ceil(Number(item.price) || 0)), Number(priceMin) || 0, Number(priceMax) || 0)} onChange={(minimum, maximum) => { setPriceMin(minimum); setPriceMax(maximum); }} /></FilterSection>}
     <FilterSection title="Categories" collapsible={collapsible}>
           <button type="button" className={category === "All categories" ? "filter active" : "filter"} onClick={() => selectCategory("All categories")}>
             <span>All categories</span><small>{products.length}</small>

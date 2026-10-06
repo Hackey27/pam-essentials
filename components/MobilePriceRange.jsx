@@ -1,12 +1,12 @@
 "use client";
 
-const money = new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS", maximumFractionDigits: 0 });
+const money = new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS", minimumFractionDigits: 0, maximumFractionDigits: 2 });
 
-export default function MobilePriceRange({ minimum, maximum, upperLimit, onChange }) {
+export default function MobilePriceRange({ minimum, maximum, upperLimit, onChange, showLabel = true }) {
   const low = minimum === "" ? 0 : Number(minimum);
   const high = maximum === "" ? upperLimit : Number(maximum);
   return <div className="mobile-price-range" role="group" aria-label="Price range">
-    <strong>Price range</strong>
+    {showLabel && <strong>Price range</strong>}
     <div className="mobile-price-values"><span>{money.format(low)}</span><span>{money.format(high)}</span></div>
     <div className="mobile-price-track" style={{ "--range-start": `${low / upperLimit * 100}%`, "--range-end": `${high / upperLimit * 100}%` }}>
       <span className="mobile-price-fill" aria-hidden="true" />
