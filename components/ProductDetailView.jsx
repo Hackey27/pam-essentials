@@ -13,7 +13,7 @@ import { CURRENT_SHOP_ADDRESS } from "@/lib/shopAddress.mjs";
 import { readCompare, toggleCompare } from "@/lib/compare.mjs";
 import { productOptions, variantDetail, variantTitles } from "@/lib/variantDisplay.mjs";
 
-export default function ProductDetailView({ id, initialCatalogue, embedded = false, onBack, onCartChange }) {
+export default function ProductDetailView({ id, initialCatalogue, embedded = false, onBack, onCartChange, onOverlayChange }) {
   const [products, setProducts] = useState(initialCatalogue?.products || []);
   const [discountRules, setDiscountRules] = useState(initialCatalogue?.discountRules || []);
   const [compareNotice, setCompareNotice] = useState("");
@@ -43,8 +43,15 @@ export default function ProductDetailView({ id, initialCatalogue, embedded = fal
   const previousOverlay = useRef("");
   const closingOverlay = useRef(false);
   overlayRef.current = activeOverlay;
+  const dismissNestedOverlay = useCallback(() => {
+    if (overlayRef.current === "delivery") setDeliveryOpen(false);
+    else if (overlayRef.current === "gallery") setLightboxIndex(-1);
+    else if (overlayRef.current === "added") setAdded(null);
+  }, []);
+  useEffect(() => { onOverlayChange?.(activeOverlay, dismissNestedOverlay); }, [activeOverlay, dismissNestedOverlay, onOverlayChange]);
+  useEffect(() => () => onOverlayChange?.("", null), [onOverlayChange]);
   useEffect(() => {
-    if (window.innerWidth > 767) return;
+    if (embedded || window.innerWidth > 767) return;
     const onBack = (event) => {
       if (closingOverlay.current) { closingOverlay.current = false; event.stopImmediatePropagation(); return; }
       if (overlayRef.current) event.stopImmediatePropagation();
@@ -56,7 +63,7 @@ export default function ProductDetailView({ id, initialCatalogue, embedded = fal
     return () => window.removeEventListener("popstate", onBack, true);
   }, []);
   useEffect(() => {
-    if (window.innerWidth > 767) return;
+    if (embedded || window.innerWidth > 767) return;
     const previous = previousOverlay.current;
     if (activeOverlay && !previous) window.history.pushState({ ...window.history.state, pamProductOverlay: activeOverlay }, "", window.location.href);
     else if (activeOverlay && previous && window.history.state?.pamProductOverlay) window.history.replaceState({ ...window.history.state, pamProductOverlay: activeOverlay }, "", window.location.href);

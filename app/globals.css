@@ -1337,7 +1337,8 @@ body > div > main h1 { color: var(--navy); }
 .quick-detail-overlay { position: fixed; inset: 0; z-index: 70; overflow-y: auto; overscroll-behavior: contain; background: white; }
 .quick-detail-overlay .detail-back { position: sticky; top: .6rem; z-index: 3; border: 1px solid var(--line); border-radius: 8px; padding: .55rem .8rem; background: white; }
 .quick-detail-overlay .product-page-header { position: relative; }
-.delivery-card a, .payment-details h3 { color: var(--navy); }
+.delivery-card a { color: var(--yellow); }
+.payment-details h3 { color: var(--navy); }
 .delivery-card a { font-weight: 900; text-decoration: underline; }
 .delivery-information-backdrop { z-index: 105; }
 .delivery-information-modal { width: min(700px, 100%); max-height: 90dvh; overflow-y: auto; text-align: left; }
