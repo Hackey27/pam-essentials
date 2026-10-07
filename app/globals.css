@@ -1526,3 +1526,12 @@ body > div > main h1 { color: var(--navy); }
 .delivery-information-modal .fulfilment-card { padding: 1rem; }
 .delivery-information-modal .detail-link { display: block; margin-top: 1rem; color: var(--navy); }
 @media (max-width: 767px) { .fulfilment-options, .fulfilment-details { grid-template-columns: 1fr; } .fulfilment-page { padding: 1.25rem 1rem; } .fulfilment-page .info-hero { padding: 1.25rem; } }
+
+/* Immediate dropdown switching, with a gentle reveal and a safe pointer path into the menu. */
+.utility-dropdown[open] > .dropdown-menu, .nav-dropdown[open] > .dropdown-menu { animation: header-dropdown-reveal 160ms ease-out; transform-origin: top; }
+@keyframes header-dropdown-reveal { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+@media (hover: hover) and (pointer: fine) {
+  .utility-dropdown > .dropdown-menu::before, .nav-dropdown > .dropdown-menu::before { content: ""; position: absolute; top: -12px; left: 0; right: 0; height: 12px; }
+  .mobile-browse-menu .dropdown-menu::before { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .utility-dropdown[open] > .dropdown-menu, .nav-dropdown[open] > .dropdown-menu { animation: none; } }
