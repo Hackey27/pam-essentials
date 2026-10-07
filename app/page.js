@@ -35,6 +35,10 @@ function Dropdown({ label, children, active = false, utility = false }) {
   const closeTimer = useRef(null);
   useEffect(() => () => clearTimeout(closeTimer.current), []);
   const cancelClose = () => clearTimeout(closeTimer.current);
+  const openOnHover = () => {
+    cancelClose();
+    if (window.matchMedia("(hover: hover) and (pointer: fine)").matches && detailsRef.current) detailsRef.current.open = true;
+  };
   const scheduleClose = () => {
     if (!window.matchMedia("(hover: hover) and (pointer: fine)").matches) return;
     cancelClose();
@@ -42,7 +46,7 @@ function Dropdown({ label, children, active = false, utility = false }) {
       if (detailsRef.current) detailsRef.current.open = false;
     }, 1000);
   };
-  return <details ref={detailsRef} className={`${utility ? "utility-dropdown" : "nav-dropdown"}${active ? " active" : ""}`} onMouseEnter={cancelClose} onMouseLeave={scheduleClose}><summary>{label}<span aria-hidden="true">▾</span></summary><div className="dropdown-menu" onClick={(event) => { if (event.target.closest("a,button")) { cancelClose(); event.currentTarget.parentElement.open = false; } }}>{children}</div></details>;
+  return <details ref={detailsRef} className={`${utility ? "utility-dropdown" : "nav-dropdown"}${active ? " active" : ""}`} onMouseEnter={openOnHover} onMouseLeave={scheduleClose}><summary>{label}<span aria-hidden="true">▾</span></summary><div className="dropdown-menu" onClick={(event) => { if (event.target.closest("a,button")) { cancelClose(); event.currentTarget.parentElement.open = false; } }}>{children}</div></details>;
 }
 
 function FilterSection({ title, collapsible, children, actions }) {
