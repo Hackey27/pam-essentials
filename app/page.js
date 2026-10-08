@@ -100,6 +100,7 @@ export default function Storefront() {
   const [order, setOrder] = useState({ customer: "", phone: "", deliveryMethod: "pickup", deliveryAddress: "", notes: "" });
   const [confirmation, setConfirmation] = useState(null);
   const [exitConfirm, setExitConfirm] = useState(false);
+  const [exiting, setExiting] = useState(false);
   const [placingOrder, setPlacingOrder] = useState(false);
   const [cookieVisible, setCookieVisible] = useState(false);
   const clickSession = useRef({ id: "", seen: new Set() });
@@ -266,6 +267,7 @@ export default function Storefront() {
     const pushGuard = () => window.history.pushState({ ...window.history.state, pamStoreGuard: true, pamStoreOverlay: null }, "", window.location.href);
     if (!window.history.state?.pamStoreGuard && !window.history.state?.pamStoreOverlay) pushGuard();
     const onBack = () => {
+      if (leavingStore.current) return;
       if (closingOverlay.current) { closingOverlay.current = false; return; }
       const layer = activeLayerRef.current;
       if (layer) {
@@ -297,6 +299,17 @@ export default function Storefront() {
     else if (!activeLayer && previous && window.history.state?.pamStoreOverlay) { closingOverlay.current = true; window.history.back(); }
     previousLayer.current = activeLayer;
   }, [activeLayer]);
+
+  function exitStore() {
+    if (leavingStore.current) return;
+    leavingStore.current = true;
+    setExiting(true);
+    // User-opened browser tabs may reject close(). Always leave the store in that case.
+    try { window.close(); } catch {}
+    window.setTimeout(() => {
+      if (!window.closed) window.location.replace("about:blank");
+    }, 100);
+  }
 
   function dismissAnnouncement() {
     try { sessionStorage.setItem("pam-announcements-seen", "1"); if (announcementOptOutRef.current) localStorage.setItem("pam-announcements-off", "1"); } catch {}
@@ -711,7 +724,7 @@ export default function Storefront() {
         </>}
       </aside></div>}
       {confirmation && <div className="modal-backdrop"><div className="modal"><span className="success-mark">✓</span><h2>Order received</h2><p>Keep this reference for pickup or delivery.</p><strong className="order-reference">{confirmation.orderId}</strong><p>{user && !role ? "Track this order in your account." : "Create a customer account and link this guest order to track it."}</p><a className="button secondary full" href="/account#orders">Track my order</a><button className="button primary full" onClick={() => { setConfirmation(null); setCartOpen(false); }}>Continue shopping</button></div></div>}
-      {exitConfirm && <div className="modal-backdrop"><div className="modal" role="dialog" aria-modal="true" aria-label="Exit store confirmation"><h2>Do you want to exit the store?</h2><p>You can continue shopping or return to the previous page.</p><div className="added-actions"><button type="button" className="button secondary" onClick={() => setExitConfirm(false)}>No, continue shopping</button><button type="button" className="button primary" onClick={() => { leavingStore.current = true; setExitConfirm(false); window.history.go(-3); }}>Yes, exit</button></div></div></div>}
+      {exitConfirm && <div className="modal-backdrop"><div className="modal" role="dialog" aria-modal="true" aria-label="Exit store confirmation"><h2>Do you want to exit the store?</h2><p>Your cart is saved for your next visit. Exit closes this tab where supported, or leaves the store for a blank page.</p><div className="added-actions"><button type="button" className="button secondary" disabled={exiting} onClick={() => setExitConfirm(false)}>No, continue shopping</button><button type="button" className="button primary" disabled={exiting} onClick={exitStore}>{exiting ? "Exiting…" : "Yes, exit"}</button></div></div></div>}
       <a className="whatsapp-fab" href={`https://wa.me/${PRIMARY_WHATSAPP}`} target="_blank" rel="noreferrer" aria-label="Chat with PAM Essentials on WhatsApp"><WhatsAppIcon size={25} /></a>
       {cookieVisible && <div className="cookie-banner"><p><b>Privacy notice</b> We use browser storage for your cart, product comparisons, customer sign-in and shopping preferences. Your wishlist and order history are saved in your customer account.</p><button className="button accent" onClick={() => { localStorage.setItem("pam-cookie-notice", "accepted"); setCookieVisible(false); }}>Okay</button></div>}
     </div>
