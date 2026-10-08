@@ -82,6 +82,7 @@ export default function Storefront() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [mobileTabsHidden, setMobileTabsHidden] = useState(false);
+  const [mobileViewport, setMobileViewport] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [compactSearchOpen, setCompactSearchOpen] = useState(false);
   const closeMobileMenu = useCallback(() => setMobileMenuOpen(false), []);
@@ -120,7 +121,6 @@ export default function Storefront() {
   const searchRef = useRef(null);
   const compactSearchRef = useRef(null);
   const filterSearchRef = useRef(null);
-  const fullHeaderRef = useRef(null);
   const compactHeaderRef = useRef(null);
   const paginationScroll = useRef(false);
   const storeShellRef = useRef(null);
@@ -226,17 +226,30 @@ export default function Storefront() {
   useEffect(() => { setCart(readCart()); const params = new URLSearchParams(window.location.search); if (params.has("cart")) setCartOpen(true); const source = params.get("returnTo"); if (source?.startsWith("/products/") && !source.startsWith("//")) cartReturn.current = source; }, []);
   useEffect(() => { const close = (event) => { if (!searchRef.current?.contains(event.target) && !compactSearchRef.current?.contains(event.target) && !filterSearchRef.current?.contains(event.target) && !event.target.closest(".compact-search-toggle")) setSearchOpen(false); }; document.addEventListener("pointerdown", close); return () => document.removeEventListener("pointerdown", close); }, []);
   useEffect(() => {
+    const mobile = window.matchMedia("(max-width: 767px)");
+    let frame = 0;
     const update = () => {
-      const hidden = window.innerWidth <= 767 && (fullHeaderRef.current?.getBoundingClientRect().bottom || 0) <= 0;
+      // Observe the real header box: display:contents wrappers have no bounds on desktop.
+      const bottom = storeHeaderRef.current?.getBoundingClientRect().bottom ?? 0;
+      const hidden = mobile.matches && bottom <= 0;
+      setMobileViewport(mobile.matches);
       setMobileTabsHidden(hidden);
+      storeShellRef.current?.style.setProperty("--mobile-nav-menu-top", `${Math.max(0, bottom) + 4}px`);
       if (!hidden) setCompactSearchOpen(false);
-      if (window.innerWidth > 767) setMobileMenuOpen(false);
+      if (!mobile.matches) setMobileMenuOpen(false);
+      if (hidden) storeHeaderRef.current?.querySelectorAll("details[open]").forEach((item) => { item.open = false; });
+    };
+    const onScroll = () => {
+      if (!mobile.matches || frame) return;
+      frame = requestAnimationFrame(() => { frame = 0; update(); });
     };
     const observer = new IntersectionObserver(update, { threshold: 0 });
-    if (fullHeaderRef.current) observer.observe(fullHeaderRef.current);
+    if (storeHeaderRef.current) observer.observe(storeHeaderRef.current);
     window.addEventListener("resize", update);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    mobile.addEventListener("change", update);
     update();
-    return () => { observer.disconnect(); window.removeEventListener("resize", update); };
+    return () => { observer.disconnect(); cancelAnimationFrame(frame); window.removeEventListener("resize", update); window.removeEventListener("scroll", onScroll); mobile.removeEventListener("change", update); };
   }, []);
   useEffect(() => {
     let touchOrigin = null;
@@ -384,6 +397,7 @@ export default function Storefront() {
   }
 
   function searchPopular(term) {
+    clearFilters();
     setBrowseMode("products");
     setCategory("All categories");
     setSelectedSubcategories([]);
@@ -396,7 +410,8 @@ export default function Storefront() {
     document.getElementById("catalogue")?.scrollIntoView({ behavior: "smooth" });
   }
 
-  function submitSearch() {
+  function submitSearch(withinFilters = false) {
+    if (!withinFilters) { clearFilters(); setBrowseMode("products"); }
     setSearchOpen(false);
     searchRef.current?.querySelector("input")?.blur();
     compactSearchRef.current?.querySelector("input")?.blur();
@@ -611,7 +626,7 @@ export default function Storefront() {
   </>;
 
   const renderSearch = (compact = false, panel = false) => <div className={`header-search${searchOpen && !query.trim() ? " search-active" : ""}`} ref={panel ? filterSearchRef : compact ? compactSearchRef : searchRef}>
-            <div className="search-field"><input type="search" aria-label="Search products, categories, or brands" aria-expanded={searchOpen && query.trim().length > 0 && (panel || compact || !mobileTabsHidden)} aria-controls={panel ? "filter-search-suggestions" : compact ? "compact-search-suggestions" : "search-suggestions"} placeholder="Search products, categories, or brands" value={query} onFocus={() => setSearchOpen(true)} onKeyDown={(event) => { if (event.key === "Escape") setSearchOpen(false); if (event.key === "Enter") { event.preventDefault(); submitSearch(); } }} onChange={(event) => { setBrowseMode("products"); setQuery(event.target.value); setSearchOpen(true); }} /><button type="button" aria-label="Show matching products" onClick={submitSearch}>⌕</button></div>
+            <div className="search-field"><input type="search" aria-label="Search products, categories, or brands" aria-expanded={searchOpen && query.trim().length > 0 && (panel || compact || !mobileTabsHidden)} aria-controls={panel ? "filter-search-suggestions" : compact ? "compact-search-suggestions" : "search-suggestions"} placeholder="Search products, categories, or brands" value={query} onFocus={() => setSearchOpen(true)} onKeyDown={(event) => { if (event.key === "Escape") setSearchOpen(false); if (event.key === "Enter") { event.preventDefault(); submitSearch(panel); } }} onChange={(event) => { setBrowseMode("products"); setQuery(event.target.value); setSearchOpen(true); }} /><button type="button" aria-label="Show matching products" onClick={() => submitSearch(panel)}>⌕</button></div>
             {searchOpen && query.trim() && (panel || compact || !mobileTabsHidden) && <div id={panel ? "filter-search-suggestions" : compact ? "compact-search-suggestions" : "search-suggestions"} className="search-suggestions" role="listbox" aria-label="Matching products">{suggestions.length ? <><p>Suggested products</p>{suggestions.map((item) => <button type="button" role="option" aria-selected="false" key={item.id} onClick={() => { recordClick(item); setMobileMenuOpen(false); setQuickProduct(item); setSearchOpen(false); }}><span className="suggestion-preview"><ProductImage product={item} width={100} className="search-preview-image" /></span><span className="suggestion-copy"><b>{item.name}</b><small>{item.category}</small></span><strong>{money.format(item.price)}</strong></button>)}</> : <p>No matching products. Try another name or keyword.</p>}</div>}
             <div className="popular-searches" role="region" aria-label="Popular searches, scroll left or right" tabIndex={0}><span><span className="popular-full">Popular Searches:</span><span className="popular-short">Popular:</span></span>{[...curatedSearches, ...popularProducts.map((product) => product.name)].map((term) => <button key={term} type="button" onClick={() => searchPopular(term)}>{term}</button>)}</div>
           </div>;
@@ -619,7 +634,7 @@ export default function Storefront() {
   return (
     <div ref={storeShellRef} data-mobile-overlay={activeLayer} className={`store-shell${crawlerAnnouncements.length ? " has-top-announcements" : ""}${mobileTabsHidden ? " mobile-tabs-hidden" : ""}`}>
       <div className="utility-bar"><span>Opening hours: {openingHours}</span><div><Dropdown label="Store Location" utility><a href="/info/contact#location">Address and opening hours</a>{mapsUrl && <a href={mapsUrl} target="_blank" rel="noreferrer">Open Google Maps</a>}</Dropdown><Dropdown label="Contact Us" utility><a href={`https://wa.me/${PRIMARY_WHATSAPP}`} target="_blank" rel="noreferrer"><WhatsAppIcon size={16} /> WhatsApp us</a><a href="tel:+233596661439">Call {PRIMARY_PHONE_LABEL}</a><a href="/info/contact#contact">All contact details</a></Dropdown><Dropdown label="Track Order" utility><a href="/account#orders">View my orders</a><a href="/account?mode=signin">Sign in to track</a></Dropdown><Dropdown label="Wishlist" utility><a href="/account#wishlist">View wishlist</a><a href="/compare">Compare products</a></Dropdown><Dropdown label={user && !role ? "My Account" : "Sign In"} utility><a href="/account?mode=signin">Sign in</a>{(!user || role) && <a href="/account?mode=register">Create account</a>}</Dropdown></div></div>
-      <div ref={fullHeaderRef} className="store-header-stack" inert={mobileTabsHidden || mobileMenuOpen} aria-hidden={mobileTabsHidden || mobileMenuOpen}>
+      <div className="store-header-stack" inert={mobileViewport && (mobileTabsHidden || mobileMenuOpen)} aria-hidden={mobileViewport && (mobileTabsHidden || mobileMenuOpen)}>
       <div ref={storeTopBarRef} className="store-top-bar">
         <div className="mobile-opening-hours">Opening hours: {openingHours}</div>
         {crawlerAnnouncements.length > 0 && <section className="top-announcement-crawler" aria-label="Store announcements"><div className="top-announcement-track" style={{ animationDuration: `${Math.max(20, crawlerAnnouncements.reduce((length, item) => length + item.title.length + item.body.length, 0) / 10)}s` }}>{crawlerAnnouncements.map((item) => <span key={item.announcementId}><strong>{item.title}:</strong> {item.body}{item.actionLabel && item.actionUrl && <a href={item.actionUrl}>{item.actionLabel}</a>}</span>)}</div></section>}

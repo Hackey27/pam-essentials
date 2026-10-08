@@ -1381,7 +1381,7 @@ body > div > main h1 { color: var(--navy); }
   .store-header .store-nav > a, .store-header .store-nav .nav-dropdown > summary { min-height: 34.2px; padding: .432rem .675rem; font-size: .702rem; }
   .store-header .cart-button { width: 44px; height: 41.4px; min-height: 41.4px; padding: .3rem; gap: 0; color: white; }
   .store-header .header-search, .store-header.mobile-tabs-hidden .header-search { grid-area: search; width: 100%; margin: 0; justify-self: stretch; }
-  .store-header .store-nav .dropdown-menu { position: absolute; top: calc(100% + 4px); left: 0; right: auto; width: min(280px, 85vw); }
+  .store-header .store-nav .dropdown-menu { position: fixed; top: var(--mobile-nav-menu-top, 178px); left: 1rem; right: 1rem; width: auto; max-width: none; max-height: min(60dvh, calc(100dvh - var(--mobile-nav-menu-top, 178px) - 1rem)); overflow-y: auto; }
   .store-shell .catalogue-heading, .store-shell:not(.mobile-tabs-hidden) .catalogue-heading { position: static; display: block; max-height: none; overflow: visible; padding: .55rem 0 .8rem; margin-bottom: 1rem; border: 0; opacity: 1; }
   .store-shell .catalogue-controls-clip { display: contents; }
   .store-shell .catalogue-controls { gap: .4rem; }
@@ -1599,3 +1599,9 @@ body > div > main h1 { color: var(--navy); }
   .mobile-browse-menu .mobile-filter-actions .table-action { min-height: 40px; }
 }
 @media (prefers-reduced-motion: reduce) { .mobile-bottom-nav, .mobile-browse-menu, .mobile-browse-backdrop, .filter-toggle-symbol > span, .filter-panel-heading span { transition: none !important; } }
+
+/* Keep restored desktop windows usable without pushing navigation offscreen. */
+@media (min-width: 768px) and (max-width: 1180px) {
+  .header-main { grid-template-columns: minmax(0, 1fr) 120px; grid-template-areas: "brand brand" "nav nav" "search cart"; gap: .75rem 1rem; }
+  .store-nav { min-width: 0; justify-content: flex-start; flex-wrap: wrap; row-gap: .65rem; }
+}
