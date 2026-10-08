@@ -1,21 +1,21 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
-export default function MobileBrowseMenu({ navigation, services, offers, filters, onClose }) {
+export default function MobileBrowseMenu({ open, search, filters, resultCount, onClear, onClose }) {
   const panelRef = useRef(null);
+  const [expanded, setExpanded] = useState(true);
   useEffect(() => {
+    if (!open) return;
     const previousFocus = document.activeElement;
     const panel = panelRef.current;
-    panelRef.current?.querySelector("button")?.focus({ preventScroll: true });
-    const handleKey = (event) => {
-      if (event.key === "Escape") { event.preventDefault(); onClose(); }
-    };
+    panel?.focus({ preventScroll: true });
+    const handleKey = (event) => { if (event.key === "Escape") { event.preventDefault(); onClose(); } };
     const handleOutsideClick = (event) => {
-      if (!panel?.contains(event.target) && !event.target.closest(".mobile-browse-toggle")) onClose();
+      if (!panel?.contains(event.target) && !event.target.closest(".mobile-browse-toggle, .mobile-filter-inline, .mobile-filter-toggle")) onClose();
     };
-    document.addEventListener("click", handleOutsideClick);
     const handleResize = () => { if (window.innerWidth > 767) onClose(); };
+    document.addEventListener("click", handleOutsideClick);
     window.addEventListener("keydown", handleKey);
     window.addEventListener("resize", handleResize);
     return () => {
@@ -24,14 +24,14 @@ export default function MobileBrowseMenu({ navigation, services, offers, filters
       window.removeEventListener("resize", handleResize);
       if (previousFocus?.isConnected && (panel?.contains(document.activeElement) || document.activeElement === document.body)) previousFocus.focus({ preventScroll: true });
     };
-  }, [onClose]);
-  return <div className="mobile-browse-backdrop">
-    <section id="mobile-browse-menu" ref={panelRef} className="mobile-browse-menu" role="dialog" aria-modal="false" aria-label="Navigation and product filters" onClick={(event) => event.stopPropagation()}>
-      <div className="mobile-menu-heading"><h2>Browse PAM</h2><button type="button" aria-label="Close navigation and product filters" onClick={onClose}>×</button></div>
-      <div className="mobile-menu-filters">{filters}</div>
-      <nav aria-label="Mobile services" onClick={(event) => { if (event.target.closest("a,button")) onClose(); }}>{services}</nav>
-      <div className="mobile-menu-offers">{offers}</div>
-      <nav aria-label="Mobile navigation" onClick={(event) => { if (event.target.closest("a,button")) onClose(); }}>{navigation}</nav>
+  }, [open, onClose]);
+  return <div className={`mobile-browse-backdrop${open ? " is-open" : ""}`} inert={!open} aria-hidden={!open}>
+    <section id="mobile-browse-menu" ref={panelRef} tabIndex={-1} className="mobile-browse-menu" role="dialog" aria-modal="false" aria-label="Product filter panel" onClick={(event) => event.stopPropagation()}>
+      <button type="button" className="filter-panel-heading" aria-expanded={expanded} aria-controls="filter-panel-content" onClick={() => setExpanded((current) => !current)}>Filter options <span aria-hidden="true" className={expanded ? "expanded" : ""}>▾</span></button>
+      {expanded && <div className="filter-panel-content" id="filter-panel-content">
+        <div className="filter-panel-scroll">{search}{filters}</div>
+        <div className="mobile-filter-actions"><button type="button" className="button primary" onClick={onClose}><span>Apply filters</span><b>{resultCount}</b><span className="sr-only">results</span></button><button type="button" className="table-action" onClick={onClear}>Clear filters</button></div>
+      </div>}
     </section>
   </div>;
 }

@@ -117,6 +117,7 @@ export default function Storefront() {
   const orderRequest = useRef(false);
   const searchRef = useRef(null);
   const compactSearchRef = useRef(null);
+  const filterSearchRef = useRef(null);
   const fullHeaderRef = useRef(null);
   const compactHeaderRef = useRef(null);
   const paginationScroll = useRef(false);
@@ -126,7 +127,7 @@ export default function Storefront() {
   const catalogueControlsRef = useRef(null);
   useLayoutEffect(() => {
     const measure = () => {
-      const height = window.innerWidth <= 767 ? (mobileTabsHidden ? compactHeaderRef.current?.getBoundingClientRect().height || 62 : 0) : (storeHeaderRef.current?.getBoundingClientRect().height || 0) + (storeTopBarRef.current?.getBoundingClientRect().height || 0);
+      const height = window.innerWidth <= 767 ? ((mobileTabsHidden || mobileMenuOpen) ? compactHeaderRef.current?.getBoundingClientRect().height || 62 : 0) : (storeHeaderRef.current?.getBoundingClientRect().height || 0) + (storeTopBarRef.current?.getBoundingClientRect().height || 0);
       storeShellRef.current?.style.setProperty("--mobile-header-stack", `${height}px`);
       storeShellRef.current?.style.setProperty("--mobile-topbar-height", `${storeTopBarRef.current?.getBoundingClientRect().height || 0}px`);
       storeShellRef.current?.style.setProperty("--mobile-controls-height", `${catalogueControlsRef.current?.getBoundingClientRect().height || 0}px`);
@@ -138,7 +139,7 @@ export default function Storefront() {
     if (compactHeaderRef.current) observer.observe(compactHeaderRef.current);
     measure();
     return () => observer.disconnect();
-  }, [mobileTabsHidden, compactSearchOpen]);
+  }, [mobileTabsHidden, compactSearchOpen, mobileMenuOpen]);
   const cartReturn = useRef("");
   const listingRestore = useRef(null);
   const previousLayer = useRef("");
@@ -175,6 +176,18 @@ export default function Storefront() {
   const activeLayer = detailProduct ? "detail" : exitConfirm ? "exit" : confirmation ? "confirmation" : addedProduct ? "added" : quickProduct ? "quick" : cartOpen ? "cart" : mobileMenuOpen ? "menu" : mobileFiltersOpen ? "filters" : servicesOpen ? "services" : announcementOpen ? "announcement" : "";
   const activeLayerRef = useRef("");
   activeLayerRef.current = activeLayer;
+  useEffect(() => { window.dispatchEvent(new CustomEvent("pam-storefront-ui", { detail: { overlay: activeLayer } })); }, [activeLayer]);
+  useEffect(() => {
+    const services = () => setServicesOpen(true);
+    window.addEventListener("pam-open-services", services);
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("services") === "1") {
+      setServicesOpen(true); params.delete("services");
+      window.history.replaceState(window.history.state, "", window.location.pathname + (params.size ? `?${params}` : "") + window.location.hash);
+    }
+    return () => { window.removeEventListener("pam-open-services", services); window.dispatchEvent(new CustomEvent("pam-storefront-ui", { detail: { overlay: "" } })); };
+  }, []);
+
 
   useEffect(() => {
     try {
@@ -209,12 +222,13 @@ export default function Storefront() {
     user.getIdToken().then((token) => fetch("/api/customer/wishlist", { headers: { authorization: `Bearer ${token}` } })).then((response) => response.json()).then((data) => setWishlistIds(data.wishlist || [])).catch(() => {});
   }, [user, role]);
   useEffect(() => { setCart(readCart()); const params = new URLSearchParams(window.location.search); if (params.has("cart")) setCartOpen(true); const source = params.get("returnTo"); if (source?.startsWith("/products/") && !source.startsWith("//")) cartReturn.current = source; }, []);
-  useEffect(() => { const close = (event) => { if (!searchRef.current?.contains(event.target) && !compactSearchRef.current?.contains(event.target) && !event.target.closest(".compact-search-toggle")) setSearchOpen(false); }; document.addEventListener("pointerdown", close); return () => document.removeEventListener("pointerdown", close); }, []);
+  useEffect(() => { const close = (event) => { if (!searchRef.current?.contains(event.target) && !compactSearchRef.current?.contains(event.target) && !filterSearchRef.current?.contains(event.target) && !event.target.closest(".compact-search-toggle")) setSearchOpen(false); }; document.addEventListener("pointerdown", close); return () => document.removeEventListener("pointerdown", close); }, []);
   useEffect(() => {
     const update = () => {
       const hidden = window.innerWidth <= 767 && (fullHeaderRef.current?.getBoundingClientRect().bottom || 0) <= 0;
       setMobileTabsHidden(hidden);
-      if (!hidden) { setCompactSearchOpen(false); setMobileMenuOpen(false); }
+      if (!hidden) setCompactSearchOpen(false);
+      if (window.innerWidth > 767) setMobileMenuOpen(false);
     };
     const observer = new IntersectionObserver(update, { threshold: 0 });
     if (fullHeaderRef.current) observer.observe(fullHeaderRef.current);
@@ -538,13 +552,11 @@ export default function Storefront() {
             {section !== "services" && <Dropdown label={<><span className="nav-full">Payment &amp; Delivery</span><span className="nav-short">Delivery</span></>}><a href="/info/delivery">Payment and delivery information</a><a href="/info/contact#location">Pickup location</a></Dropdown>}
             {!compact && <div className="mobile-extra-nav"><Dropdown label="Contact"><a href="/info/contact#location">Store location</a><a href={`https://wa.me/${PRIMARY_WHATSAPP}`} target="_blank" rel="noreferrer"><WhatsAppIcon size={16} /> WhatsApp us</a><a href="/info/contact#contact">Contact details</a></Dropdown></div>}{section !== "services" && <div className="mobile-extra-nav"><Dropdown label="Account"><a href="/account#orders">Track order</a><a href="/account#wishlist">Wishlist</a><a href="/compare">Compare products</a><a href="/account?mode=signin">Sign in</a><a href="/account?mode=register">Create account</a></Dropdown></div>}
           </>;
-  const renderFilters = (collapsible = false, section = "all") => <>
-    {!collapsible && <FilterSection title="Price range" collapsible={false}><MobilePriceRange showLabel={false} minimum={priceMin} maximum={priceMax} upperLimit={Math.max(1, ...products.map((item) => Math.ceil(Number(item.price) || 0)), Number(priceMin) || 0, Number(priceMax) || 0)} onChange={(minimum, maximum) => { setPriceMin(minimum); setPriceMax(maximum); }} /></FilterSection>}
-    {section !== "offers" && <FilterSection title={collapsible ? "Filter" : "Categories"} collapsible={collapsible} actions={collapsible ? <div className="mobile-filter-actions"><button type="button" className="button primary" onClick={closeMobileMenu}><span>Apply filters</span><b>{visible.length}</b><span className="sr-only">results</span></button><button type="button" className="table-action" onClick={clearFilters}>Clear filters</button></div> : null}>
+  const renderCategoryChoices = (includePrice = false) => <>
           <button type="button" className={category === "All categories" ? "filter active" : "filter"} onClick={() => selectCategory("All categories")}>
             <span>All categories</span><small>{products.length}</small>
           </button>
-          {collapsible && <MobilePriceRange minimum={priceMin} maximum={priceMax} upperLimit={Math.max(1, ...products.map((item) => Math.ceil(Number(item.price) || 0)), Number(priceMin) || 0, Number(priceMax) || 0)} onChange={(minimum, maximum) => { setPriceMin(minimum); setPriceMax(maximum); }} />}
+          {includePrice && <MobilePriceRange minimum={priceMin} maximum={priceMax} upperLimit={Math.max(1, ...products.map((item) => Math.ceil(Number(item.price) || 0)), Number(priceMin) || 0, Number(priceMax) || 0)} onChange={(minimum, maximum) => { setPriceMin(minimum); setPriceMax(maximum); }} />}
           {categoryList.map((item) => {
             const id = item.categoryId || item.id;
             const children = subcategoryList.filter((child) => child.categoryId === id);
@@ -573,6 +585,11 @@ export default function Storefront() {
             </div>;
           })}
           {!categoryList.length && categories.slice(1).map((name) => <button type="button" className={category === name ? "filter active" : "filter"} key={name} onClick={() => selectCategory(name)}>{name}</button>)}
+  </>;
+  const renderFilters = (collapsible = false, section = "all") => <>
+    {!collapsible && <FilterSection title="Price range" collapsible={false}><MobilePriceRange showLabel={false} minimum={priceMin} maximum={priceMax} upperLimit={Math.max(1, ...products.map((item) => Math.ceil(Number(item.price) || 0)), Number(priceMin) || 0, Number(priceMax) || 0)} onChange={(minimum, maximum) => { setPriceMin(minimum); setPriceMax(maximum); }} /></FilterSection>}
+    {section !== "offers" && <FilterSection title={collapsible ? "Filter" : "Categories"} collapsible={collapsible} actions={collapsible ? <div className="mobile-filter-actions"><button type="button" className="button primary" onClick={closeMobileMenu}><span>Apply filters</span><b>{visible.length}</b><span className="sr-only">results</span></button><button type="button" className="table-action" onClick={clearFilters}>Clear filters</button></div> : null}>
+          {renderCategoryChoices(collapsible)}
 </FilterSection>}
           {!collapsible && <FilterSection title="Availability" collapsible={collapsible}><div className="facet-group" role="group" aria-label="Availability">{[["all", "All"], ["in", "In Stock"], ["out", "Out of Stock"]].map(([value, label]) => <label key={value}><input type="radio" name={collapsible ? "menu-availability" : "availability"} checked={availability === value} onChange={() => setAvailability(value)} /> {label}</label>)}</div></FilterSection>}
           {section !== "categories" && <FilterSection title="Offers" collapsible={collapsible}><div className="facet-group" role="group" aria-label="Offers">{[["all", "All"], ["sale", "On Sale"], ["promotions", "Promotions"]].map(([value, label]) => <label key={value}><input type="radio" name={collapsible ? "menu-offer" : "offer"} checked={offer === value} onChange={() => setOffer(value)} /> {label}</label>)}</div></FilterSection>}
@@ -580,16 +597,16 @@ export default function Storefront() {
     {!collapsible && <button type="button" className="table-action" onClick={clearFilters}>Clear filters</button>}
   </>;
 
-  const renderSearch = (compact = false) => <div className={`header-search${searchOpen && !query.trim() ? " search-active" : ""}`} ref={compact ? compactSearchRef : searchRef}>
-            <div className="search-field"><input type="search" aria-label="Search products, categories, or brands" aria-expanded={searchOpen && query.trim().length > 0 && (compact || !mobileTabsHidden)} aria-controls={compact ? "compact-search-suggestions" : "search-suggestions"} placeholder="Search products, categories, or brands" value={query} onFocus={() => setSearchOpen(true)} onKeyDown={(event) => { if (event.key === "Escape") setSearchOpen(false); if (event.key === "Enter") { event.preventDefault(); submitSearch(); } }} onChange={(event) => { setBrowseMode("products"); setQuery(event.target.value); setSearchOpen(true); }} /><button type="button" aria-label="Show matching products" onClick={submitSearch}>⌕</button></div>
-            {searchOpen && query.trim() && (compact || !mobileTabsHidden) && <div id={compact ? "compact-search-suggestions" : "search-suggestions"} className="search-suggestions" role="listbox" aria-label="Matching products">{suggestions.length ? <><p>Suggested products</p>{suggestions.map((item) => <button type="button" role="option" aria-selected="false" key={item.id} onClick={() => { recordClick(item); setQuickProduct(item); setSearchOpen(false); }}><span><b>{item.name}</b><small>{item.category} · {item.id}</small></span><strong>{money.format(item.price)}</strong></button>)}</> : <p>No matching products. Try another name or keyword.</p>}</div>}
+  const renderSearch = (compact = false, panel = false) => <div className={`header-search${searchOpen && !query.trim() ? " search-active" : ""}`} ref={panel ? filterSearchRef : compact ? compactSearchRef : searchRef}>
+            <div className="search-field"><input type="search" aria-label="Search products, categories, or brands" aria-expanded={searchOpen && query.trim().length > 0 && (panel || compact || !mobileTabsHidden)} aria-controls={panel ? "filter-search-suggestions" : compact ? "compact-search-suggestions" : "search-suggestions"} placeholder="Search products, categories, or brands" value={query} onFocus={() => setSearchOpen(true)} onKeyDown={(event) => { if (event.key === "Escape") setSearchOpen(false); if (event.key === "Enter") { event.preventDefault(); submitSearch(); } }} onChange={(event) => { setBrowseMode("products"); setQuery(event.target.value); setSearchOpen(true); }} /><button type="button" aria-label="Show matching products" onClick={submitSearch}>⌕</button></div>
+            {searchOpen && query.trim() && (panel || compact || !mobileTabsHidden) && <div id={panel ? "filter-search-suggestions" : compact ? "compact-search-suggestions" : "search-suggestions"} className="search-suggestions" role="listbox" aria-label="Matching products">{suggestions.length ? <><p>Suggested products</p>{suggestions.map((item) => <button type="button" role="option" aria-selected="false" key={item.id} onClick={() => { recordClick(item); setMobileMenuOpen(false); setQuickProduct(item); setSearchOpen(false); }}><span className="suggestion-preview"><ProductImage product={item} width={100} className="search-preview-image" /></span><span className="suggestion-copy"><b>{item.name}</b><small>{item.category}</small></span><strong>{money.format(item.price)}</strong></button>)}</> : <p>No matching products. Try another name or keyword.</p>}</div>}
             <div className="popular-searches" role="region" aria-label="Popular searches, scroll left or right" tabIndex={0}><span><span className="popular-full">Popular Searches:</span><span className="popular-short">Popular:</span></span>{[...curatedSearches, ...popularProducts.map((product) => product.name)].map((term) => <button key={term} type="button" onClick={() => searchPopular(term)}>{term}</button>)}</div>
           </div>;
 
   return (
-    <div ref={storeShellRef} className={`store-shell${crawlerAnnouncements.length ? " has-top-announcements" : ""}${mobileTabsHidden ? " mobile-tabs-hidden" : ""}`}>
+    <div ref={storeShellRef} data-mobile-overlay={activeLayer} className={`store-shell${crawlerAnnouncements.length ? " has-top-announcements" : ""}${mobileTabsHidden ? " mobile-tabs-hidden" : ""}`}>
       <div className="utility-bar"><span>Opening hours: {openingHours}</span><div><Dropdown label="Store Location" utility><a href="/info/contact#location">Address and opening hours</a>{mapsUrl && <a href={mapsUrl} target="_blank" rel="noreferrer">Open Google Maps</a>}</Dropdown><Dropdown label="Contact Us" utility><a href={`https://wa.me/${PRIMARY_WHATSAPP}`} target="_blank" rel="noreferrer"><WhatsAppIcon size={16} /> WhatsApp us</a><a href="tel:+233596661439">Call {PRIMARY_PHONE_LABEL}</a><a href="/info/contact#contact">All contact details</a></Dropdown><Dropdown label="Track Order" utility><a href="/account#orders">View my orders</a><a href="/account?mode=signin">Sign in to track</a></Dropdown><Dropdown label="Wishlist" utility><a href="/account#wishlist">View wishlist</a><a href="/compare">Compare products</a></Dropdown><Dropdown label={user && !role ? "My Account" : "Sign In"} utility><a href="/account?mode=signin">Sign in</a>{(!user || role) && <a href="/account?mode=register">Create account</a>}</Dropdown></div></div>
-      <div ref={fullHeaderRef} className="store-header-stack" inert={mobileTabsHidden} aria-hidden={mobileTabsHidden}>
+      <div ref={fullHeaderRef} className="store-header-stack" inert={mobileTabsHidden || mobileMenuOpen} aria-hidden={mobileTabsHidden || mobileMenuOpen}>
       <div ref={storeTopBarRef} className="store-top-bar">
         <div className="mobile-opening-hours">Opening hours: {openingHours}</div>
         {crawlerAnnouncements.length > 0 && <section className="top-announcement-crawler" aria-label="Store announcements"><div className="top-announcement-track" style={{ animationDuration: `${Math.max(20, crawlerAnnouncements.reduce((length, item) => length + item.title.length + item.body.length, 0) / 10)}s` }}>{crawlerAnnouncements.map((item) => <span key={item.announcementId}><strong>{item.title}:</strong> {item.body}{item.actionLabel && item.actionUrl && <a href={item.actionUrl}>{item.actionLabel}</a>}</span>)}</div></section>}
@@ -605,22 +622,26 @@ export default function Storefront() {
         </div>
       </header>
       </div>
-      <div ref={compactHeaderRef} className={`compact-store-header${mobileTabsHidden ? " visible" : ""}`} inert={!mobileTabsHidden} aria-hidden={!mobileTabsHidden}>
+      <div ref={compactHeaderRef} className={`compact-store-header${mobileTabsHidden || mobileMenuOpen ? " visible" : ""}${mobileMenuOpen ? " filters-active" : ""}`} inert={!mobileTabsHidden && !mobileMenuOpen} aria-hidden={!mobileTabsHidden && !mobileMenuOpen}>
         <div className="compact-header-row">
-          <button type="button" className="mobile-browse-toggle" aria-label="Open navigation and product filters" aria-expanded={mobileMenuOpen} aria-controls="mobile-browse-menu" onClick={() => { setCompactSearchOpen(false); setMobileMenuOpen((open) => !open); }}><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" /></svg></button>
+          <button type="button" className={`mobile-browse-toggle${mobileMenuOpen ? " is-open" : ""}`} aria-label={mobileMenuOpen ? "Close filters" : "Open filters"} aria-expanded={mobileMenuOpen} aria-controls="mobile-browse-menu" onClick={() => { setCompactSearchOpen(false); setMobileMenuOpen((open) => !open); }}><span className="filter-toggle-symbol" aria-hidden="true"><span /><span /><span /></span>{mobileMenuOpen && <span className="filter-toggle-label">Filter</span>}</button>
           <a className="compact-brand" href="/" aria-label="PAM Essentials home"><BrandLogo background="navy" /></a>
           <button type="button" className="compact-search-toggle" aria-label={compactSearchOpen ? "Close product search" : "Open product search"} aria-expanded={compactSearchOpen} aria-controls="compact-search-panel" onClick={() => { setMobileMenuOpen(false); setCompactSearchOpen((open) => !open); setSearchOpen(true); requestAnimationFrame(() => compactSearchRef.current?.querySelector("input")?.focus({ preventScroll: true })); }}><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></svg></button>
           <button className="cart-button" onClick={() => setCartOpen(true)} aria-label={`View cart, ${cartCount} items`}><svg className="cart-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 4h2l2.1 10.4a2 2 0 0 0 2 1.6H19a2 2 0 0 0 2-1.6L22 8H6"/><circle cx="10" cy="20" r="1"/><circle cx="19" cy="20" r="1"/></svg><b>{cartCount}</b></button>
         </div>
         {compactSearchOpen && <div id="compact-search-panel" className="compact-search-panel">{renderSearch(true)}</div>}
       </div>
-      {mobileMenuOpen && <MobileBrowseMenu onClose={closeMobileMenu} services={navigationItems(true, "services")} navigation={navigationItems(true, "secondary")} filters={renderFilters(true, "categories")} offers={renderFilters(true, "offers")} />}
+      <MobileBrowseMenu open={mobileMenuOpen} onClose={closeMobileMenu} onClear={clearFilters} resultCount={visible.length} search={renderSearch(false, true)} filters={<>
+        <MobilePriceRange minimum={priceMin} maximum={priceMax} upperLimit={Math.max(1, ...products.map((item) => Math.ceil(Number(item.price) || 0)), Number(priceMin) || 0, Number(priceMax) || 0)} onChange={(minimum, maximum) => { setPriceMin(minimum); setPriceMax(maximum); }} />
+        {renderFilters(true, "offers")}
+        <FilterSection title="Categories" collapsible>{renderCategoryChoices()}</FilterSection>
+      </>} />
 
       <section className={`hero${webHeroUrl ? " has-web-image" : ""}${mobileHeroUrl ? " has-mobile-image" : ""}`}><div className={`hero-flyer hero-flyer-web${webHeroUrl ? " uploaded" : ""}`} aria-hidden="true" style={heroBackground(webHeroUrl)} /><div className={`hero-flyer hero-flyer-mobile${mobileHeroUrl ? " uploaded" : ""}`} aria-hidden="true" style={heroBackground(mobileHeroUrl)} /><div className="hero-content"><p className="eyebrow">Everyday Essentials, thoughtfully selected.</p><h1>Find what you need.<br />Pick up or get it delivered.</h1><p>School, home, gifts and daily essentials in one simple shop.</p><div className="hero-actions"><a className="button primary" href="#catalogue">Shop products</a><a className="button whatsapp" href={`https://wa.me/${PRIMARY_WHATSAPP}`} target="_blank" rel="noreferrer"><WhatsAppIcon size={18} /> WhatsApp us</a></div></div><div className="hero-panel" aria-hidden="true"><span>P</span><span>A</span><span>M</span></div></section>
       {dealsActive && (dealProducts.length > 0 || dealBundles.length > 0) && <section className="deals-feature"><div><p className="eyebrow">Selected for you</p><h2>PAM Deals</h2><p>{dealPercent > 0 ? `Up to ${dealPercent}% off selected products` : "Selected everyday offers"}</p></div><a className="button accent" href="/?browse=deals#catalogue">Shop deals</a></section>}
 
       <section className="catalogue" id="catalogue">
-        <button type="button" className="mobile-filter-toggle" aria-expanded={mobileFiltersOpen} aria-controls="store-filters" onClick={() => setMobileFiltersOpen((open) => !open)}><span aria-hidden="true">☰</span><span className="filter-label-wide">Categories &amp; filters</span><span className="filter-label-mobile">Filters</span></button>
+        <button type="button" className="mobile-filter-toggle" aria-expanded={mobileMenuOpen} aria-controls="mobile-browse-menu" onClick={() => setMobileMenuOpen((open) => !open)}><span aria-hidden="true">☰</span><span className="filter-label-wide">Categories &amp; filters</span><span className="filter-label-mobile">Filters</span></button>
         <aside id="store-filters" className={mobileFiltersOpen ? "filters mobile-open" : "filters"} aria-label="Product filters">
           <button type="button" className="mobile-filter-close" onClick={() => setMobileFiltersOpen(false)}>× Close filters</button>
           <div className="filter-scroll">
@@ -632,7 +653,7 @@ export default function Storefront() {
         </aside>
 
         <main className="catalogue-main" id="catalogue-results">
-          <div className="catalogue-heading"><div><p className="breadcrumb">{breadcrumb}</p><h2>{heading}</h2>{selectedNodes.length > 1 && <p className="desktop-product-count">{selectedNodes.length} subcategories selected</p>}</div><div className="catalogue-controls-clip"><div ref={catalogueControlsRef} className="catalogue-controls"><button type="button" className="mobile-filter-inline" aria-expanded={mobileFiltersOpen} aria-controls="store-filters" onClick={() => setMobileFiltersOpen((open) => !open)}><span aria-hidden="true">☰</span> Filters</button><label className="sort-control" htmlFor="store-sort">Sort by: <select id="store-sort" aria-label="Sort products" value={sort} onChange={(e) => setSort(e.target.value)}><option value="categories">Product categories</option><option value="popularity">Popularity</option><option value="price-low">Price: low to high</option><option value="price-high">Price: high to low</option><option value="rating">Rating</option><option value="latest">Latest</option><option value="promotions">Promotions</option></select></label><label className="page-size-control">Show: <select aria-label="Products per page" value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))}>{[30, 60, 80, 100].map((size) => <option key={size} value={size}>{size}</option>)}</select></label><div className="grid-density" role="group" aria-label="Grid density"><button type="button" aria-label="Standard grid" aria-pressed={gridDensity === "standard"} onClick={() => setGridDensity("standard")}>▦</button><button type="button" aria-label="Compact grid" aria-pressed={gridDensity === "compact"} onClick={() => setGridDensity("compact")}>▦▦</button></div></div></div></div>
+          <div className="catalogue-heading"><div><p className="breadcrumb">{breadcrumb}</p><h2>{heading}</h2>{selectedNodes.length > 1 && <p className="desktop-product-count">{selectedNodes.length} subcategories selected</p>}</div><div className="catalogue-controls-clip"><div ref={catalogueControlsRef} className="catalogue-controls"><button type="button" className="mobile-filter-inline" aria-expanded={mobileMenuOpen} aria-controls="mobile-browse-menu" onClick={() => setMobileMenuOpen((open) => !open)}><span aria-hidden="true">☰</span> Filters</button><label className="sort-control" htmlFor="store-sort">Sort by: <select id="store-sort" aria-label="Sort products" value={sort} onChange={(e) => setSort(e.target.value)}><option value="categories">Product categories</option><option value="popularity">Popularity</option><option value="price-low">Price: low to high</option><option value="price-high">Price: high to low</option><option value="rating">Rating</option><option value="latest">Latest</option><option value="promotions">Promotions</option></select></label><label className="page-size-control">Show: <select aria-label="Products per page" value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))}>{[30, 60, 80, 100].map((size) => <option key={size} value={size}>{size}</option>)}</select></label><div className="grid-density" role="group" aria-label="Grid density"><button type="button" aria-label="Standard grid" aria-pressed={gridDensity === "standard"} onClick={() => setGridDensity("standard")}>▦</button><button type="button" aria-label="Compact grid" aria-pressed={gridDensity === "compact"} onClick={() => setGridDensity("compact")}>▦▦</button></div></div></div></div>
           {selectedNodes.length > 0 && <div className="filter-chips" aria-label="Selected subcategories"><span>{selectedNodes.length} {selectedNodes.length === 1 ? "subcategory" : "subcategories"} selected</span>{selectedNodes.map((item) => <button type="button" key={item.subSubcategoryId || item.subcategoryId} onClick={() => item.subSubcategoryId ? toggleSubSubcategory(item) : toggleSubcategory(item)} aria-label={`Remove ${item.name} filter`}>{item.name} ×</button>)}<button type="button" onClick={() => { setSelectedSubcategories([]); setSelectedSubSubcategories([]); }}>Clear</button></div>}
           {loading && <div className="empty-state"><div className="spinner" /><p>Loading the catalogue…</p></div>}
           {error && !products.length && <div className="empty-state error-panel"><h3>Catalogue unavailable</h3><p>{error}</p></div>}
