@@ -45,8 +45,10 @@ function Dropdown({ label, children, active = false, utility = false }) {
   return <details ref={detailsRef} className={`${utility ? "utility-dropdown" : "nav-dropdown"}${active ? " active" : ""}`} onMouseEnter={openOnHover} onMouseLeave={closeOnLeave}><summary>{label}<span aria-hidden="true">▾</span></summary><div className="dropdown-menu" onClick={(event) => { if (event.target.closest("a,button")) event.currentTarget.parentElement.open = false; }}>{children}</div></details>;
 }
 
-function FilterSection({ title, collapsible, children, actions }) {
-  return collapsible ? <details className={`mobile-menu-section${actions ? " mobile-category-section" : ""}`}><summary>{title}<span aria-hidden="true">▾</span></summary><div className="mobile-menu-section-content"><div className="mobile-menu-section-scroll">{children}</div>{actions}</div></details> : <div className="filter-section"><h2>{title}</h2>{children}</div>;
+function FilterSection({ title, collapsible, children, actions, defaultOpen = false, resetKey }) {
+  const detailsRef = useRef(null);
+  useEffect(() => { if (defaultOpen && resetKey && detailsRef.current) detailsRef.current.open = true; }, [defaultOpen, resetKey]);
+  return collapsible ? <details ref={detailsRef} open={defaultOpen || undefined} className={`mobile-menu-section${actions ? " mobile-category-section" : ""}`}><summary>{title}<span aria-hidden="true">▾</span></summary><div className="mobile-menu-section-content"><div className="mobile-menu-section-scroll">{children}</div>{actions}</div></details> : <div className="filter-section"><h2>{title}</h2>{children}</div>;
 }
 
 export default function Storefront() {
@@ -237,17 +239,28 @@ export default function Storefront() {
     return () => { observer.disconnect(); window.removeEventListener("resize", update); };
   }, []);
   useEffect(() => {
+    let touchOrigin = null;
+    const rememberTouch = (event) => { const touch = event.touches?.[0]; touchOrigin = touch ? { x: touch.clientX, y: touch.clientY } : null; };
     const dismissUntypedSearch = (event) => {
-      if (window.innerWidth > 767 || query.trim() || !searchOpen) return;
-      if (event.target.closest?.(".popular-searches, .compact-search-panel")) return;
-      const input = (mobileTabsHidden ? compactSearchRef : searchRef).current?.querySelector("input");
-      if (document.activeElement === input) { input.blur(); setSearchOpen(false); }
+      if (window.innerWidth > 767 || query.trim() || mobileMenuOpen || (!searchOpen && !compactSearchOpen)) return;
+      // Horizontal browsing of popular searches keeps the search open; vertical page gestures close an empty search.
+      if (event.target.closest?.(".popular-searches")) {
+        if (event.type === "wheel" && Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
+        const touch = event.touches?.[0];
+        if (touch && touchOrigin && Math.abs(touch.clientX - touchOrigin.x) > Math.abs(touch.clientY - touchOrigin.y)) return;
+      }
+      const input = (compactSearchOpen ? compactSearchRef : searchRef).current?.querySelector("input");
+      if (compactSearchOpen || document.activeElement === input) {
+        input?.blur(); setSearchOpen(false); setCompactSearchOpen(false);
+      }
     };
-    // A keyboard opening can itself scroll the viewport; only a user scroll gesture should dismiss it.
+    // A keyboard opening can scroll the viewport itself. Only an actual wheel/touch gesture dismisses empty search.
+    window.addEventListener("touchstart", rememberTouch, { passive: true });
     window.addEventListener("touchmove", dismissUntypedSearch, { passive: true });
     window.addEventListener("wheel", dismissUntypedSearch, { passive: true });
-    return () => { window.removeEventListener("touchmove", dismissUntypedSearch); window.removeEventListener("wheel", dismissUntypedSearch); };
-  }, [query, searchOpen, mobileTabsHidden]);
+    return () => { window.removeEventListener("touchstart", rememberTouch); window.removeEventListener("touchmove", dismissUntypedSearch); window.removeEventListener("wheel", dismissUntypedSearch); };
+  }, [query, searchOpen, compactSearchOpen, mobileMenuOpen]);
+
   useEffect(() => {
     if (window.innerWidth > 767) return;
     if (leavingStore.current) return;
@@ -634,7 +647,7 @@ export default function Storefront() {
       <MobileBrowseMenu open={mobileMenuOpen} onClose={closeMobileMenu} onClear={clearFilters} resultCount={visible.length} search={renderSearch(false, true)} filters={<>
         <MobilePriceRange minimum={priceMin} maximum={priceMax} upperLimit={Math.max(1, ...products.map((item) => Math.ceil(Number(item.price) || 0)), Number(priceMin) || 0, Number(priceMax) || 0)} onChange={(minimum, maximum) => { setPriceMin(minimum); setPriceMax(maximum); }} />
         {renderFilters(true, "offers")}
-        <FilterSection title="Categories" collapsible>{renderCategoryChoices()}</FilterSection>
+        <FilterSection title="Categories" collapsible defaultOpen resetKey={mobileMenuOpen}>{renderCategoryChoices()}</FilterSection>
       </>} />
 
       <section className={`hero${webHeroUrl ? " has-web-image" : ""}${mobileHeroUrl ? " has-mobile-image" : ""}`}><div className={`hero-flyer hero-flyer-web${webHeroUrl ? " uploaded" : ""}`} aria-hidden="true" style={heroBackground(webHeroUrl)} /><div className={`hero-flyer hero-flyer-mobile${mobileHeroUrl ? " uploaded" : ""}`} aria-hidden="true" style={heroBackground(mobileHeroUrl)} /><div className="hero-content"><p className="eyebrow">Everyday Essentials, thoughtfully selected.</p><h1>Find what you need.<br />Pick up or get it delivered.</h1><p>School, home, gifts and daily essentials in one simple shop.</p><div className="hero-actions"><a className="button primary" href="#catalogue">Shop products</a><a className="button whatsapp" href={`https://wa.me/${PRIMARY_WHATSAPP}`} target="_blank" rel="noreferrer"><WhatsAppIcon size={18} /> WhatsApp us</a></div></div><div className="hero-panel" aria-hidden="true"><span>P</span><span>A</span><span>M</span></div></section>

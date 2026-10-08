@@ -7,6 +7,7 @@ export default function MobileBrowseMenu({ open, search, filters, resultCount, o
   const [expanded, setExpanded] = useState(true);
   useEffect(() => {
     if (!open) return;
+    setExpanded(true);
     const previousFocus = document.activeElement;
     const panel = panelRef.current;
     panel?.focus({ preventScroll: true });

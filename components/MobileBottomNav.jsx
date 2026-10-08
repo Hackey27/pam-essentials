@@ -5,11 +5,11 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 const items = [
-  { key: "account", label: "Account", href: "/account?mode=signin" },
-  { key: "orders", label: "Orders", href: "/account?mode=signin#orders" },
-  { key: "home", label: "Home", href: "/" },
-  { key: "delivery", label: "Payment & Delivery", href: "/info/delivery" },
   { key: "services", label: "Services", href: "/?services=1" },
+  { key: "delivery", label: "Payment & Delivery", href: "/info/delivery" },
+  { key: "home", label: "Home", href: "/" },
+  { key: "orders", label: "Orders", href: "/account?mode=signin#orders" },
+  { key: "account", label: "Account", href: "/account?mode=signin" },
 ];
 
 function NavIcon({ kind, selected }) {
@@ -41,8 +41,8 @@ export default function MobileBottomNav() {
       frame = 0;
       const y = Math.max(0, Math.min(window.scrollY, Math.max(0, document.documentElement.scrollHeight - window.innerHeight)));
       if (navigationReset.current) { lastY = y; return; }
-      if (y > lastY) setHidden(false);
-      else if (y < lastY) setHidden(true);
+      if (y > lastY) setHidden(true);
+      else if (y < lastY) setHidden(false);
       lastY = y;
     };
     const scroll = () => { if (!frame) frame = requestAnimationFrame(update); };
