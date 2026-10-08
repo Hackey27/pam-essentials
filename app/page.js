@@ -11,6 +11,7 @@ import { CURRENT_SHOP_ADDRESS } from "@/lib/shopAddress.mjs";
 import { whatsappOrderMessage } from "@/lib/whatsappOrder.mjs";
 import WhatsAppIcon from "@/components/WhatsAppIcon";
 import { getHeroImageUrl } from "@/lib/heroImages.mjs";
+import Dropdown from "@/components/HeaderDropdown";
 import BrandLogo from "@/components/BrandLogo";
 import CustomerFooter from "@/components/CustomerFooter";
 import MobileBrowseMenu from "@/components/MobileBrowseMenu";
@@ -28,21 +29,6 @@ const money = new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS
 function ProductArt({ name, category }) {
   const initials = name.split(" ").slice(0, 2).map((word) => word[0]).join("");
   return <div className="product-art" aria-label={`${name} image placeholder`}><span>{initials}</span><small>{category}</small></div>;
-}
-
-function Dropdown({ label, children, active = false, utility = false }) {
-  const detailsRef = useRef(null);
-  const openOnHover = () => {
-    if (!window.matchMedia("(hover: hover) and (pointer: fine)").matches || !detailsRef.current) return;
-    detailsRef.current.closest(".store-shell")?.querySelectorAll(".utility-dropdown[open], .nav-dropdown[open]").forEach((dropdown) => {
-      if (dropdown !== detailsRef.current) dropdown.open = false;
-    });
-    detailsRef.current.open = true;
-  };
-  const closeOnLeave = () => {
-    if (window.matchMedia("(hover: hover) and (pointer: fine)").matches && detailsRef.current) detailsRef.current.open = false;
-  };
-  return <details ref={detailsRef} className={`${utility ? "utility-dropdown" : "nav-dropdown"}${active ? " active" : ""}`} onMouseEnter={openOnHover} onMouseLeave={closeOnLeave}><summary>{label}<span aria-hidden="true">▾</span></summary><div className="dropdown-menu" onClick={(event) => { if (event.target.closest("a,button")) event.currentTarget.parentElement.open = false; }}>{children}</div></details>;
 }
 
 function FilterSection({ title, collapsible, children, actions, defaultOpen = false, resetKey }) {

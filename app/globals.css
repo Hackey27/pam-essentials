@@ -1605,3 +1605,11 @@ body > div > main h1 { color: var(--navy); }
   .header-main { grid-template-columns: minmax(0, 1fr) 120px; grid-template-areas: "brand brand" "nav nav" "search cart"; gap: .75rem 1rem; }
   .store-nav { min-width: 0; justify-content: flex-start; flex-wrap: wrap; row-gap: .65rem; }
 }
+
+/* Open header menus live outside scrolling rows and above the hero. */
+.header-dropdown-overlay { position: fixed; z-index: 45; margin: 0; max-width: min(320px, calc(100vw - 32px)); overflow: visible; animation: header-dropdown-reveal 140ms ease-out; transform-origin: top; }
+@media (hover: hover) and (pointer: fine) { .header-dropdown-overlay::before { content: ""; position: absolute; top: -12px; left: 0; right: 0; height: 12px; } }
+@media (max-width: 767px) { .header-dropdown-overlay { min-width: 0; max-width: none; } }
+@media (prefers-reduced-motion: reduce) { .header-dropdown-overlay { animation: none; } }
+
+.header-dropdown-scroll { display: grid; gap: .15rem; max-height: inherit; overflow-y: auto; }
