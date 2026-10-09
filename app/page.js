@@ -321,7 +321,7 @@ export default function Storefront() {
     return ["All categories", ...(ordered.length ? ordered : [...new Set(products.map((product) => product.category))])];
   }, [products, categoryList]);
   const currentCategory = categoryList.find((item) => item.name === category);
-  const suggestions = useMemo(() => query.trim() ? products.filter((item) => matchesSearch(item, query)).sort((a, b) => Number(b.name.toLowerCase().startsWith(query.trim().toLowerCase())) - Number(a.name.toLowerCase().startsWith(query.trim().toLowerCase())) || a.name.localeCompare(b.name)).slice(0, 8) : [], [products, query]);
+  const suggestions = useMemo(() => query.trim() ? products.filter((item) => matchesSearch(item, query)).sort((a, b) => Number(b.name.toLowerCase().startsWith(query.trim().toLowerCase())) - Number(a.name.toLowerCase().startsWith(query.trim().toLowerCase())) || a.name.localeCompare(b.name)) : [], [products, query]);
   const currentCategoryId = currentCategory?.categoryId || currentCategory?.id || "";
   const selectedNodes = [
     ...selectedSubcategories.map((id) => subcategoryList.find((item) => item.subcategoryId === id)).filter(Boolean),
