@@ -2,7 +2,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { NextResponse } from "next/server";
 import { adminDb } from "@/lib/admin";
 import { customerIdentity } from "@/lib/customerAuth";
-import { availableForSale, catalogueContext } from "@/lib/commerce";
+import { availableOnStorefront, catalogueContext } from "@/lib/commerce";
 
 export const dynamic = "force-dynamic";
 
@@ -26,8 +26,7 @@ export async function POST(request) {
     return NextResponse.json({ ok: true });
   }
   const [productSnap, context] = await Promise.all([store.collection("products").doc(encodeURIComponent(id)).get(), catalogueContext(store)]);
-  if (!productSnap.exists || !availableForSale(productSnap.data(), context)) return NextResponse.json({ error: "This product is unavailable." }, { status: 404 });
+  if (!productSnap.exists || !availableOnStorefront(productSnap.data(), context)) return NextResponse.json({ error: "This product is unavailable." }, { status: 404 });
   await accountRef.set({ email: account.email, wishlist: FieldValue.arrayUnion(id), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
   return NextResponse.json({ ok: true });
 }
-

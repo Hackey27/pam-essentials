@@ -10,6 +10,7 @@ export async function POST(request) {
   const access = await requireRole(request, ["owner", "admin"]);
   if (access.error) return NextResponse.json({ error: access.error }, { status: access.status });
   const body = await request.json().catch(() => ({}));
+  if (body.contactForPrice !== undefined && typeof body.contactForPrice !== "boolean") return NextResponse.json({ error: "Choose a valid pricing inquiry setting." }, { status: 400 });
   const id = text(body.id || body.sku, 80);
   const name = text(body.name, 160);
   const categoryId = text(body.categoryId, 120);
@@ -100,6 +101,7 @@ export async function POST(request) {
     subSubcategoryId,
     subSubcategory: subSubcategoryName,
     price,
+    ...(typeof body.contactForPrice === "boolean" ? { contactForPrice: body.contactForPrice } : {}),
     costPrice,
     pinned: Boolean(body.pinned),
     randomColours: Boolean(body.randomColours),
@@ -175,4 +177,3 @@ export async function POST(request) {
   }
   return NextResponse.json({ ok: true, id });
 }
-

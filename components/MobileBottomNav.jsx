@@ -29,6 +29,7 @@ export default function MobileBottomNav() {
   const staffPage = /^\/(admin|pos|login|api|images)(?:\/|$)/.test(pathname);
   const [hidden, setHidden] = useState(false);
   const [blocked, setBlocked] = useState(false);
+  const [inquiryOpen, setInquiryOpen] = useState(false);
   const [hash, setHash] = useState("");
   const navigationReset = useRef(false);
   useEffect(() => {
@@ -54,6 +55,8 @@ export default function MobileBottomNav() {
     window.addEventListener("hashchange", location);
     window.addEventListener("popstate", location);
     window.addEventListener("pam-storefront-ui", ui);
+    const inquiry = (event) => setInquiryOpen(Boolean(event.detail?.open));
+    window.addEventListener("pam-pricing-inquiry-ui", inquiry);
     return () => {
       document.body.classList.remove("customer-mobile-nav-space");
       cancelAnimationFrame(frame); cancelAnimationFrame(resetFrame);
@@ -61,11 +64,12 @@ export default function MobileBottomNav() {
       window.removeEventListener("hashchange", location);
       window.removeEventListener("popstate", location);
       window.removeEventListener("pam-storefront-ui", ui);
+      window.removeEventListener("pam-pricing-inquiry-ui", inquiry);
     };
   }, [pathname, staffPage]);
   if (staffPage) return null;
   const active = pathname.startsWith("/account") ? hash === "#orders" ? "orders" : "account" : pathname.startsWith("/services") ? "services" : ["/info/delivery", "/info/contact"].includes(pathname) ? "delivery" : "home";
-  const unavailable = hidden || blocked;
+  const unavailable = hidden || blocked || inquiryOpen;
   return <nav className={`mobile-bottom-nav${unavailable ? " is-hidden" : ""}`} aria-label="Customer navigation" aria-hidden={unavailable} inert={unavailable}>
     {items.map((item) => <Link key={item.key} href={item.href} aria-label={item.label} aria-current={active === item.key ? "page" : undefined} className={active === item.key ? "selected" : ""} onClick={(event) => {
       if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;

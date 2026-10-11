@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
+import { hasSellingPrice } from "@/lib/productPricing.mjs";
 import { adminDb } from "@/lib/admin";
-import { availableForSale, catalogueContext, publicDiscountRule } from "@/lib/commerce";
+import { availableOnStorefront, catalogueContext, publicDiscountRule } from "@/lib/commerce";
 import { publicProduct, serializeDoc } from "@/lib/productData";
 import { categoryLabels, effectiveCollections } from "@/lib/categoryHierarchy";
 import { popularityScore } from "@/lib/catalogueBrowse.mjs";
@@ -24,7 +25,7 @@ export async function GET() {
     const publicLaunch = process.env.STORE_PUBLIC === "true";
     const ranked = snapshot.docs
       .map(serializeDoc)
-      .filter((product) => availableForSale(product, context))
+      .filter((product) => availableOnStorefront(product, context))
       .map((product) => ({ ...publicProduct(product), ...categoryLabels(product, context.hierarchy), collections: effectiveCollections(product, context.hierarchy), _score: popularityScore(product), _popular: Number(product.clickCount || 0) >= 20 || Number(product.purchaseCount || 0) >= 3 }))
       .sort((a, b) => (publicLaunch ? b._score - a._score : 0) || Number(b.pinned) - Number(a.pinned) || a.name.localeCompare(b.name));
 
@@ -34,7 +35,7 @@ export async function GET() {
       .map(({ id, name }) => ({ id, name })) : [];
     const products = ranked.map(({ _score, _popular, ...product }) => product);
     const productMap = new Map(products.map((product) => [product.id, product]));
-    const dealBundles = context.deals.filter((deal) => (deal.productIds || []).length >= 2 && deal.productIds.every((id) => productMap.has(id))).map((deal) => ({ dealId: deal.dealId, name: deal.name, productIds: deal.productIds, finalPrice: Number(deal.finalPrice), aggregatePrice: Math.round(deal.productIds.reduce((sum, id) => sum + productMap.get(id).price, 0) * 100) / 100, available: deal.productIds.every((id) => productMap.get(id).stock > 0) }));
+    const dealBundles = context.deals.filter((deal) => (deal.productIds || []).length >= 2 && deal.productIds.every((id) => productMap.has(id) && hasSellingPrice(productMap.get(id)))).map((deal) => ({ dealId: deal.dealId, name: deal.name, productIds: deal.productIds, finalPrice: Number(deal.finalPrice), aggregatePrice: Math.round(deal.productIds.reduce((sum, id) => sum + productMap.get(id).price, 0) * 100) / 100, available: deal.productIds.every((id) => productMap.get(id).stock > 0) }));
 
     const storeLocation = currentShopAddress(locationSetting.data()?.value);
     const mapsUrl = isGoogleMapsUrl(mapsSetting.data()?.value) ? String(mapsSetting.data()?.value || "") : "";
@@ -46,4 +47,3 @@ export async function GET() {
     return NextResponse.json({ products: [], error: "The catalogue is temporarily unavailable." }, { status: 503 });
   }
 }
-

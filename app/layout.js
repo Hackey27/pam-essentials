@@ -6,6 +6,7 @@ import FooterReturn from "@/components/FooterReturn";
 import CustomerPageFooter from "@/components/CustomerPageFooter";
 import CustomerAppearance from "@/components/CustomerAppearance";
 import MobileBottomNav from "@/components/MobileBottomNav";
+import PricingInquiry from "@/components/PricingInquiry";
 
 export const metadata = {
   title: "PAM Essentials",
@@ -22,7 +23,7 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body>
-        <AuthProvider><CustomerAppearance /><FooterReturn />{children}<CustomerPageFooter /><MobileBottomNav /></AuthProvider>
+        <AuthProvider><CustomerAppearance /><FooterReturn />{children}<CustomerPageFooter /><MobileBottomNav /><PricingInquiry /></AuthProvider>
       </body>
     </html>
   );
