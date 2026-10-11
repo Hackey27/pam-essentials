@@ -8,6 +8,14 @@ const categories = [{ categoryId: "b", name: "Bottles", sortOrder: 2 }, { catego
 const subs = [{ subcategoryId: "pen", categoryId: "w", name: "Pens", sortOrder: 2 }, { subcategoryId: "pencil", categoryId: "w", name: "Pencils", sortOrder: 1 }, { subcategoryId: "b-pen", categoryId: "b", name: "Pens", sortOrder: 1 }];
 const products = [{ id: "p1", name: "Zulu pen", categoryId: "w", category: "Writing", subcategoryId: "pen", subcategory: "Pens", imageUrl: "https://example.com/pen.jpg" }, { id: "p2", name: "Alpha pen", categoryId: "w", category: "Writing", subcategoryId: "pen", subcategory: "Pens", imageUrl: "https://example.com/pen.jpg" }, { id: "c", name: "Pencil", categoryId: "w", category: "Writing", subcategoryId: "pencil", subcategory: "Pencils" }, { id: "f", name: "Folder", categoryId: "w", category: "Writing" }, { id: "b", name: "Bottle", categoryId: "b", category: "Bottles", subcategoryId: "b-pen", subcategory: "Pens" }];
 
+test("a category with one card photo also rotates uploaded gallery angles without duplicate images", () => {
+  const items = [{ ...products[0], images: [products[0].imageUrl, "https://example.com/angle.jpg"] }];
+  const before = JSON.stringify(items);
+  const result = carouselCategories(categories, items);
+  assert.deepEqual(result[0].photos.map((p) => p.url), [products[0].imageUrl, "https://example.com/angle.jpg"]);
+  assert.equal(JSON.stringify(items), before);
+});
+
 test("carousel follows Admin order, skips inactive/empty categories and deduplicates existing photos", () => {
   const before = JSON.stringify({ categories, products });
   const result = carouselCategories([...categories, { categoryId: "e", name: "Empty", sortOrder: 0 }, { categoryId: "x", name: "Hidden", active: false }], products);

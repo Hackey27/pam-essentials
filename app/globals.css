@@ -1691,3 +1691,30 @@ body > div > main h1 { color: var(--navy); }
   .hero-short p:not(.eyebrow) { font-size: .86rem; }
   .hero-short .hero-actions .button { width: min(152px, calc((100% - .8cm) / 2)); padding-inline: .4rem; gap: .4rem; font-size: clamp(.78rem, 3.5vw, .85rem); }
 }
+
+/* Category browsing and customer directory additions. */
+.category-carousel-stage { position: relative; }
+.category-overlay-arrow { position: absolute; z-index: 2; top: calc(var(--category-frame) / 2); transform: translateY(-50%); width: 44px; height: 44px; display: grid; place-items: center; border: 1px solid #d9e3ef; border-radius: 50%; color: var(--navy); background: rgba(255,255,255,.94); box-shadow: 0 3px 12px #102c4d24; cursor: pointer; }
+.category-overlay-arrow.previous { left: 6px; }
+.category-overlay-arrow.next { right: 6px; }
+.category-overlay-arrow svg { width: 23px; height: 23px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.category-overlay-arrow:hover { background: var(--navy); color: white; }
+.category-overlay-arrow:disabled { opacity: .4; cursor: default; }
+.category-carousel-viewport { cursor: grab; user-select: none; }
+.category-carousel-viewport.dragging, .category-carousel-viewport.dragging .category-carousel-card { cursor: grabbing; }
+.customer-directory .panel-title, .wishlist-analytics .panel-title { align-items: flex-start; gap: 1rem; }
+.customer-directory .panel-title p, .wishlist-analytics .panel-title p { margin-bottom: .5rem; }
+.customer-export-actions { display: flex; flex-wrap: wrap; gap: .65rem; margin: 1rem 0; }
+.customer-directory .data-table td { overflow-wrap: anywhere; }
+.wishlist-analytics { margin-bottom: 1.5rem; }
+.customer-preferences { display: grid; gap: .8rem; margin: 1rem 0; }
+.customer-preferences label { display: flex; align-items: flex-start; gap: .6rem; }
+.customer-preferences input[type="checkbox"] { width: 20px; height: 20px; flex-shrink: 0; margin: .15rem 0 0; }
+.customer-profile form { display: grid; gap: .75rem; }
+@media (max-width: 680px) { .customer-directory .panel-title, .wishlist-analytics .panel-title { flex-wrap: wrap; } }
+
+.customer-directory td:nth-child(2) { min-width: 170px; }
+.customer-directory td:nth-child(3) { white-space: nowrap; }
+.customer-directory td:nth-child(4) { min-width: 130px; }
+.customer-directory td:nth-child(6) { min-width: 140px; }
+.customer-directory td > span { display: block; }

@@ -104,6 +104,7 @@ export async function POST(request) {
     pinned: Boolean(body.pinned),
     randomColours: Boolean(body.randomColours),
     ...(typeof body.randomShapes === "boolean" ? { randomShapes: body.randomShapes } : {}),
+    ...(typeof body.randomSizes === "boolean" ? { randomSizes: body.randomSizes } : {}),
     newArrival: Boolean(body.newArrival),
     collections: collections.map((value) => text(value, 80)).filter(Boolean).slice(0, 12),
     active: body.active !== false,

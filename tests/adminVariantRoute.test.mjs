@@ -25,3 +25,17 @@ test("Admin links saved products and retains each sibling's commercial identity"
   assert.equal(b.stock, 0);
   assert.equal(b.variantManaged, true);
 });
+
+
+test("random sizes can be enabled and omitted edits preserve the flag and commercial fields", async () => {
+  globalThis.__pamTestUsers = new Map([["owner", { uid: "owner", email: "owner@example.com", role: "owner" }]]);
+  const store = memoryFirestore({ users: { owner: { role: "owner", active: true } }, products: { A: base }, categories: { C: { name: "Bottles" } }, subcategories: { S: { categoryId: "C", name: "Bottles" } }, sub_subcategories: { L: { categoryId: "C", subcategoryId: "S", name: "Water bottles" } }, admin_audit: {} }); globalThis.__pamTestStore = store;
+  assert.equal((await POST(post({ ...base, randomSizes: true }))).status, 200);
+  assert.equal(store.inspect("products", "A").randomSizes, true);
+  assert.equal((await POST(post({ ...base, name: "Renamed" }))).status, 200);
+  assert.equal(store.inspect("products", "A").randomSizes, true);
+  assert.equal(store.inspect("products", "A").stock, 4);
+  assert.equal(store.inspect("products", "A").sku, "SKU-A");
+  assert.equal((await POST(post({ ...base, randomSizes: false }))).status, 200);
+  assert.equal(store.inspect("products", "A").randomSizes, false);
+});
