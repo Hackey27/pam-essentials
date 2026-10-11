@@ -23,7 +23,10 @@ async function readBody(request) {
 }
 export async function POST(request) {
   const origin = request.headers.get("origin");
-  if (origin && origin !== new URL(request.url).origin) return NextResponse.json({ error: "Send inquiries from the PAM website." }, { status: 403 });
+  // Cloud Run terminates HTTPS before forwarding to Next's internal HTTP URL.
+  const publicHost = request.headers.get("host");
+  const allowedOrigins = [new URL(request.url).origin, publicHost ? `https://${publicHost}` : ""];
+  if (origin && !allowedOrigins.includes(origin)) return NextResponse.json({ error: "Send inquiries from the PAM website." }, { status: 403 });
   let body;
   try { body = validateInquiry(await readBody(request)); }
   catch (error) { return NextResponse.json({ error: error instanceof SyntaxError ? "Check your inquiry details." : error.message }, { status: 400 }); }

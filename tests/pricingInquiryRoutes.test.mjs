@@ -56,6 +56,12 @@ test("invalid/disabled inquiries are rejected, cross-origin and large bodies blo
   setup().runTransaction = async () => { throw new Error("secret internal failure"); };
   const failure = await send(request("/api/inquiries", body())); assert.equal(failure.status, 503); assert.doesNotMatch(JSON.stringify(await failure.json()), /secret internal/);
 });
+test("HTTPS storefront origins are accepted behind Cloud Run's internal HTTP request URL", async () => {
+  setup();
+  const response = await send(request("/api/inquiries", body(), null, { origin: "https://pam.example.test", host: "pam.example.test" }));
+  assert.equal(response.status, 200);
+  assert.equal((await send(request("/api/inquiries", body(), null, { origin: "https://unrelated.example.test", host: "pam.example.test" }))).status, 403);
+});
 test("Admin inquiry list and audited updates are role-protected, field-limited and paginated", async () => {
   const store = setup(); await send(request("/api/inquiries", body()));
   assert.equal((await list(request("/api/admin/inquiries"))).status, 401);
