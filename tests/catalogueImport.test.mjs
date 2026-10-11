@@ -46,3 +46,15 @@ test("Excel-safe export round-trip preserves minus-prefix SKUs and apostrophe te
   const plan = planCatalogueImport(csv, [{ docId: "immutable", data: product }], hierarchy);
   assert.equal(plan.errors.length, 0); assert.equal(plan.entries[0].id, "immutable"); assert.deepEqual(plan.entries[0].patch, {});
 });
+
+
+test("optional PRODUCT_TYPE patches only metadata, round-trips and preserves blank existing values", () => {
+  const plan = planCatalogueImport("SKU,PRODUCT_TYPE\nSKU1,Bottles", records, hierarchy);
+  assert.equal(plan.errors.length, 0);
+  assert.deepEqual(plan.entries[0].patch, { productType: "Bottles" });
+  const typed = { ...original, productType: "Bottles" };
+  assert.deepEqual(planCatalogueImport("SKU,PRODUCT_TYPE\nSKU1,", [{ docId: "immutable-id", data: typed }], hierarchy).entries[0].patch, {});
+  assert.equal(parseCatalogueCsv(exportCatalogueCsv([typed]))[0].productType, "Bottles");
+  assert.equal(planCatalogueImport("SKU,PRODUCT_TYPE\nSKU1," + "A".repeat(81), records, hierarchy).errors.length, 1);
+  assert.equal(planCatalogueImport("SKU,PRODUCT_TYPE\nSKU1,=unsafe", records, hierarchy).errors.length, 1);
+});

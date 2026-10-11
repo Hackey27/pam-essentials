@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { publicProduct } from "../lib/productData.js";
 import { POST } from "../app/api/admin/catalogue-import/route.js";
 import { memoryFirestore } from "./fixtures/memoryFirestore.mjs";
 const post = (body, role = "owner") => new Request("http://test/api/admin/catalogue-import", { method: "POST", headers: { authorization: `Bearer ${role}`, "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -26,4 +27,17 @@ test("stale preview and invalid rows write nothing; non-admin cannot import", as
   assert.equal((await POST(post({ ...file, mode: "preview", csv: file.csv + "\nBROKEN,Product,-1,School" }))).status, 400);
   assert.equal((await POST(post({ ...file, mode: "preview" }, "cashier"))).status, 403);
   assert.equal((await store.collection("admin_audit").get()).docs.length, 0);
+});
+
+
+test("CSV Product Type applies as audited optional metadata without changing identity, stock or hierarchy", async () => {
+  const store = setup();
+  const typed = { fileName: "types.csv", csv: "SKU,PRODUCT_TYPE\nSKU1,Accessories", mode: "preview" };
+  const response = await POST(post(typed)); assert.equal(response.status, 200);
+  const preview = await response.json(); assert.equal(preview.rows[0].changes[0].field, "productType");
+  assert.equal(store.inspect("products", "ID1").productType, undefined);
+  const result = await POST(post({ ...typed, mode: "apply", previewHash: preview.previewHash, requestId })); assert.equal(result.status, 200);
+  const saved = store.inspect("products", "ID1"); assert.equal(saved.productType, "Accessories"); assert.equal(saved.sku, "SKU1"); assert.equal(saved.categoryId, "c"); assert.equal(saved.stock, 9); assert.equal(saved.productGroupId, "G"); assert.equal(saved.cardPreviewImagePath, "products/original/card-preview/photo.png");
+  assert.equal(publicProduct(saved).productType, "Accessories");
+  const audit = (await store.collection("admin_audit").get()).docs[0].data(); assert.match(JSON.stringify(audit), /productType/);
 });
