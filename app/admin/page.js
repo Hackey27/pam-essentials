@@ -8,6 +8,8 @@ import AdminProductImages from "@/components/AdminProductImages";
 import AdminProductVariants from "@/components/AdminProductVariants";
 import { editorVariantState } from "@/lib/adminVariants.mjs";
 import AdminHeroGallery from "@/components/AdminHeroGallery";
+import AdminCatalogueImport from "@/components/AdminCatalogueImport";
+import AdminTypography from "@/components/AdminTypography";
 import AdminAnnouncements from "@/components/AdminAnnouncements";
 import AdminLocationSettings from "@/components/AdminLocationSettings";
 import AdminProductBarcodes from "@/components/AdminProductBarcodes";
@@ -20,7 +22,7 @@ import { effectiveRuleEnd } from "@/lib/discount.mjs";
 
 const money = new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS" });
 const whole = new Intl.NumberFormat("en-GH");
-const allNav = ["Overview", "Orders", "Products", "Categories", "Inventory", "Discounts", "Promotions", "Announcements", "Staff", "Analytics", "Transactions", "Settings", "Audit"];
+const allNav = ["Overview", "Orders", "Products", "Categories", "Inventory", "Discounts", "Promotions", "Announcements", "Appearance", "Staff", "Analytics", "Transactions", "Settings", "Audit"];
 const supervisorNav = ["Overview", "Orders", "Inventory"];
 const settingKeys = ["STORE_NAME", "STORE_LOCATION", "GOOGLE_MAPS_URL", "OPENING_HOURS", "WHATSAPP_NUMBER", "RECEIPT_FOOTER", "DELIVERY_OPTIONS", "DELIVERY_FEE", "PAM_DEALS_ACTIVE", "HERO_FLYER_URL"];
 const emptyData = { products: [], orders: [], movements: [], categories: [], subcategories: [], subSubcategories: [], discounts: [], dealBundles: [], settings: {}, users: [], audit: [], sales: [], expenses: [], metrics: {}, permissions: {} };
@@ -117,6 +119,7 @@ function AdminPortal() {
   const [movementType, setMovementType] = useState("all");
   const [rankBy, setRankBy] = useState("revenue");
   const [seeding, setSeeding] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [editor, setEditor] = useState(null);
   const [saving, setSaving] = useState(false);
   const [uploadingImages, setUploadingImages] = useState(false);
@@ -323,7 +326,7 @@ function AdminPortal() {
   openOrderStatuses.push(["pending-payment", data.orders.filter((order) => order.paymentStatus !== "paid" && !["completed", "cancelled"].includes(order.status)).length]);
 
   const primaryAction = {
-    Products: <><button className="button secondary" onClick={seedCatalogue} disabled={seeding}>{seeding ? "Importing…" : "Import catalogue"}</button><button className="button primary" onClick={() => openEditor("product")}>New product</button></>,
+    Products: <><button className="button secondary" onClick={seedCatalogue} disabled={seeding}>{seeding ? "Importing…" : "Import bundled catalogue"}</button><button type="button" className="button secondary" onClick={() => setImportOpen(true)}>Import / update file</button><button className="button primary" onClick={() => openEditor("product")}>New product</button></>,
     Categories: <><button className="button secondary" onClick={() => openEditor("subcategory")}>New subcategory</button><button className="button secondary" onClick={() => openEditor("subSubcategory")}>New sub-subcategory</button><button className="button primary" onClick={() => openEditor("category")}>New category</button></>,
     Discounts: <button className="button primary" onClick={() => openEditor("discount")}>New rule</button>,
     Promotions: <button className="button primary" onClick={() => openEditor("promotion")}>New promotion</button>,
@@ -340,6 +343,7 @@ function AdminPortal() {
 
   return <div className="admin-shell">
     <aside className="admin-sidebar"><div><a className="admin-brand" href="/" aria-label="PAM Essentials home"><BrandLogo background="navy" symbolOnMobile /></a><p className="admin-user">{user?.email}<br /><b>{role}</b></p></div><nav>{nav.map((item) => <button key={item} onClick={() => setSection(item)} className={section === item ? "active" : ""}><span className="nav-dot" /><span>{item}</span>{item === "Orders" && data.metrics.openOrders > 0 && <b>{data.metrics.openOrders}</b>}{item === "Inventory" && data.metrics.lowStock > 0 && <b>{data.metrics.lowStock}</b>}</button>)}</nav><div className="sidebar-actions"><a href="/pos">Open till</a><a href="/">View store</a></div></aside>
+    {importOpen && <AdminCatalogueImport products={data.products} authorizedFetch={authorizedFetch} onImported={load} onClose={() => setImportOpen(false)} />}
     <main className="admin-main">
       <header className="admin-topbar"><div className="admin-topbar-identity"><span className="admin-mobile-brand"><BrandLogo symbol /></span><div><p>PAM Essentials & More Admin</p><span>{user?.email}</span></div></div><div><button className="icon-button" onClick={load} aria-label="Refresh">↻</button><button className="icon-button" onClick={signOut} aria-label="Sign out">↪</button></div></header>
       <section className="admin-content">
@@ -366,11 +370,12 @@ function AdminPortal() {
           {section === "Transactions" && <AdminReceipts sales={data.sales} />}
 
           {section === "Announcements" && <AdminAnnouncements />}
+          {section === "Appearance" && <AdminTypography settings={data.settings} saving={saving} onSave={(payload, message) => mutate("/api/admin/settings", payload, message)} />}
 
           {section === "Settings" && <AdminHeroGallery settings={data.settings} saving={saving} onSave={(payload, message) => mutate("/api/admin/settings", payload, message)} />}
           {section === "Settings" && <AdminLocationSettings settings={data.settings} saving={saving} onSave={(payload, message) => mutate("/api/admin/settings", payload, message)} />}
 
-          {section === "Settings" && <><div className="panel deals-admin-control"><div><h2>PAM Deals</h2><p>{data.settings.PAM_DEALS_ACTIVE?.value === true ? "Active on the storefront" : "Hidden from the storefront"} · {data.products.filter((product) => (product.collections || []).includes("PAM Deals")).length} products tagged</p><small>Tag selected products in Products and add a targeted discount rule before advertising a percentage.</small></div><button type="button" className={data.settings.PAM_DEALS_ACTIVE?.value === true ? "button secondary" : "button primary"} disabled={saving} onClick={() => mutate("/api/admin/settings", { key: "PAM_DEALS_ACTIVE", value: data.settings.PAM_DEALS_ACTIVE?.value !== true, description: "Show PAM Deals collection on the storefront" }, "PAM Deals visibility updated.")}>{data.settings.PAM_DEALS_ACTIVE?.value === true ? "Deactivate PAM Deals" : "Activate PAM Deals"}</button></div><div className="data-table-wrap"><table className="data-table"><thead><tr><th>Setting</th><th>Value</th><th>Description</th><th>Action</th></tr></thead><tbody>{Object.values(data.settings).map((setting) => <tr key={setting.key}><td><b>{setting.key}</b></td><td>{String(setting.value ?? "")}</td><td>{setting.description || "—"}</td><td><button className="table-action" onClick={() => openEditor("setting", setting)}>Edit</button></td></tr>)}</tbody></table></div><div className="panel"><div className="panel-title"><div><h2>PAM Deals bundles</h2><p>Combine two or more products and set one final selling price.</p></div><button className="button primary" onClick={() => openEditor("dealBundle")}>New bundle</button></div><div className="data-table-wrap"><table className="data-table"><thead><tr><th>Bundle</th><th>Products</th><th>Combined price</th><th>Final price</th><th>Status</th><th>Action</th></tr></thead><tbody>{data.dealBundles.length ? data.dealBundles.map((deal) => <tr key={deal.dealId}><td><b>{deal.name}</b><span>{deal.dealId}</span></td><td>{(deal.productIds || []).length}</td><td>{money.format(deal.aggregatePrice || 0)}</td><td>{money.format(deal.finalPrice || 0)}</td><td>{deal.archived ? "Archived" : deal.active !== false ? "Active" : "Inactive"}</td><td><button className="table-action" onClick={() => openEditor("dealBundle", deal)}>Edit</button></td></tr>) : <tr><td colSpan="6" className="empty-cell">No deal bundles configured yet.</td></tr>}</tbody></table></div></div></>}
+          {section === "Settings" && <><div className="panel deals-admin-control"><div><h2>PAM Deals</h2><p>{data.settings.PAM_DEALS_ACTIVE?.value === true ? "Active on the storefront" : "Hidden from the storefront"} · {data.products.filter((product) => (product.collections || []).includes("PAM Deals")).length} products tagged</p><small>Tag selected products in Products and add a targeted discount rule before advertising a percentage.</small></div><button type="button" className={data.settings.PAM_DEALS_ACTIVE?.value === true ? "button secondary" : "button primary"} disabled={saving} onClick={() => mutate("/api/admin/settings", { key: "PAM_DEALS_ACTIVE", value: data.settings.PAM_DEALS_ACTIVE?.value !== true, description: "Show PAM Deals collection on the storefront" }, "PAM Deals visibility updated.")}>{data.settings.PAM_DEALS_ACTIVE?.value === true ? "Deactivate PAM Deals" : "Activate PAM Deals"}</button></div><div className="data-table-wrap"><table className="data-table"><thead><tr><th>Setting</th><th>Value</th><th>Description</th><th>Action</th></tr></thead><tbody>{Object.values(data.settings).map((setting) => <tr key={setting.key}><td><b>{setting.key}</b></td><td>{String(setting.value ?? "")}</td><td>{setting.description || "—"}</td><td><button className="table-action" onClick={() => setting.key === "STOREFRONT_TYPOGRAPHY" ? setSection("Appearance") : openEditor("setting", setting)}>Edit</button></td></tr>)}</tbody></table></div><div className="panel"><div className="panel-title"><div><h2>PAM Deals bundles</h2><p>Combine two or more products and set one final selling price.</p></div><button className="button primary" onClick={() => openEditor("dealBundle")}>New bundle</button></div><div className="data-table-wrap"><table className="data-table"><thead><tr><th>Bundle</th><th>Products</th><th>Combined price</th><th>Final price</th><th>Status</th><th>Action</th></tr></thead><tbody>{data.dealBundles.length ? data.dealBundles.map((deal) => <tr key={deal.dealId}><td><b>{deal.name}</b><span>{deal.dealId}</span></td><td>{(deal.productIds || []).length}</td><td>{money.format(deal.aggregatePrice || 0)}</td><td>{money.format(deal.finalPrice || 0)}</td><td>{deal.archived ? "Archived" : deal.active !== false ? "Active" : "Inactive"}</td><td><button className="table-action" onClick={() => openEditor("dealBundle", deal)}>Edit</button></td></tr>) : <tr><td colSpan="6" className="empty-cell">No deal bundles configured yet.</td></tr>}</tbody></table></div></div></>}
 
           {section === "Audit" && <div className="data-table-wrap"><table className="data-table"><thead><tr><th>Timestamp</th><th>Admin</th><th>Action</th><th>Entity</th><th>Description</th></tr></thead><tbody>{data.audit.map((entry) => <tr key={entry.id}><td>{dateTime(entry.timestamp)}</td><td>{entry.adminEmail || entry.admin}</td><td>{entry.action}</td><td><b>{entry.entityType}</b><span>{entry.entityId}</span></td><td>{entry.description}</td></tr>)}</tbody></table></div>}
         </>}

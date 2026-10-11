@@ -346,8 +346,8 @@ export default function Storefront() {
       inCollection(product, collection, discountRules) &&
       (browseMode === "products" || (browseMode === "new" ? isNewArrival(product) : browseMode === "promotions" ? isPromotion(product, discountRules) : dealsActive && hasCollection(product, "PAM Deals")))
     );
-    return sortProducts(filtered, browseMode === "new" ? "latest" : sort, discountRules);
-  }, [products, discountRules, query, category, selectedSubcategories, selectedSubSubcategories, sort, browseMode, priceMin, priceMax, availability, offer, collection, publicLaunch, dealsActive]);
+    return sortProducts(filtered, browseMode === "new" ? "latest" : sort, discountRules, categoryList);
+  }, [products, categoryList, discountRules, query, category, selectedSubcategories, selectedSubSubcategories, sort, browseMode, priceMin, priceMax, availability, offer, collection, publicLaunch, dealsActive]);
   const dealProducts = products.filter((product) => hasCollection(product, "PAM Deals"));
   const dealPercent = Math.max(0, ...discountRules.filter((rule) => rule.discountType === "PERCENT" && Number(rule.value) <= 20 && rule.scopeType !== "GLOBAL" && dealProducts.some((product) => rule.scopeType === "PRODUCT" ? rule.scopeId === product.id : rule.scopeType === "CATEGORY" && rule.scopeId === product.categoryId)).map((rule) => Number(rule.value || 0)));
   const pageCount = Math.max(1, Math.ceil(visible.length / pageSize));

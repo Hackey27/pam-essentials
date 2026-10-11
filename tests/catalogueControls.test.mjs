@@ -43,3 +43,12 @@ test("applied discount labels work for POS lines and saved orders", () => {
   assert.equal(orderOfferLabel({ quantity: 2, unitPrice: 10, lineTotal: 18, discountRuleSnapshot: { discountType: "PERCENT", value: 10, amount: 2 } }), "10% discount applied");
   assert.equal(orderOfferLabel({ quantity: 3, unitPrice: 10, lineTotal: 27, dealBundleSnapshot: { amount: 3 } }), "Deal applied");
 });
+
+
+test("category sorting follows Admin assignments and completes each category alphabetically", () => {
+  const items = [{ id: "B2", name: "Zulu bottle", category: "Bottles", categoryId: "b" }, { id: "W2", name: "Zulu pen", category: "Writing", categoryId: "w" }, { id: "B1", name: "Alpha bottle", category: "Bottles", categoryId: "b" }, { id: "W1", name: "Alpha pen", category: "Writing", categoryId: "w" }];
+  const categories = [{ categoryId: "b", name: "Bottles", sortOrder: 2 }, { categoryId: "w", name: "Writing", sortOrder: 1 }];
+  assert.deepEqual(sortProducts(items, "categories", [], categories).map((item) => item.id), ["W1", "W2", "B1", "B2"]);
+  categories[0].sortOrder = 0;
+  assert.deepEqual(sortProducts(items, "categories", [], categories).map((item) => item.id), ["B1", "B2", "W1", "W2"]);
+});

@@ -164,3 +164,9 @@ export async function POST(request) {
   });
 }
 
+
+export async function GET(request) {
+  const access = await requireRole(request, ["owner", "admin"]);
+  if (access.error) return NextResponse.json({ error: access.error }, { status: access.status });
+  return NextResponse.json({ source: { products: products.length, categories: hierarchy.categories.length, subcategories: hierarchy.subcategories.length, subSubcategories: hierarchy.subSubcategories.length, origin: "Data.xlsx", format: "Bundled JSON definitions" } });
+}

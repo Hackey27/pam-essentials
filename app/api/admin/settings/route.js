@@ -6,7 +6,10 @@ import { isHeroImagePath } from "@/lib/heroImages.mjs";
 import { validHeroImageList } from "@/lib/heroGallery.mjs";
 import { isGoogleMapsUrl } from "@/lib/location.mjs";
 
+import { normalizeTypography, validTypography, TYPOGRAPHY_KEY } from "@/lib/typography.mjs";
+
 const allowed = new Set([
+  TYPOGRAPHY_KEY,
   "DEFAULT_LOW_STOCK_LEVEL", "DISCOUNT_STACKING", "TAX_ENABLED", "PRICES_INCLUDE_TAX", "VAT_RATE", "NHIL_RATE", "GETFUND_RATE", "RECEIPT_TAX_NOTE",
   "STORE_NAME", "STORE_LOCATION", "GOOGLE_MAPS_URL", "OPENING_HOURS", "WHATSAPP_NUMBER", "RECEIPT_FOOTER", "DELIVERY_OPTIONS", "DELIVERY_FEE", "PAM_DEALS_ACTIVE", "HERO_FLYER_URL", "HERO_WEB_IMAGE_PATH", "HERO_MOBILE_IMAGE_PATH", "HERO_WEB_IMAGES", "HERO_MOBILE_IMAGES",
 ]);
@@ -26,10 +29,13 @@ export async function POST(request) {
   if ((key === "HERO_WEB_IMAGE_PATH" && body.value && !isHeroImagePath(body.value, "web")) || (key === "HERO_MOBILE_IMAGE_PATH" && body.value && !isHeroImagePath(body.value, "mobile"))) return NextResponse.json({ error: "Choose an uploaded hero image for that screen size." }, { status: 400 });
   if ((key === "HERO_WEB_IMAGES" && !validHeroImageList(body.value, "web")) || (key === "HERO_MOBILE_IMAGES" && !validHeroImageList(body.value, "mobile"))) return NextResponse.json({ error: "Choose up to 12 valid hero images with a sort order for that screen size." }, { status: 400 });
 
+  if (key === TYPOGRAPHY_KEY && !validTypography(body.value)) return NextResponse.json({ error: "Choose valid font, size, style and colour options." }, { status: 400 });
+
   const store = adminDb();
   const ref = store.collection("settings").doc(key);
   const existing = await ref.get();
   let value = typeof body.value === "string" ? text(body.value, 2000) : body.value;
+  if (key === TYPOGRAPHY_KEY) value = normalizeTypography(body.value);
   if (booleans.has(key)) value = body.value === true || body.value === "true";
   if (numbers.has(key)) value = nullableNumber(body.value);
   const setting = { key, value, description: text(body.description, 500), updatedAt: FieldValue.serverTimestamp(), updatedBy: access.user.uid };

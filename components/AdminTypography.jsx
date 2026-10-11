@@ -1,0 +1,18 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { fontCss, normalizeTypography, typographyFonts, typographySections, TYPOGRAPHY_KEY } from "@/lib/typography.mjs";
+
+export default function AdminTypography({ settings, saving, onSave }) {
+  const [draft, setDraft] = useState(() => normalizeTypography(settings[TYPOGRAPHY_KEY]?.value));
+  useEffect(() => { setDraft(normalizeTypography(settings[TYPOGRAPHY_KEY]?.value)); }, [settings]);
+  const update = (section, key, value) => setDraft((current) => ({ ...current, [section]: { ...current[section], [key]: value } }));
+  const textStyle = (group) => ({ fontFamily: fontCss(group.fontFamily), fontSize: `${group.fontSize}px`, fontWeight: group.fontWeight, fontStyle: group.fontStyle, color: group.textColor, background: group.backgroundColor });
+  return <form className="panel admin-form typography-settings" onSubmit={(event) => { event.preventDefault(); onSave({ key: TYPOGRAPHY_KEY, value: draft, description: "Customer website and announcement typography" }, "Website appearance saved."); }}>
+    <h2>Website &amp; announcement appearance</h2><p>Control base customer-page text and announcement styling. Preview your choices below. Save to publish them across customer pages.</p>
+    {typographySections.map((section) => <fieldset className="typography-group" key={section.id}><legend>{section.title}</legend><div className="form-grid">{section.fields.map((field) => <label key={field.key}>{field.label}{field.type === "font" ? <select value={draft[section.id][field.key]} onChange={(event) => update(section.id, field.key, event.target.value)}>{typographyFonts.map((font) => <option key={font.id} value={font.id}>{font.label}</option>)}</select> : field.type === "weight" ? <select value={draft[section.id][field.key]} onChange={(event) => update(section.id, field.key, Number(event.target.value))}>{[400, 600, 700, 800, 900].map((weight) => <option key={weight} value={weight}>{weight === 400 ? "Regular" : weight === 600 ? "Semibold" : weight === 700 ? "Bold" : weight === 800 ? "Extra bold" : "Heavy"}</option>)}</select> : field.type === "style" ? <select value={draft[section.id][field.key]} onChange={(event) => update(section.id, field.key, event.target.value)}><option value="normal">Normal</option><option value="italic">Italic</option></select> : <input required type={field.type} min={field.min} max={field.max} step={field.type === "number" ? "0.01" : undefined} value={draft[section.id][field.key]} onChange={(event) => update(section.id, field.key, field.type === "number" ? Number(event.target.value) : event.target.value)} />}</label>)}</div>
+      <div className={`typography-preview${section.id === "crawler" ? " typography-crawler-preview" : ""}`} style={textStyle(draft[section.id])}>{section.id !== "crawler" && <h3 style={{ fontFamily: fontCss(draft[section.id].headingFamily), fontSize: section.id === "announcement" ? `${draft.announcement.headingSize}px` : undefined, color: draft[section.id].headingColor }}>Everyday essentials, thoughtfully selected.</h3>}<p style={{ margin: 0 }}>Find what you need. Pick up or get it delivered.</p></div>
+    </fieldset>)}
+    <div className="typography-actions"><button type="submit" className="button primary" disabled={saving}>{saving ? "Saving…" : "Save appearance"}</button><button type="button" className="button secondary" disabled={saving} onClick={() => setDraft(normalizeTypography())}>Reset preview to defaults</button></div><p className="muted">More appearance controls can be added here later. Changes affect the customer website.</p>
+  </form>;
+}

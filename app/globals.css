@@ -68,7 +68,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .top-announcement-track > span { display: inline-flex; align-items: center; gap: .4rem; }
 .top-announcement-track a { color: var(--yellow); text-decoration: underline; }
 .top-announcement-crawler:hover .top-announcement-track, .top-announcement-crawler:focus-within .top-announcement-track { animation-play-state: paused; }
-.store-shell.has-top-announcements .store-header { top: 28px; }
+.store-shell.has-top-announcements .store-header { top: var(--mobile-topbar-height, 28px); }
 @keyframes pam-announcement-crawl { to { transform: translateX(-100%); } }
 @media (prefers-reduced-motion: reduce) { .top-announcement-crawler { overflow-x: auto; } .top-announcement-track { padding: 0 1rem; animation: none; } }
 .store-header { position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.97); border-bottom: 1px solid var(--line); backdrop-filter: blur(12px); }
@@ -1613,3 +1613,19 @@ body > div > main h1 { color: var(--navy); }
 @media (prefers-reduced-motion: reduce) { .header-dropdown-overlay { animation: none; } }
 
 .header-dropdown-scroll { display: grid; gap: .15rem; max-height: inherit; overflow-y: auto; }
+
+.typography-settings { display: grid; gap: 1rem; }
+.typography-group { min-width: 0; border: 1px solid var(--line); border-radius: 12px; padding: 1rem; }
+.typography-group legend { color: var(--navy); font-weight: 800; padding: 0 .5rem; }
+.typography-preview { margin-top: 1rem; padding: 1.25rem; border: 1px solid var(--line); border-radius: 10px; }
+.typography-actions { display: flex; flex-wrap: wrap; gap: .75rem; }
+.typography-crawler-preview { overflow-wrap: anywhere; }
+
+.catalogue-import-dialog { display: grid; gap: 1rem; width: min(1100px, calc(100vw - 2rem)); max-height: 90dvh; overflow-y: auto; }
+.catalogue-import-actions { display: flex; flex-wrap: wrap; gap: .75rem; }
+.catalogue-import-dialog label { display: grid; gap: .4rem; }
+.catalogue-import-dialog details { padding: .75rem; border-radius: 8px; background: var(--soft-blue); }
+.catalogue-import-dialog details p { margin: .75rem 0 0; }
+.import-preview { max-height: 45dvh; }
+.import-preview td { vertical-align: top; white-space: normal; overflow-wrap: anywhere; }
+.import-row-errors { max-height: 30dvh; overflow-y: auto; color: var(--red); }
