@@ -2037,3 +2037,41 @@ body > div > main h1 { color: var(--navy); }
   .store-shell .product-card-actions .button { height: 41.8px; min-height: 41.8px; }
   .store-shell .product-card-actions .add-cart-action { flex-basis: 41.8px; }
 }
+
+/* Listing card refinement: full action widths with shorter heights retained. */
+.store-shell .product-card-actions { width: 100%; gap: .45rem; }
+.store-shell .product-card .product-stock-line { margin-bottom: .45rem; }
+.store-shell .product-card .product-stock-line .badge.success { font-size: .684rem; padding: .22192rem .47681rem; }
+.store-shell .product-card { min-height: 418.803px; }
+.store-shell .product-card .product-copy { min-height: 145.543px; padding-bottom: .6rem; }
+@media (max-width: 767.98px) {
+  .store-shell .product-card-actions .add-cart-action { flex-basis: 44px; }
+  .store-shell .product-card .product-stock-line .badge.success { font-size: .5795rem; padding: .17678rem .29611rem; }
+  .store-shell .product-card .product-stock-line { margin-bottom: .3rem; }
+  .store-shell .product-card { min-height: 324.579px; }
+  .store-shell .product-card .product-copy { min-height: 119.479px; padding-bottom: .3rem; }
+  .store-shell .product-grid.compact .product-card { min-height: 289.016px; }
+  .store-shell .product-grid.compact .product-card .product-copy { min-height: 106.316px; }
+}
+
+/* Widen the cards into spare side spacing, while retaining safe page gutters. */
+.store-shell .product-grid { --card-grid-columns: 4; --card-grid-gap: 1rem; --card-side-room: 1.75rem; margin-inline: max(calc(-2.5% + (var(--card-grid-columns) - 1) * var(--card-grid-gap) * .025), calc(-1 * var(--card-side-room))); }
+.store-shell .product-grid.compact { --card-grid-columns: 5; --card-grid-gap: .65rem; }
+@media (max-width: 1180px) { .store-shell .product-grid { --card-grid-columns: 3; } }
+@media (max-width: 767.98px) {
+  .store-shell .product-grid, .store-shell .product-grid.compact { --card-grid-columns: 2; --card-grid-gap: .6rem; --card-side-room: .5rem; }
+}
+
+.store-shell .product-card .product-copy h3 { margin-top: 0; margin-bottom: .35rem; }
+.store-shell .product-card .product-stock-line { margin-bottom: .2rem; }
+.store-shell .product-card .price { margin-bottom: .55rem; }
+@media (max-width: 767.98px) {
+  .store-shell .product-card .product-copy h3 { margin-bottom: .25rem; }
+  .store-shell .product-card .product-stock-line { margin-bottom: .15rem; }
+  .store-shell .product-card .price { margin-bottom: .2rem; }
+  .store-shell .product-card-actions { margin-top: 0; }
+  .store-shell .product-grid.compact .product-card .product-copy { padding-block: .2rem; }
+  .store-shell .product-grid.compact .product-card .product-copy h3 { margin-bottom: .1rem; }
+  .store-shell .product-grid.compact .product-card .price { margin-bottom: .15rem; }
+  .store-shell .product-grid.compact .product-card .product-stock-line { margin-bottom: .1rem; }
+}
