@@ -1,3 +1,5 @@
+import { reviewKey } from "@/lib/reviewStore";
+import { reviewSummary } from "@/lib/productReviews.mjs";
 import { NextResponse } from "next/server";
 import { hasSellingPrice } from "@/lib/productPricing.mjs";
 import { adminDb } from "@/lib/admin";
@@ -17,7 +19,8 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   try {
     const store = adminDb();
-    const [snapshot, context, flyerSetting, webHeroSetting, mobileHeroSetting, locationSetting, mapsSetting, hoursSetting, announcementSnap, webGallerySetting, mobileGallerySetting] = await Promise.all([store.collection("products").get(), catalogueContext(store), store.collection("settings").doc("HERO_FLYER_URL").get(), store.collection("settings").doc("HERO_WEB_IMAGE_PATH").get(), store.collection("settings").doc("HERO_MOBILE_IMAGE_PATH").get(), store.collection("settings").doc("STORE_LOCATION").get(), store.collection("settings").doc("GOOGLE_MAPS_URL").get(), store.collection("settings").doc("OPENING_HOURS").get(), store.collection("announcements").get(), store.collection("settings").doc("HERO_WEB_IMAGES").get(), store.collection("settings").doc("HERO_MOBILE_IMAGES").get()]);
+    const [snapshot, context, flyerSetting, webHeroSetting, mobileHeroSetting, locationSetting, mapsSetting, hoursSetting, announcementSnap, webGallerySetting, mobileGallerySetting, reviewSummaries] = await Promise.all([store.collection("products").get(), catalogueContext(store), store.collection("settings").doc("HERO_FLYER_URL").get(), store.collection("settings").doc("HERO_WEB_IMAGE_PATH").get(), store.collection("settings").doc("HERO_MOBILE_IMAGE_PATH").get(), store.collection("settings").doc("STORE_LOCATION").get(), store.collection("settings").doc("GOOGLE_MAPS_URL").get(), store.collection("settings").doc("OPENING_HOURS").get(), store.collection("announcements").get(), store.collection("settings").doc("HERO_WEB_IMAGES").get(), store.collection("settings").doc("HERO_MOBILE_IMAGES").get(), store.collection("product_review_summaries").get()]);
+    const ratings = new Map(reviewSummaries.docs.map((doc) => [doc.id, reviewSummary(doc.data())]));
     const dealsActive = context.dealsActive;
     const flyerUrl = flyerSetting.exists ? String(flyerSetting.data().value || "") : "";
     const webHeroPath = isHeroImagePath(webHeroSetting.data()?.value, "web") ? webHeroSetting.data().value : "";
@@ -33,7 +36,7 @@ export async function GET() {
       .filter((product) => product._popular)
       .slice(0, 3)
       .map(({ id, name }) => ({ id, name })) : [];
-    const products = ranked.map(({ _score, _popular, ...product }) => product);
+    const products = ranked.map(({ _score, _popular, ...product }) => { const summary = ratings.get(reviewKey(product)); return { ...product, rating: summary?.average || 0, reviewCount: summary?.count || 0 }; });
     const productMap = new Map(products.map((product) => [product.id, product]));
     const dealBundles = context.deals.filter((deal) => (deal.productIds || []).length >= 2 && deal.productIds.every((id) => productMap.has(id) && hasSellingPrice(productMap.get(id)))).map((deal) => ({ dealId: deal.dealId, name: deal.name, productIds: deal.productIds, finalPrice: Number(deal.finalPrice), aggregatePrice: Math.round(deal.productIds.reduce((sum, id) => sum + productMap.get(id).price, 0) * 100) / 100, available: deal.productIds.every((id) => productMap.get(id).stock > 0) }));
 

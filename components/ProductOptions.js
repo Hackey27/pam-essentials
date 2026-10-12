@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import GalleryZoom from "@/components/GalleryZoom";
+import { ReviewRating } from "@/components/ProductReviews";
 import WhatsAppIcon from "@/components/WhatsAppIcon";
 import { PRIMARY_WHATSAPP } from "@/lib/shop";
 import { quantityOfferMessage } from "@/lib/quantityOffer.mjs";
@@ -69,7 +71,7 @@ export function ProductImageLightbox({ product, images, index, onIndexChange, on
   const closeButton = useRef(null);
   const callbacks = useRef({ index, images, onIndexChange, onClose });
   callbacks.current = { index, images, onIndexChange, onClose };
-  const gesture = useRef({ x: 0, y: 0, dragged: false, lastWheel: 0 });
+  const dialog = useRef(null);
   const move = (direction) => { const current = callbacks.current; current.onIndexChange((current.index + direction + current.images.length) % current.images.length); };
   useEffect(() => {
     const previousFocus = document.activeElement;
@@ -77,6 +79,11 @@ export function ProductImageLightbox({ product, images, index, onIndexChange, on
     document.body.style.overflow = "hidden";
     closeButton.current?.focus();
     const key = (event) => {
+      if (event.key === "Tab") {
+        const buttons = [...dialog.current.querySelectorAll("button:not(:disabled)")];
+        if (event.shiftKey && document.activeElement === buttons[0]) { event.preventDefault(); buttons.at(-1)?.focus(); }
+        else if (!event.shiftKey && document.activeElement === buttons.at(-1)) { event.preventDefault(); buttons[0]?.focus(); }
+      }
       if (["Escape", "ArrowRight", "ArrowLeft"].includes(event.key)) {
         event.preventDefault(); event.stopImmediatePropagation();
         if (event.key === "Escape") callbacks.current.onClose();
@@ -86,7 +93,7 @@ export function ProductImageLightbox({ product, images, index, onIndexChange, on
     window.addEventListener("keydown", key, true);
     return () => { document.body.style.overflow = overflow; window.removeEventListener("keydown", key, true); previousFocus?.focus(); };
   }, []);
-  return createPortal(<div className="image-lightbox" role="dialog" aria-modal="true" aria-label="Product image gallery" onClick={(event) => { if (gesture.current.dragged) { gesture.current.dragged = false; return; } if (event.target === event.currentTarget) onClose(); }} onPointerDown={(event) => { gesture.current.x = event.clientX; gesture.current.y = event.clientY; gesture.current.dragged = false; }} onPointerUp={(event) => { const dx = event.clientX - gesture.current.x, dy = event.clientY - gesture.current.y; if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy)) { gesture.current.dragged = true; move(dx < 0 ? 1 : -1); } }} onWheel={(event) => { if (Math.abs(event.deltaX) > 35 && Math.abs(event.deltaX) > Math.abs(event.deltaY) && Date.now() - gesture.current.lastWheel > 450) { gesture.current.lastWheel = Date.now(); move(event.deltaX > 0 ? 1 : -1); } }}><button ref={closeButton} type="button" className="image-lightbox-close" onClick={onClose} aria-label="Close gallery">×</button>{images.length > 1 && <button type="button" className="image-lightbox-nav" onClick={() => move(-1)} aria-label="Previous image">‹</button>}<div className="image-lightbox-frame" onClick={(event) => event.stopPropagation()}><div className="image-lightbox-slide" key={index}><ProductImage product={product} source={images[index]?.source} width={2200} eager /></div><span>{index + 1} / {images.length}</span></div>{images.length > 1 && <button type="button" className="image-lightbox-nav" onClick={() => move(1)} aria-label="Next image">›</button>}</div>, document.body);
+  return createPortal(<div ref={dialog} className="image-lightbox" role="dialog" aria-modal="true" aria-label="Product image gallery" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}><button ref={closeButton} type="button" className="image-lightbox-close" onClick={onClose} aria-label="Close gallery">×</button>{images.length > 1 && <button type="button" className="image-lightbox-nav" onClick={() => move(-1)} aria-label="Previous image">‹</button>}<div className="image-lightbox-frame" onClick={(event) => event.stopPropagation()}><GalleryZoom key={index} onSwipe={(direction) => { if (images.length > 1) move(direction); }}><ProductImage product={product} source={images[index]?.source} width={2200} eager /></GalleryZoom><span>{index + 1} / {images.length}</span></div>{images.length > 1 && <button type="button" className="image-lightbox-nav" onClick={() => move(1)} aria-label="Next image">›</button>}</div>, document.body);
 }
 
 export default function ProductOptions({ initialProduct, products, discountRules = [], onAdd, compact = false, onClose, onSelectionChange, previewSource, onPreviewChange, onOpenGallery, onImageOverlayChange, onNavigateDetail, footer }) {
@@ -136,7 +143,7 @@ export default function ProductOptions({ initialProduct, products, discountRules
     </section>
     <div className="product-option-body">
       <div className="product-option-top">{compact && <button type="button" className="icon-button" onClick={onClose} aria-label="Close Quick View">×</button>}</div>
-      <h2>{selected.name}</h2><div className="detail-price">{quoteOnly ? <PricingInquiryButton product={selected} /> : promotionPrice(selected, discountRules) != null ? <><del>{money.format(selected.price)}</del> <strong>{money.format(promotionPrice(selected, discountRules))}</strong></> : money.format(selected.price)}</div>
+      <h2>{selected.name}</h2><ReviewRating product={selected} /><div className="detail-price">{quoteOnly ? <PricingInquiryButton product={selected} /> : promotionPrice(selected, discountRules) != null ? <><del>{money.format(selected.price)}</del> <strong>{money.format(promotionPrice(selected, discountRules))}</strong></> : money.format(selected.price)}</div>
       <p className={quoteOnly ? "stock-label" : selected.stock <= 0 ? "stock-label out" : selected.stock < Number(selected.lowStockLevel ?? 8) ? "stock-label low" : "stock-label"}>{quoteOnly ? "Price confirmed after reviewing your measurements" : selected.stock > 0 ? `✓ In stock${selected.stock < Number(selected.lowStockLevel ?? 8) ? " · Low stock" : ""}` : "Out of Stock"}</p>
       <p className="sku">SKU: {selected.sku || selected.id}</p>
       {randomSelectionNote(selected) && <p className="colour-note">{randomSelectionNote(selected)}</p>}

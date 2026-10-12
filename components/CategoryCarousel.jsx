@@ -14,6 +14,7 @@ export default function CategoryCarousel({ categories, products, onSelect }) {
   const wheelDistance = useRef(0);
   const wheelTime = useRef(0);
   const [dragOffset, setDragOffset] = useState(0);
+  const [dragging, setDragging] = useState(false);
   const [layout, setLayout] = useState({ stride: 240, count: 1 });
   const [start, setStart] = useState(0);
   const [step, setStep] = useState(0);
@@ -26,7 +27,7 @@ export default function CategoryCarousel({ categories, products, onSelect }) {
   const [pageVisible, setPageVisible] = useState(true);
   const [reducedMotion, setReducedMotion] = useState(true);
   const canMove = items.length > layout.count;
-  const auto = !paused && !hovered && !focused && onScreen && pageVisible && !reducedMotion;
+  const auto = !paused && !dragging && !hovered && !focused && onScreen && pageVisible && !reducedMotion;
   const photoAuto = !paused && onScreen && pageVisible && !reducedMotion;
   const hasPhotoSeries = items.some((category) => category.photos.length > 1);
 
@@ -101,7 +102,29 @@ export default function CategoryCarousel({ categories, products, onSelect }) {
   return <section className="category-carousel" ref={sectionRef} aria-label="Browse categories" onMouseEnter={() => { if (matchMedia("(hover: hover)").matches) setHovered(true); }} onMouseLeave={() => setHovered(false)} onFocusCapture={() => setFocused(true)} onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false); }}>
     <div className="category-carousel-heading"><div><p className="eyebrow">Find your everyday favourites</p><h2>Shop by category</h2></div><div className="category-carousel-controls"><button type="button" className="category-pause" onClick={() => setPaused((current) => !current)} aria-pressed={paused} aria-label={paused ? "Play category carousel" : "Pause category carousel"}><span aria-hidden="true">{paused ? "▶" : "Ⅱ"}</span></button></div></div>
     <div className="category-carousel-stage">
-    <div className={`category-carousel-viewport${dragOffset ? " dragging" : ""}`} ref={viewportRef} onPointerDown={(event) => { if (event.button !== 0 || step) return; pointer.current = { x: event.clientX, y: event.clientY }; suppressClick.current = false; }} onPointerMove={(event) => { const origin = pointer.current; if (!origin || !canMove) return; const dx = event.clientX - origin.x; const dy = event.clientY - origin.y; if (Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy)) { suppressClick.current = true; event.currentTarget.setPointerCapture(event.pointerId); setDragOffset(Math.max(-layout.stride, Math.min(layout.stride, dx))); } }} onPointerUp={(event) => { const origin = pointer.current; pointer.current = null; setDragOffset(0); if (!origin) return; const dx = event.clientX - origin.x; const dy = event.clientY - origin.y; if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) { suppressClick.current = true; move(dx > 0 ? -1 : 1); } }} onPointerCancel={() => { pointer.current = null; setDragOffset(0); }} onLostPointerCapture={() => { pointer.current = null; setDragOffset(0); }}>
+    <div className={`category-carousel-viewport${dragging ? " dragging" : ""}`} ref={viewportRef}
+      onPointerDown={(event) => {
+        if (event.button !== 0 || pointer.current || !canMove) return;
+        if (step) { setStart((current) => wrap(current + step, items.length)); setStep(0); }
+        pointer.current = { id: event.pointerId, x: event.clientX, y: event.clientY }; suppressClick.current = false; setDragging(true);
+      }}
+      onPointerMove={(event) => {
+        const origin = pointer.current; if (!origin || origin.id !== event.pointerId) return;
+        const dx = event.clientX-origin.x, dy = event.clientY-origin.y;
+        if (Math.abs(dy) > 8 && Math.abs(dy) > Math.abs(dx) && !suppressClick.current) { pointer.current = null; setDragging(false); setDragOffset(0); return; }
+        if (Math.abs(dx) > 8 && (suppressClick.current || Math.abs(dx) > Math.abs(dy))) { suppressClick.current = true; if (!event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.setPointerCapture(event.pointerId); setDragOffset(Math.max(-layout.stride, Math.min(layout.stride, dx))); }
+      }}
+      onPointerUp={(event) => {
+        const origin = pointer.current; if (!origin || origin.id !== event.pointerId) return;
+        pointer.current = null; setDragging(false); setDragOffset(0);
+        const dx = event.clientX-origin.x, dy = event.clientY-origin.y;
+        if (Math.abs(dx) > Math.min(40, layout.stride*.2) && Math.abs(dx) > Math.abs(dy)) { suppressClick.current = true; move(dx > 0 ? -1 : 1); }
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+      }}
+      onPointerCancel={(event) => { if (pointer.current?.id === event.pointerId) { pointer.current = null; setDragging(false); setDragOffset(0); } }}
+      onLostPointerCapture={(event) => { if (pointer.current?.id === event.pointerId) { pointer.current = null; setDragging(false); setDragOffset(0); } }}
+      onClickCapture={(event) => { if (suppressClick.current) { event.preventDefault(); event.stopPropagation(); suppressClick.current = false; } }}>
+
       <div className={`category-carousel-track${step ? " moving" : ""}`} style={{ transform: `translateX(${canMove ? -layout.stride * (1 + step) + (step ? 0 : dragOffset) : 0}px)`, transitionDuration: reducedMotion ? "0ms" : `${CATEGORY_MOVE_MS}ms` }}>
         {slots.map(({ category, slot }) => {
           const offscreen = canMove && (slot === 0 || slot > layout.count + 1);

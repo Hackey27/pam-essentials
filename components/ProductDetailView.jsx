@@ -4,6 +4,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import ProductOptions, { ProductImage, ProductImageLightbox, productVariants } from "@/components/ProductOptions";
 import { addToCart, readCart, saveCart } from "@/lib/storeCart";
 import { detailImageSource, productGallery } from "@/lib/productImages.mjs";
+import ProductReviews from "@/components/ProductReviews";
 import BrandLogo from "@/components/BrandLogo";
 import CustomerFooter from "@/components/CustomerFooter";
 import PaymentDetails from "@/components/PaymentDetails";
@@ -160,6 +161,7 @@ export default function ProductDetailView({ id, initialCatalogue, embedded = fal
           </div>
         </div>
         <div className="product-detail-lower">
+          <ProductReviews key={selected.id} product={selected} />
           {related.length > 0 && <section className="related-products"><h2>You may also like</h2><div className="related-grid">{related.map((item) => <a href={`/products/${encodeURIComponent(item.id)}`} key={item.id}><ProductImage product={item} /><b>{item.name}</b></a>)}</div></section>}
         </div>
       </>}
@@ -170,4 +172,3 @@ export default function ProductDetailView({ id, initialCatalogue, embedded = fal
     {lightboxIndex >= 0 && gallery.length > 0 && <ProductImageLightbox product={selected} images={gallery} index={Math.min(lightboxIndex, gallery.length - 1)} onIndexChange={(index) => { setLightboxIndex(index); setPreviewSource(gallery[index].source); }} onClose={() => setLightboxIndex(-1)} />}
   </div>;
 }
-
