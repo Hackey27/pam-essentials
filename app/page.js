@@ -132,6 +132,13 @@ export default function Storefront() {
   const catalogueControlsRef = useRef(null);
   useLayoutEffect(() => {
     const measure = () => {
+      const header = storeHeaderRef.current;
+      if (header) {
+        // Recover the untrimmed height so responsive wrapping and font changes retain a 5% reduction.
+        const previousTrim = Number.parseFloat(header.style.getPropertyValue("--navigation-half-trim")) || 0;
+        const nextTrim = (header.getBoundingClientRect().height + previousTrim * 2) * .025;
+        if (Math.abs(nextTrim - previousTrim) > .03) header.style.setProperty("--navigation-half-trim", `${nextTrim}px`);
+      }
       const height = window.matchMedia("(width < 1180px)").matches ? ((mobileTabsHidden || mobileMenuOpen) ? compactHeaderRef.current?.getBoundingClientRect().height || 62 : 0) : (storeHeaderRef.current?.getBoundingClientRect().height || 0) + (storeTopBarRef.current?.getBoundingClientRect().height || 0);
       storeShellRef.current?.style.setProperty("--mobile-header-stack", `${height}px`);
       storeShellRef.current?.style.setProperty("--mobile-topbar-height", `${storeTopBarRef.current?.getBoundingClientRect().height || 0}px`);

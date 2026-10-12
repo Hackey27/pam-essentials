@@ -2006,3 +2006,34 @@ body > div > main h1 { color: var(--navy); }
   .compact-store-header, .mobile-browse-menu, .mobile-browse-backdrop, .filter-toggle-symbol > span, .filter-panel-heading span { transition: none !important; }
   .header-dropdown-overlay, .compact-search-panel, .desktop-search-panel { animation: none; }
 }
+
+/* Shorter navigation keeps content in normal flow and preserves usable controls. */
+.store-shell .store-header .header-main { padding-block: calc(1rem - var(--navigation-half-trim, 0px)); }
+.store-shell .desktop-thin-row { min-height: 55.1px; padding-block: .26rem; }
+@media (max-width: 1179.98px) {
+  .store-shell .compact-header-row { min-height: 58.9px; padding-block: 6.5px; }
+}
+@media (min-width: 768px) and (max-width: 1179.98px) {
+  .store-shell .compact-header-row { min-height: 55.1px; }
+}
+@media (max-width: 767.98px) {
+  .store-shell .store-header .header-main { padding-block: calc(9.775px - var(--navigation-half-trim, 0px)); }
+}
+/* Compact only the card details; retain the original image viewport and name type. */
+.store-shell .product-card { height: auto; min-height: 450.326px; }
+.store-shell .product-card-image { flex-basis: 271.66px; }
+.store-shell .product-card .product-copy { min-height: 177.066px; padding-block: .9rem; }
+.store-shell .product-card .price { font-size: .94866rem; }
+.store-shell .product-card-actions { width: 95%; align-self: center; gap: .4275rem; }
+.store-shell .product-card-actions .button { height: 38px; min-height: 38px; }
+@media (max-width: 767.98px) {
+  .store-shell .product-card { height: auto; min-height: 349.01px; }
+  .store-shell .product-card-image { flex-basis: 203.5px; }
+  .store-shell .product-grid.compact .product-card { height: auto; min-height: 310.77px; }
+  .store-shell .product-grid.compact .product-card-image { flex-basis: 181.1px; }
+  .store-shell .product-card .product-copy { min-height: 143.91px; padding-block: .495rem; }
+  .store-shell .product-grid.compact .product-card .product-copy { min-height: 128.07px; }
+  .store-shell .product-card .price { font-size: .80801rem; }
+  .store-shell .product-card-actions .button { height: 41.8px; min-height: 41.8px; }
+  .store-shell .product-card-actions .add-cart-action { flex-basis: 41.8px; }
+}
