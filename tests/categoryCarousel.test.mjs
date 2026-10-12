@@ -1,12 +1,22 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { carouselCategories, CATEGORY_HOLD_MS, PHOTO_HOLD_MS } from "../lib/categoryCarousel.mjs";
+import { carouselCategories, categoryWheelDelta, CATEGORY_HOLD_MS, PHOTO_HOLD_MS, CATEGORY_MANUAL_MOVE_MS } from "../lib/categoryCarousel.mjs";
 import { groupProductsByType } from "../lib/productTypes.mjs";
 import { sortProducts } from "../lib/catalogueSort.mjs";
 
 const categories = [{ categoryId: "b", name: "Bottles", sortOrder: 2 }, { categoryId: "w", name: "Writing", sortOrder: 1 }];
 const subs = [{ subcategoryId: "pen", categoryId: "w", name: "Pens", sortOrder: 2 }, { subcategoryId: "pencil", categoryId: "w", name: "Pencils", sortOrder: 1 }, { subcategoryId: "b-pen", categoryId: "b", name: "Pens", sortOrder: 1 }];
 const products = [{ id: "p1", name: "Zulu pen", categoryId: "w", category: "Writing", subcategoryId: "pen", subcategory: "Pens", imageUrl: "https://example.com/pen.jpg" }, { id: "p2", name: "Alpha pen", categoryId: "w", category: "Writing", subcategoryId: "pen", subcategory: "Pens", imageUrl: "https://example.com/pen.jpg" }, { id: "c", name: "Pencil", categoryId: "w", category: "Writing", subcategoryId: "pencil", subcategory: "Pencils" }, { id: "f", name: "Folder", categoryId: "w", category: "Writing" }, { id: "b", name: "Bottle", categoryId: "b", category: "Bottles", subcategoryId: "b-pen", subcategory: "Pens" }];
+
+test("vertical wheels and browser zoom pass through; horizontal and Shift-wheel gestures browse promptly", () => {
+  assert.equal(categoryWheelDelta({ deltaY: 120 }), 0);
+  assert.equal(categoryWheelDelta({ deltaX: 8, deltaY: 120 }), 0);
+  assert.equal(categoryWheelDelta({ deltaX: 120, ctrlKey: true }), 0);
+  assert.equal(categoryWheelDelta({ deltaX: -40, deltaY: 2 }), -40);
+  assert.equal(categoryWheelDelta({ deltaY: 3, shiftKey: true, deltaMode: 1 }), 48);
+  assert.equal(categoryWheelDelta({ deltaX: 1, deltaMode: 2 }, 600), 600);
+  assert.equal(CATEGORY_MANUAL_MOVE_MS, 300);
+});
 
 test("a category with one card photo also rotates uploaded gallery angles without duplicate images", () => {
   const items = [{ ...products[0], images: [products[0].imageUrl, "https://example.com/angle.jpg"] }];

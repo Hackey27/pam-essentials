@@ -59,7 +59,7 @@ export default function HeaderDropdown({ label, children, active = false, utilit
     const links = [...menuRef.current.querySelectorAll("a,button")];
     if (event.shiftKey && document.activeElement === links[0]) { event.preventDefault(); close(true); }
     else if (!event.shiftKey && document.activeElement === links.at(-1)) {
-      const controls = [...document.querySelectorAll(".utility-bar summary, .store-header summary, .store-header .brand, .store-header input, .store-header .search-field button, .store-header .cart-button")].filter((item) => item.getBoundingClientRect().width && !item.closest("[inert]"));
+      const controls = [...document.querySelectorAll(".utility-bar summary, .store-header summary, .store-header .brand, .store-header input, .store-header .search-field button, .store-header .cart-button, .desktop-thin-header summary, .desktop-thin-brand, .desktop-search-panel input, .desktop-search-panel .search-field button, .desktop-search-toggle, .desktop-thin-cart")].filter((item) => { const rect = item.getBoundingClientRect(); return rect.width && rect.bottom > 0 && rect.top < window.innerHeight && !item.closest("[inert]"); });
       const next = controls[controls.indexOf(detailsRef.current.querySelector("summary")) + 1];
       if (next) { event.preventDefault(); close(); next.focus({ preventScroll: true }); }
     }

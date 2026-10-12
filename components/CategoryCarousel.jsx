@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { carouselCategories, CATEGORY_HOLD_MS, PHOTO_HOLD_MS, CATEGORY_MOVE_MS, PHOTO_MOVE_MS } from "@/lib/categoryCarousel.mjs";
+import { carouselCategories, categoryWheelDelta, CATEGORY_HOLD_MS, PHOTO_HOLD_MS, CATEGORY_MOVE_MS, CATEGORY_MANUAL_MOVE_MS, PHOTO_MOVE_MS } from "@/lib/categoryCarousel.mjs";
 
 const wrap = (value, length) => (value % length + length) % length;
 
@@ -18,6 +18,7 @@ export default function CategoryCarousel({ categories, products, onSelect }) {
   const [layout, setLayout] = useState({ stride: 240, count: 1 });
   const [start, setStart] = useState(0);
   const [step, setStep] = useState(0);
+  const [stepDuration, setStepDuration] = useState(CATEGORY_MOVE_MS);
   const [photoIndex, setPhotoIndex] = useState(0);
   const [photoMoving, setPhotoMoving] = useState(false);
   const [paused, setPaused] = useState(false);
@@ -28,7 +29,7 @@ export default function CategoryCarousel({ categories, products, onSelect }) {
   const [reducedMotion, setReducedMotion] = useState(true);
   const canMove = items.length > layout.count;
   const auto = !paused && !dragging && !hovered && !focused && onScreen && pageVisible && !reducedMotion;
-  const photoAuto = !paused && onScreen && pageVisible && !reducedMotion;
+  const photoAuto = !paused && !dragging && onScreen && pageVisible && !reducedMotion;
   const hasPhotoSeries = items.some((category) => category.photos.length > 1);
 
   useEffect(() => {
@@ -59,14 +60,14 @@ export default function CategoryCarousel({ categories, products, onSelect }) {
 
   useEffect(() => {
     if (!auto || !canMove || step) return;
-    const timer = setTimeout(() => setStep(1), CATEGORY_HOLD_MS);
+    const timer = setTimeout(() => { setStepDuration(CATEGORY_MOVE_MS); setStep(1); }, CATEGORY_HOLD_MS);
     return () => clearTimeout(timer);
   }, [auto, canMove, step, start]);
   useEffect(() => {
     if (!step) return;
-    const timer = setTimeout(() => { setStart((index) => wrap(index + step, items.length)); setStep(0); }, reducedMotion ? 0 : CATEGORY_MOVE_MS);
+    const timer = setTimeout(() => { setStart((index) => wrap(index + step, items.length)); setStep(0); }, reducedMotion ? 0 : stepDuration);
     return () => clearTimeout(timer);
-  }, [step, items.length, reducedMotion]);
+  }, [step, stepDuration, items.length, reducedMotion]);
   useEffect(() => {
     if (!photoAuto || !hasPhotoSeries || photoMoving || step) return;
     const timer = setTimeout(() => setPhotoMoving(true), PHOTO_HOLD_MS);
@@ -78,21 +79,20 @@ export default function CategoryCarousel({ categories, products, onSelect }) {
     return () => clearTimeout(timer);
   }, [photoMoving, reducedMotion]);
 
-  const move = (direction) => { if (canMove && !step) setStep(direction); };
+  const move = (direction) => { if (canMove && !step) { setStepDuration(CATEGORY_MANUAL_MOVE_MS); setStep(direction); } };
   useEffect(() => {
     const viewport = viewportRef.current;
     if (!viewport || !canMove) return;
     const wheel = (event) => {
-      if (event.ctrlKey) return; // Preserve browser pinch-to-zoom.
-      const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+      const delta = categoryWheelDelta(event, viewport.clientWidth);
       if (!delta) return;
       event.preventDefault();
       if (step) return;
       const now = Date.now();
       if (now - wheelTime.current > 200 || Math.sign(delta) !== Math.sign(wheelDistance.current)) wheelDistance.current = 0;
       wheelTime.current = now;
-      wheelDistance.current += delta * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? viewport.clientWidth : 1);
-      if (Math.abs(wheelDistance.current) >= 35) { setStep(wheelDistance.current > 0 ? 1 : -1); wheelDistance.current = 0; }
+      wheelDistance.current += delta;
+      if (Math.abs(wheelDistance.current) >= 18) { setStepDuration(CATEGORY_MANUAL_MOVE_MS); setStep(wheelDistance.current > 0 ? 1 : -1); wheelDistance.current = 0; }
     };
     viewport.addEventListener("wheel", wheel, { passive: false });
     return () => viewport.removeEventListener("wheel", wheel);
@@ -118,14 +118,14 @@ export default function CategoryCarousel({ categories, products, onSelect }) {
         const origin = pointer.current; if (!origin || origin.id !== event.pointerId) return;
         pointer.current = null; setDragging(false); setDragOffset(0);
         const dx = event.clientX-origin.x, dy = event.clientY-origin.y;
-        if (Math.abs(dx) > Math.min(40, layout.stride*.2) && Math.abs(dx) > Math.abs(dy)) { suppressClick.current = true; move(dx > 0 ? -1 : 1); }
+        if (Math.abs(dx) > Math.min(30, layout.stride*.16) && Math.abs(dx) > Math.abs(dy)) { suppressClick.current = true; move(dx > 0 ? -1 : 1); }
         if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
       }}
       onPointerCancel={(event) => { if (pointer.current?.id === event.pointerId) { pointer.current = null; setDragging(false); setDragOffset(0); } }}
       onLostPointerCapture={(event) => { if (pointer.current?.id === event.pointerId) { pointer.current = null; setDragging(false); setDragOffset(0); } }}
       onClickCapture={(event) => { if (suppressClick.current) { event.preventDefault(); event.stopPropagation(); suppressClick.current = false; } }}>
 
-      <div className={`category-carousel-track${step ? " moving" : ""}`} style={{ transform: `translateX(${canMove ? -layout.stride * (1 + step) + (step ? 0 : dragOffset) : 0}px)`, transitionDuration: reducedMotion ? "0ms" : `${CATEGORY_MOVE_MS}ms` }}>
+      <div className={`category-carousel-track${step ? " moving" : ""}`} style={{ transform: `translateX(${canMove ? -layout.stride * (1 + step) + (step ? 0 : dragOffset) : 0}px)`, transitionDuration: reducedMotion ? "0ms" : `${stepDuration}ms` }}>
         {slots.map(({ category, slot }) => {
           const offscreen = canMove && (slot === 0 || slot > layout.count + 1);
           const current = category.photos[photoIndex % category.photos.length];

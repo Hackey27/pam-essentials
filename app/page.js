@@ -75,6 +75,7 @@ export default function Storefront() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [mobileTabsHidden, setMobileTabsHidden] = useState(false);
+  const [desktopHeaderHidden, setDesktopHeaderHidden] = useState(false);
   const [mobileViewport, setMobileViewport] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [compactSearchOpen, setCompactSearchOpen] = useState(false);
@@ -119,6 +120,7 @@ export default function Storefront() {
   const paginationScroll = useRef(false);
   const storeShellRef = useRef(null);
   const storeHeaderRef = useRef(null);
+  const desktopHeaderRef = useRef(null);
   const storeTopBarRef = useRef(null);
   const catalogueControlsRef = useRef(null);
   useLayoutEffect(() => {
@@ -136,6 +138,9 @@ export default function Storefront() {
     measure();
     return () => observer.disconnect();
   }, [mobileTabsHidden, compactSearchOpen, mobileMenuOpen]);
+  useEffect(() => {
+    if (!desktopHeaderHidden) desktopHeaderRef.current?.querySelectorAll("details[open]").forEach((item) => { item.open = false; });
+  }, [desktopHeaderHidden]);
   const cartReturn = useRef("");
   const listingRestore = useRef(null);
   const listingSnapshot = useRef(null);
@@ -229,15 +234,17 @@ export default function Storefront() {
       // Observe the real header box: display:contents wrappers have no bounds on desktop.
       const bottom = storeHeaderRef.current?.getBoundingClientRect().bottom ?? 0;
       const hidden = mobile.matches && bottom <= 0;
+      const desktopHidden = !mobile.matches && bottom <= 0;
+      setDesktopHeaderHidden(desktopHidden);
       setMobileViewport(mobile.matches);
       setMobileTabsHidden(hidden);
       storeShellRef.current?.style.setProperty("--mobile-nav-menu-top", `${Math.max(0, bottom) + 4}px`);
-      if (!hidden) setCompactSearchOpen(false);
+      if (!hidden && !desktopHidden) setCompactSearchOpen(false);
       if (!mobile.matches) setMobileMenuOpen(false);
-      if (hidden) storeHeaderRef.current?.querySelectorAll("details[open]").forEach((item) => { item.open = false; });
+      if (hidden || desktopHidden) storeHeaderRef.current?.querySelectorAll("details[open]").forEach((item) => { item.open = false; });
     };
     const onScroll = () => {
-      if (!mobile.matches || frame) return;
+      if (frame) return;
       frame = requestAnimationFrame(() => { frame = 0; update(); });
     };
     const observer = new IntersectionObserver(update, { threshold: 0 });
@@ -650,7 +657,7 @@ export default function Storefront() {
               <div className="product-card-tools"><button type="button" data-tooltip="Compare" aria-label={`${compareIds.includes(product.id) ? "Remove" : "Add"} ${product.name} ${compareIds.includes(product.id) ? "from" : "to"} comparison`} aria-pressed={compareIds.includes(product.id)} onClick={() => compareProduct(product)}>⇄</button><button type="button" data-tooltip="Wishlist" aria-label={`Add ${product.name} to wishlist`} aria-pressed={wishlistIds.includes(product.id)} onClick={() => wishlistProduct(product)}>{wishlistIds.includes(product.id) ? "♥" : "♡"}</button></div>
               <div className="product-copy"><div className="product-stock-line"><span className={requiresPricingInquiry(product) ? "badge neutral" : product.stock > 0 ? "badge success" : "badge danger"}>{requiresPricingInquiry(product) ? "Quote required" : product.stock > 0 ? "✓ In stock" : "Out of stock"}</span>{!requiresPricingInquiry(product) && product.stock > 0 && product.stock < Number(product.lowStockLevel ?? 8) && <span className="badge warning">Low stock</span>}</div><div className="product-badges">{isNewArrival(product) && <span className="badge neutral">New</span>}{publicLaunch && isBestSeller(product) && <span className="badge neutral">Best seller</span>}{dealsActive && hasCollection(product, "PAM Deals") && <span className="badge neutral">PAM Deal</span>}</div>
               <h3><a href={`/products/${encodeURIComponent(product.id)}`} onClick={rememberListingContext}>{product.name}</a></h3>{product.description && <p className="product-description">{product.description}</p>}{(product.randomColours || product.randomShapes || product.randomSizes) && <div className="random-product-badges">{product.randomColours && <span>Random colours</span>}{product.randomShapes && <span>Random shape</span>}{product.randomSizes && <span>Random size</span>}</div>}
-              <ReviewRating product={product} /><p className="price">{requiresPricingInquiry(product) ? <PricingInquiryButton product={product} /> : hasVariants ? variantPrice(variants) : promotionPrice(product, discountRules) != null ? <><del>{money.format(product.price)}</del> <strong>{money.format(promotionPrice(product, discountRules))}</strong></> : money.format(product.price)}</p>{hasVariants && <small>{variants.length} variants available</small>}
+              {Number(product.reviewCount) > 0 && <ReviewRating product={product} />}<p className="price">{requiresPricingInquiry(product) ? <PricingInquiryButton product={product} /> : hasVariants ? variantPrice(variants) : promotionPrice(product, discountRules) != null ? <><del>{money.format(product.price)}</del> <strong>{money.format(promotionPrice(product, discountRules))}</strong></> : money.format(product.price)}</p>{hasVariants && <small>{variants.length} variants available</small>}
               <div className="product-card-actions"><button type="button" className="button quick-view-action full" aria-label="Quick view" onClick={() => { recordClick(product); setQuickProduct(product); }}>{hasVariants ? "View options" : "Quick View"}</button>
               {hasSellingPrice(product) && product.stock > 0 && <button type="button" className="button add-cart-action full" aria-label="Add to cart" onClick={() => add(product)}><span className="add-cart-label">Add to cart</span><svg className="add-cart-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M2 3h2l2 11h10l2-7H5"/><circle cx="8" cy="20" r="1"/><circle cx="16" cy="20" r="1"/><path d="M18 4h5M20.5 1.5v5"/></svg></button>}</div>
             </div></article>;
@@ -658,9 +665,9 @@ export default function Storefront() {
   }
 
   return (
-    <div ref={storeShellRef} data-mobile-overlay={activeLayer} className={`store-shell${crawlerAnnouncements.length ? " has-top-announcements" : ""}${mobileTabsHidden ? " mobile-tabs-hidden" : ""}`}>
+    <div ref={storeShellRef} data-mobile-overlay={activeLayer} className={`store-shell${desktopHeaderHidden ? " desktop-header-hidden" : ""}${crawlerAnnouncements.length ? " has-top-announcements" : ""}${mobileTabsHidden ? " mobile-tabs-hidden" : ""}`}>
       <div className="utility-bar"><span>Opening hours: {openingHours}</span><div><Dropdown label="Store Location" utility><a href="/info/contact#location">Address and opening hours</a>{mapsUrl && <a href={mapsUrl} target="_blank" rel="noreferrer">Open Google Maps</a>}</Dropdown><Dropdown label="Contact Us" utility><a href={`https://wa.me/${PRIMARY_WHATSAPP}`} target="_blank" rel="noreferrer"><WhatsAppIcon size={16} /> WhatsApp us</a><a href="tel:+233596661439">Call {PRIMARY_PHONE_LABEL}</a><a href="/info/contact#contact">All contact details</a></Dropdown><Dropdown label="Track Order" utility><a href="/account#orders">View my orders</a><a href="/account?mode=signin">Sign in to track</a></Dropdown><Dropdown label="Wishlist" utility><a href="/account#wishlist">View wishlist</a><a href="/compare">Compare products</a></Dropdown><Dropdown label={user && !role ? "My Account" : "Sign In"} utility><a href="/account?mode=signin">Sign in</a>{(!user || role) && <a href="/account?mode=register">Create account</a>}</Dropdown></div></div>
-      <div className="store-header-stack" inert={mobileViewport && (mobileTabsHidden || mobileMenuOpen)} aria-hidden={mobileViewport && (mobileTabsHidden || mobileMenuOpen)}>
+      <div className="store-header-stack" inert={mobileViewport ? (mobileTabsHidden || mobileMenuOpen) : desktopHeaderHidden} aria-hidden={mobileViewport ? (mobileTabsHidden || mobileMenuOpen) : desktopHeaderHidden}>
       <div ref={storeTopBarRef} className="store-top-bar">
         <div className="mobile-opening-hours">Opening hours: {openingHours}</div>
         {crawlerAnnouncements.length > 0 && <section className="top-announcement-crawler" aria-label="Store announcements"><div className="top-announcement-track" style={{ animationDuration: `${Math.max(20, crawlerAnnouncements.reduce((length, item) => length + item.title.length + item.body.length, 0) / 10)}s` }}>{crawlerAnnouncements.map((item) => <span key={item.announcementId}><strong>{item.title}:</strong> {item.body}{item.actionLabel && item.actionUrl && <a href={item.actionUrl}>{item.actionLabel}</a>}</span>)}</div></section>}
@@ -683,8 +690,21 @@ export default function Storefront() {
           <button type="button" className="compact-search-toggle" aria-label={compactSearchOpen ? "Close product search" : "Open product search"} aria-expanded={compactSearchOpen} aria-controls="compact-search-panel" onClick={() => { setMobileMenuOpen(false); setCompactSearchOpen((open) => !open); setSearchOpen(true); requestAnimationFrame(() => compactSearchRef.current?.querySelector("input")?.focus({ preventScroll: true })); }}><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></svg></button>
           <button className="cart-button" onClick={() => setCartOpen(true)} aria-label={`View cart, ${cartCount} items`}><svg className="cart-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 4h2l2.1 10.4a2 2 0 0 0 2 1.6H19a2 2 0 0 0 2-1.6L22 8H6"/><circle cx="10" cy="20" r="1"/><circle cx="19" cy="20" r="1"/></svg><b>{cartCount}</b></button>
         </div>
-        {compactSearchOpen && <div id="compact-search-panel" className="compact-search-panel">{renderSearch(true)}</div>}
+        {mobileViewport && compactSearchOpen && <div id="compact-search-panel" className="compact-search-panel">{renderSearch(true)}</div>}
       </div>
+      <header ref={desktopHeaderRef} className={`desktop-thin-header${desktopHeaderHidden ? " visible" : ""}`} inert={!desktopHeaderHidden} aria-hidden={!desktopHeaderHidden}>
+        <div className="desktop-thin-row">
+          <a className="desktop-thin-brand" href="/" aria-label="PAM Essentials home"><BrandLogo background="navy" /></a>
+          <nav className="desktop-thin-nav" aria-label="Compact desktop navigation">
+            <Dropdown label="Products" active={browseMode === "products"}><button type="button" onClick={() => browse("products")}>All products</button><button type="button" onClick={() => { browse("products"); document.getElementById("catalogue")?.scrollIntoView({ behavior: "smooth" }); }}>Categories and filters</button></Dropdown>
+            {navigationItems(true, "services")}
+            <Dropdown label="Menu"><button type="button" onClick={() => browse("products")}>All products</button><button type="button" onClick={() => { browse("products"); document.getElementById("catalogue")?.scrollIntoView({ behavior: "smooth" }); }}>Categories and filters</button><button type="button" onClick={() => setServicesOpen(true)}>Services</button><RequestProductLink /><button type="button" onClick={() => browse("new")}>New arrivals</button><button type="button" onClick={() => browse("promotions")}>Promotions</button>{dealsActive && <button type="button" onClick={() => browse("deals")}>PAM Deals</button>}<a href="/info/delivery">Payment &amp; delivery</a><a href="/info/contact#location">Pickup location</a><a href="/info/contact">Contact us</a><a href="/account#orders">Track order</a><a href="/account#wishlist">Wishlist</a><a href="/compare">Compare products</a><a href="/account?mode=signin">{user && !role ? "My account" : "Sign in"}</a>{(!user || role) && <a href="/account?mode=register">Create account</a>}</Dropdown>
+          </nav>
+          <button type="button" className="compact-search-toggle desktop-search-toggle" aria-label={compactSearchOpen ? "Close product search" : "Open product search"} aria-expanded={compactSearchOpen} aria-controls="desktop-search-panel" onClick={() => { setCompactSearchOpen((open) => !open); setSearchOpen(true); requestAnimationFrame(() => compactSearchRef.current?.querySelector("input")?.focus({ preventScroll: true })); }}><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></svg></button>
+          <button type="button" className="desktop-thin-cart" onClick={() => setCartOpen(true)} aria-label={`View cart, ${cartCount} items`}><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M3 4h2l2.1 10.4a2 2 0 0 0 2 1.6H19a2 2 0 0 0 2-1.6L22 8H6"/><circle cx="10" cy="20" r="1"/><circle cx="19" cy="20" r="1"/></svg><span>Cart</span><b>{cartCount}</b></button>
+        </div>
+        {desktopHeaderHidden && compactSearchOpen && <div id="desktop-search-panel" className="desktop-search-panel">{renderSearch(true)}</div>}
+      </header>
       <MobileBrowseMenu open={mobileMenuOpen} onClose={closeMobileMenu} onClear={clearFilters} resultCount={visible.length} search={renderSearch(false, true)} filters={<>
         <MobilePriceRange minimum={priceMin} maximum={priceMax} upperLimit={Math.max(1, ...products.map((item) => Math.ceil(Number(item.price) || 0)), Number(priceMin) || 0, Number(priceMax) || 0)} onChange={(minimum, maximum) => { setPriceMin(minimum); setPriceMax(maximum); }} />
         {renderFilters(true, "offers")}
