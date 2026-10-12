@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 export default function FooterReturn() {
   const [position, setPosition] = useState(null);
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get("from") !== "footer") return;
+    if (window.location.pathname === "/request-product" || new URLSearchParams(window.location.search).get("from") !== "footer") return;
     let disposed = false;
     let heading;
     let frame;

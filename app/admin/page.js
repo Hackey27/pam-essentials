@@ -11,6 +11,7 @@ import AdminHeroGallery from "@/components/AdminHeroGallery";
 import AdminCatalogueImport from "@/components/AdminCatalogueImport";
 import AdminCustomers from "@/components/AdminCustomers";
 import AdminInquiries from "@/components/AdminInquiries";
+import AdminProductRequests from "@/components/AdminProductRequests";
 import AdminWishlistAnalytics from "@/components/AdminWishlistAnalytics";
 import AdminTypography from "@/components/AdminTypography";
 import AdminAnnouncements from "@/components/AdminAnnouncements";
@@ -25,7 +26,7 @@ import { effectiveRuleEnd } from "@/lib/discount.mjs";
 
 const money = new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS" });
 const whole = new Intl.NumberFormat("en-GH");
-const allNav = ["Overview", "Orders", "Products", "Categories", "Inventory", "Discounts", "Promotions", "Announcements", "Appearance", "Staff", "Customers", "Inquiries", "Analytics", "Transactions", "Settings", "Audit"];
+const allNav = ["Overview", "Orders", "Products", "Categories", "Inventory", "Discounts", "Promotions", "Announcements", "Appearance", "Staff", "Customers", "Inquiries", "Product Requests", "Analytics", "Transactions", "Settings", "Audit"];
 const supervisorNav = ["Overview", "Orders", "Inventory"];
 const settingKeys = ["STORE_NAME", "STORE_LOCATION", "GOOGLE_MAPS_URL", "OPENING_HOURS", "WHATSAPP_NUMBER", "RECEIPT_FOOTER", "DELIVERY_OPTIONS", "DELIVERY_FEE", "PAM_DEALS_ACTIVE", "HERO_FLYER_URL"];
 const emptyData = { products: [], orders: [], movements: [], categories: [], subcategories: [], subSubcategories: [], discounts: [], dealBundles: [], settings: {}, users: [], audit: [], sales: [], expenses: [], metrics: {}, permissions: {} };
@@ -370,6 +371,7 @@ function AdminPortal() {
 
           {section === "Customers" && <AdminCustomers authorizedFetch={authorizedFetch} orders={data.orders} />}
           {section === "Inquiries" && <AdminInquiries authorizedFetch={authorizedFetch} />}
+          {section === "Product Requests" && <AdminProductRequests authorizedFetch={authorizedFetch} />}
           {section === "Analytics" && <><AdminWishlistAnalytics authorizedFetch={authorizedFetch} products={data.products} /><div className="metric-grid">{metricCards.map(([label, value, note]) => <article className="metric-card" key={label}><p>{label}</p><strong>{value}</strong><span>{note}</span></article>)}</div><div className="table-tools analytics-tools"><span>Rank performance by</span><select value={rankBy} onChange={(event) => setRankBy(event.target.value)}><option value="revenue">Revenue</option><option value="quantity">Quantity</option><option value="profit">Profit</option></select></div><div className="admin-panels"><article className="panel"><div className="panel-title"><h2>Top products</h2></div>{performance.products.length ? performance.products.map(([id, value]) => <div className="order-row" key={id}><div><b>{value.name}</b><span>{value.quantity} units · {money.format(value.revenue)} revenue</span></div><strong>{rankBy === "quantity" ? whole.format(value.quantity) : money.format(value[rankBy])}</strong></div>) : <p className="muted">Sales will appear here after checkout.</p>}</article><article className="panel"><div className="panel-title"><h2>Category performance</h2></div>{performance.categories.length ? performance.categories.map(([name, value]) => <div className="order-row" key={name}><div><b>{name}</b><span>{value.quantity} units · {money.format(value.revenue)} revenue</span></div><strong>{rankBy === "quantity" ? whole.format(value.quantity) : money.format(value[rankBy])}</strong></div>) : <p className="muted">No category sales yet.</p>}</article><article className="panel"><div className="panel-title"><h2>Channel split</h2></div>{performance.channels.length ? performance.channels.map(([name, revenue]) => <div className="order-row" key={name}><div><b>{name}</b><span>Sales channel</span></div><strong>{money.format(revenue)}</strong></div>) : <p className="muted">No channel sales yet.</p>}</article><article className="panel"><div className="panel-title"><h2>No-sale products</h2></div>{performance.noSales.length ? performance.noSales.map((product) => <div className="order-row" key={product.id}><div><b>{product.name}</b><span>{product.category} · {product.stock} in stock</span></div><span className="badge warning">No sales</span></div>) : <p className="muted">Every active product sold in this period.</p>}</article><article className="panel"><div className="panel-title"><h2>Recent expenses</h2></div>{data.expenses.length ? data.expenses.slice(0, 10).map((expense) => <div className="order-row" key={expense.id}><div><b>{expense.description}</b><span>{expense.category} · {dateTime(expense.createdAt)}</span></div><strong>{money.format(expense.amount)}</strong></div>) : <p className="muted">No expenses recorded.</p>}</article></div></>}
 
           {section === "Transactions" && <AdminReceipts sales={data.sales} />}

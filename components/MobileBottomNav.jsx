@@ -68,7 +68,7 @@ export default function MobileBottomNav() {
     };
   }, [pathname, staffPage]);
   if (staffPage) return null;
-  const active = pathname.startsWith("/account") ? hash === "#orders" ? "orders" : "account" : pathname.startsWith("/services") ? "services" : ["/info/delivery", "/info/contact"].includes(pathname) ? "delivery" : "home";
+  const active = pathname.startsWith("/account") ? hash === "#orders" ? "orders" : "account" : (pathname.startsWith("/services") || pathname === "/request-product") ? "services" : ["/info/delivery", "/info/contact"].includes(pathname) ? "delivery" : "home";
   const unavailable = hidden || blocked || inquiryOpen;
   return <nav className={`mobile-bottom-nav${unavailable ? " is-hidden" : ""}`} aria-label="Customer navigation" aria-hidden={unavailable} inert={unavailable}>
     {items.map((item) => <Link key={item.key} href={item.href} aria-label={item.label} aria-current={active === item.key ? "page" : undefined} className={active === item.key ? "selected" : ""} onClick={(event) => {
