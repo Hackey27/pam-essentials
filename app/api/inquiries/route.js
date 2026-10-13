@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { FieldValue } from "firebase-admin/firestore";
 import { NextResponse } from "next/server";
+import { optionalCustomerIdentity } from "@/lib/customerAuth";
 import { adminDb } from "@/lib/admin";
 import { availableOnStorefront, catalogueContext } from "@/lib/commerce";
 import { requiresPricingInquiry } from "@/lib/productPricing.mjs";
@@ -22,6 +23,8 @@ async function readBody(request) {
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 }
 export async function POST(request) {
+  const account = await optionalCustomerIdentity(request);
+  if (account.error) return NextResponse.json({ error: account.error }, { status: account.status });
   const origin = request.headers.get("origin");
   // Cloud Run terminates HTTPS before forwarding to Next's internal HTTP URL.
   const publicHost = request.headers.get("host");
@@ -42,7 +45,7 @@ export async function POST(request) {
       const previous = await transaction.get(inquiryRef);
       if (previous.exists) {
         if (previous.data().requestHash !== bodyHash) return { status: 409, error: "This inquiry reference was used for different details. Reopen the form to send a new inquiry." };
-        return { reference: previous.data().reference, duplicate: true };
+        return { reference: previous.data().reference, linkedToAccount: Boolean(account.uid && previous.data().customerUid === account.uid), duplicate: true };
       }
       const productSnap = await transaction.get(productRef);
       const limits = await transaction.getAll(...limitRefs);
@@ -54,16 +57,16 @@ export async function POST(request) {
       });
       if (activeLimits.some((limit) => limit.count >= 5)) return { status: 429, error: "You have sent several inquiries recently. Please call or WhatsApp us, or try again later." };
       const { requestId, ...details } = body;
-      transaction.create(inquiryRef, { ...details, reference, requestHash: bodyHash, productName: product.name, sku: product.sku || product.id || body.productId, category: product.category || "", variantOptions: product.variantOptions || {}, status: "new", internalNotes: "", createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+      transaction.create(inquiryRef, { ...details, ...(account.uid ? { customerUid: account.uid } : {}), statusHistory: [{ status: "new", at: new Date().toISOString() }], reference, requestHash: bodyHash, productName: product.name, sku: product.sku || product.id || body.productId, category: product.category || "", variantOptions: product.variantOptions || {}, status: "new", internalNotes: "", createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
       activeLimits.forEach((limit, index) => {
         const value = { count: limit.count + 1, windowStart: limit.windowStart };
         if (limits[index].exists) transaction.update(limitRefs[index], value);
         else transaction.create(limitRefs[index], value);
       });
-      return { reference };
+      return { reference, linkedToAccount: Boolean(account.uid) };
     });
     if (result.error) return NextResponse.json({ error: result.error }, { status: result.status });
-    return NextResponse.json({ ok: true, ...result, message: inquiryAcknowledgement }, { headers: { "cache-control": "no-store" } });
+    return NextResponse.json({ ok: true, ...result, message: inquiryAcknowledgement, trackingCode: body.requestId }, { headers: { "cache-control": "no-store" } });
   } catch {
     return NextResponse.json({ error: "Your inquiry has not been confirmed as saved. Please retry using this form, or call/WhatsApp us." }, { status: 503 });
   }

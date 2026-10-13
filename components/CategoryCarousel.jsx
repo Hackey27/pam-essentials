@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { carouselCategories, categoryWheelDelta, CATEGORY_HOLD_MS, PHOTO_HOLD_MS, CATEGORY_MOVE_MS, CATEGORY_MANUAL_MOVE_MS, PHOTO_MOVE_MS } from "@/lib/categoryCarousel.mjs";
+import { carouselCategories, categoryWheelDelta, isCarouselCaptureLoss, CATEGORY_HOLD_MS, PHOTO_HOLD_MS, CATEGORY_MOVE_MS, CATEGORY_MANUAL_MOVE_MS, PHOTO_MOVE_MS } from "@/lib/categoryCarousel.mjs";
 
 const wrap = (value, length) => (value % length + length) % length;
 
@@ -122,7 +122,7 @@ export default function CategoryCarousel({ categories, products, onSelect }) {
         if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
       }}
       onPointerCancel={(event) => { if (pointer.current?.id === event.pointerId) { pointer.current = null; setDragging(false); setDragOffset(0); } }}
-      onLostPointerCapture={(event) => { if (pointer.current?.id === event.pointerId) { pointer.current = null; setDragging(false); setDragOffset(0); } }}
+      onLostPointerCapture={(event) => { if (!isCarouselCaptureLoss(event)) return; if (pointer.current?.id === event.pointerId) { pointer.current = null; setDragging(false); setDragOffset(0); } }}
       onClickCapture={(event) => { if (suppressClick.current) { event.preventDefault(); event.stopPropagation(); suppressClick.current = false; } }}>
 
       <div className={`category-carousel-track${step ? " moving" : ""}`} style={{ transform: `translateX(${canMove ? -layout.stride * (1 + step) + (step ? 0 : dragOffset) : 0}px)`, transitionDuration: reducedMotion ? "0ms" : `${stepDuration}ms` }}>

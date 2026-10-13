@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { inquiryStatuses } from "@/lib/inquiries.mjs";
+import TrackingCode from "@/components/TrackingCode";
 import WhatsAppIcon from "@/components/WhatsAppIcon";
 import { variantDetail } from "@/lib/variantDisplay.mjs";
 
@@ -9,6 +10,7 @@ const date = (value) => value ? new Date(value).toLocaleString("en-GH", { dateSt
 const label = (status) => status === "in-progress" ? "In progress" : status === "resolved" ? "Resolved" : "New";
 function InquiryDetails({ inquiry, authorizedFetch, onSaved, onClose }) {
   const [status, setStatus] = useState(inquiry.status), [notes, setNotes] = useState(inquiry.internalNotes);
+  const [reply, setReply] = useState(inquiry.customerReply || ""), [quote, setQuote] = useState(inquiry.quoteTotal ?? "");
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
   const saving = useRef(false), panel = useRef(null);
   const phone = inquiry.phone.replace(/[^+\d]/g, "");
@@ -17,9 +19,9 @@ function InquiryDetails({ inquiry, authorizedFetch, onSaved, onClose }) {
     event.preventDefault(); if (saving.current) return;
     saving.current = true; setBusy(true); setError("");
     try {
-      const response = await authorizedFetch("/api/admin/inquiries", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: inquiry.id, status, internalNotes: notes }) });
+      const response = await authorizedFetch("/api/admin/inquiries", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: inquiry.id, status, internalNotes: notes, customerReply: reply, quoteTotal: quote }) });
       const data = await response.json(); if (!response.ok) throw new Error(data.error);
-      onSaved({ ...inquiry, status, internalNotes: notes, updatedAt: new Date().toISOString() });
+      onSaved({ ...inquiry, status, internalNotes: notes, customerReply: reply, quoteTotal: quote === "" ? null : Number(quote), updatedAt: new Date().toISOString() });
     } catch (reason) { setError(reason.message || "Inquiry update was not confirmed."); }
     finally { saving.current = false; setBusy(false); }
   }
@@ -29,7 +31,7 @@ function InquiryDetails({ inquiry, authorizedFetch, onSaved, onClose }) {
     const key = (event) => {
       if (event.key === "Escape" && !saving.current) onClose();
       if (event.key === "Tab") {
-        const items = [...panel.current.querySelectorAll("button:not(:disabled),a[href],select:not(:disabled),textarea:not(:disabled)")];
+        const items = [...panel.current.querySelectorAll("button:not(:disabled),a[href],select:not(:disabled),input:not(:disabled),textarea:not(:disabled)")];
         if (event.shiftKey && document.activeElement === items[0]) { event.preventDefault(); items.at(-1)?.focus(); }
         else if (!event.shiftKey && document.activeElement === items.at(-1)) { event.preventDefault(); items[0]?.focus(); }
       }
@@ -37,7 +39,7 @@ function InquiryDetails({ inquiry, authorizedFetch, onSaved, onClose }) {
     window.addEventListener("keydown", key);
     return () => { document.body.style.overflow = overflow; window.removeEventListener("keydown", key); prior?.focus(); };
   }, []);
-  return <div className="modal-backdrop"><section ref={panel} className="modal admin-inquiry-detail" role="dialog" aria-modal="true" aria-label="Inquiry details"><header className="drawer-title"><h2>{inquiry.reference}</h2><button type="button" className="icon-button" disabled={busy} onClick={onClose} aria-label="Close inquiry details">×</button></header><dl className="inquiry-details"><dt>Received</dt><dd>{date(inquiry.createdAt)}</dd><dt>Customer</dt><dd>{inquiry.name}</dd><dt>Contact</dt><dd>{inquiry.phone || "No phone provided"}<br />{inquiry.email || "No email provided"}</dd><dt>Product / SKU</dt><dd>{inquiry.productName}<br />{inquiry.sku}{variantDetail(inquiry) && <><br />{variantDetail(inquiry)}</>}</dd><dt>Quantity</dt><dd>{inquiry.quantity}</dd><dt>Measurements</dt><dd>{inquiry.measurements || "Not provided"}</dd><dt>Inquiry</dt><dd className="inquiry-message-text">{inquiry.message}</dd><dt>Last updated</dt><dd>{date(inquiry.updatedAt)}{inquiry.updatedBy && ` · ${inquiry.updatedBy}`}</dd></dl><div className="inquiry-contact-actions">{phone && <><a className="button secondary" href={`tel:${phone}`}>Call customer</a><a className="button whatsapp" href={`https://wa.me/${whatsappPhone}?text=${encodeURIComponent(`Hello ${inquiry.name}, regarding your PAM pricing inquiry ${inquiry.reference} for ${inquiry.productName}:`)}`} target="_blank" rel="noreferrer"><WhatsAppIcon size={18} /> WhatsApp customer</a></>}{inquiry.email && <a className="button secondary" href={`mailto:${inquiry.email}?subject=${encodeURIComponent(`PAM pricing inquiry ${inquiry.reference}`)}`}>Email customer</a>}</div><p>Contact buttons open your calling or messaging app. Messages are sent when you choose to send them there.</p><form onSubmit={save}><label>Status<select value={status} disabled={busy} onChange={(event) => setStatus(event.target.value)}>{inquiryStatuses.map((value) => <option key={value} value={value}>{label(value)}</option>)}</select></label><label>Internal staff notes<textarea rows={4} maxLength={2000} value={notes} disabled={busy} onChange={(event) => setNotes(event.target.value)} /></label><small>Internal notes are only available in Admin. Updating status does not send a customer message.</small>{error && <p className="notice error-notice" role="alert">{error}</p>}<button className="button primary" disabled={busy}>{busy ? "Saving…" : "Save inquiry update"}</button></form></section></div>;
+  return <div className="modal-backdrop"><section ref={panel} className="modal admin-inquiry-detail" role="dialog" aria-modal="true" aria-label="Inquiry details"><header className="drawer-title"><h2>{inquiry.reference}</h2><button type="button" className="icon-button" disabled={busy} onClick={onClose} aria-label="Close inquiry details">×</button></header><dl className="inquiry-details"><dt>Received</dt><dd>{date(inquiry.createdAt)}</dd><dt>Customer</dt><dd>{inquiry.name}</dd><dt>Contact</dt><dd>{inquiry.phone || "No phone provided"}<br />{inquiry.email || "No email provided"}</dd><dt>Product / SKU</dt><dd>{inquiry.productName}<br />{inquiry.sku}{variantDetail(inquiry) && <><br />{variantDetail(inquiry)}</>}</dd><dt>Quantity</dt><dd>{inquiry.quantity}</dd><dt>Measurements</dt><dd>{inquiry.measurements || "Not provided"}</dd><dt>Inquiry</dt><dd className="inquiry-message-text">{inquiry.message}</dd><dt>Last updated</dt><dd>{date(inquiry.updatedAt)}{inquiry.updatedBy && ` · ${inquiry.updatedBy}`}</dd></dl><div className="inquiry-contact-actions">{phone && <><a className="button secondary" href={`tel:${phone}`}>Call customer</a><a className="button whatsapp" href={`https://wa.me/${whatsappPhone}?text=${encodeURIComponent(`Hello ${inquiry.name}, regarding your PAM pricing inquiry ${inquiry.reference} for ${inquiry.productName}:`)}`} target="_blank" rel="noreferrer"><WhatsAppIcon size={18} /> WhatsApp customer</a></>}{inquiry.email && <a className="button secondary" href={`mailto:${inquiry.email}?subject=${encodeURIComponent(`PAM pricing inquiry ${inquiry.reference}`)}`}>Email customer</a>}</div><p>Contact buttons open your calling or messaging app. Messages are sent when you choose to send them there.</p><TrackingCode code={inquiry.id} linked={Boolean(inquiry.customerUid)} admin /><form onSubmit={save}><label>Reply visible to the customer<textarea rows={3} maxLength={3000} value={reply} disabled={busy} onChange={(event) => setReply(event.target.value)} /></label><label>Quote amount (GHS) · optional<input type="number" min=".01" step=".01" max="10000000" value={quote} disabled={busy} onChange={(event) => setQuote(event.target.value)} /></label><label>Status<select value={status} disabled={busy} onChange={(event) => setStatus(event.target.value)}>{inquiryStatuses.map((value) => <option key={value} value={value}>{label(value)}</option>)}</select></label><label>Internal staff notes<textarea rows={4} maxLength={2000} value={notes} disabled={busy} onChange={(event) => setNotes(event.target.value)} /></label><small>Internal notes are only available in Admin. Updating status does not send a customer message.</small>{error && <p className="notice error-notice" role="alert">{error}</p>}<button className="button primary" disabled={busy}>{busy ? "Saving…" : "Save inquiry update"}</button></form></section></div>;
 }
 export default function AdminInquiries({ authorizedFetch, initialRecord = null, onChanged }) {
   const [records, setRecords] = useState([]), [cursor, setCursor] = useState(null), [updated, setUpdated] = useState("");

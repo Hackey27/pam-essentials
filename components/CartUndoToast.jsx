@@ -1,0 +1,3 @@
+"use client";
+import {useEffect,useState} from "react";
+export default function CartUndoToast({removal,onUndo,onExpire,busy}){const [fading,setFading]=useState(false);useEffect(()=>{setFading(false);const time=Math.max(0,removal.expiresAt-Date.now());const timer=setTimeout(()=>setFading(true),time);const gone=setTimeout(onExpire,time+220);return()=>{clearTimeout(timer);clearTimeout(gone);};},[removal]);return <div className={`cart-undo-toast${fading?" fading":""}`} role="status"><span>{removal.line.name} removed.</span><button type="button" disabled={busy||fading} onClick={onUndo}>Undo</button></div>;}

@@ -6,6 +6,7 @@ import FooterReturn from "@/components/FooterReturn";
 import CustomerPageFooter from "@/components/CustomerPageFooter";
 import CustomerAppearance from "@/components/CustomerAppearance";
 import MobileBottomNav from "@/components/MobileBottomNav";
+import { ShopInformationProvider } from "@/components/ShopInformation";
 import PricingInquiry from "@/components/PricingInquiry";
 
 export const metadata = {
@@ -23,7 +24,7 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body>
-        <AuthProvider><CustomerAppearance /><FooterReturn />{children}<CustomerPageFooter /><MobileBottomNav /><PricingInquiry /></AuthProvider>
+        <AuthProvider><ShopInformationProvider><CustomerAppearance /><FooterReturn />{children}<CustomerPageFooter /><MobileBottomNav /><PricingInquiry /></ShopInformationProvider></AuthProvider>
       </body>
     </html>
   );

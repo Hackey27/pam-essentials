@@ -1,0 +1,10 @@
+import {FieldValue} from "firebase-admin/firestore";
+import {createHash} from "node:crypto";
+import {NextResponse} from "next/server";
+import {adminDb} from "@/lib/admin";
+import {customerIdentity} from "@/lib/customerAuth";
+import {matchingContact,trackingUuid} from "@/lib/customerTracking.mjs";
+export const dynamic="force-dynamic";
+const send=(body,status=200)=>NextResponse.json(body,{status,headers:{"cache-control":"private, no-store"}});
+export async function POST(request){const account=await customerIdentity(request);if(account.error)return send({error:account.error},account.status);const body=await request.json().catch(()=>({})),id=String(body.trackingCode||"").trim().toLowerCase(),contact=String(body.contact||"").trim();if(!["request","inquiry"].includes(body.kind)||!trackingUuid.test(id)||!contact||contact.length>254)return send({error:"Enter the private tracking code and contact details used for this request."},400);
+ try{const db=adminDb(),ref=db.collection(body.kind==="request"?"product_requests":"inquiries").doc(id),limit=db.collection("customer_tracking_limits").doc(createHash("sha256").update(account.uid).digest("hex"));const result=await db.runTransaction(async(tx)=>{const [record,counter]=await tx.getAll(ref,limit),now=Date.now(),old=counter.data()||{},fresh=now-Number(old.windowStart||0)>=3600000,count=fresh?0:Number(old.count||0);if(count>=10)return {error:"Too many attempts. Please wait an hour or contact PAM for help.",status:429};tx.set(limit,{windowStart:fresh?now:old.windowStart,count:count+1},{merge:true});const value=record.data();if(!record.exists||!matchingContact(value,contact)||value.customerUid&&value.customerUid!==account.uid)return {error:"No linkable request matched those details. Contact PAM if you need your private tracking code.",status:404};if(value.customerUid!==account.uid){tx.update(ref,{customerUid:account.uid,linkedAt:FieldValue.serverTimestamp()});}return {ok:true,reference:value.reference};});return send(result,result.status||200);}catch{return send({error:"Linking was not confirmed. Refresh and retry."},503);}}

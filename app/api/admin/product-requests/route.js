@@ -37,7 +37,7 @@ export async function GET(request) {
     const result = focused ? { docs: [focused] } : await query.get(), page = result.docs.slice(0, 100);
     const requests = page.map((doc) => {
       const v = doc.data();
-      return { id: doc.id, reference: v.reference, name: v.name, phone: v.phone || "", email: v.email || "", productName: v.productName, description: v.description, quantity: v.quantity, measurements: v.measurements || "", preferences: v.preferences || "", productLink: v.productLink || "", budget: v.budget ?? null, preferredDate: v.preferredDate || "", allowAlternatives: v.allowAlternatives === true, imageCount: v.imageIds?.length || 0, status: v.status || "new", internalNotes: v.internalNotes || "", quotation: v.quotation || "", quoteTotal: v.quoteTotal ?? null, updatedBy: v.updatedBy || "", createdAt: date(v.createdAt), updatedAt: date(v.updatedAt) };
+      return { id: doc.id, reference: v.reference, name: v.name, phone: v.phone || "", email: v.email || "", productName: v.productName, description: v.description, quantity: v.quantity, measurements: v.measurements || "", preferences: v.preferences || "", productLink: v.productLink || "", budget: v.budget ?? null, preferredDate: v.preferredDate || "", allowAlternatives: v.allowAlternatives === true, imageCount: v.imageIds?.length || 0, status: v.status || "new", internalNotes: v.internalNotes || "", customerUid: v.customerUid || "", quotation: v.quotation || "", quoteTotal: v.quoteTotal ?? null, updatedBy: v.updatedBy || "", createdAt: date(v.createdAt), updatedAt: date(v.updatedAt) };
     });
     return NextResponse.json({ requests, nextCursor: result.docs.length > 100 ? page.at(-1).id : null, updatedAt: new Date().toISOString() }, { headers: { "cache-control": "private, no-store" } });
   } catch { return NextResponse.json({ error: "Product requests could not be loaded. Please retry." }, { status: 503 }); }
@@ -52,7 +52,7 @@ export async function POST(request) {
     const store = adminDb(), ref = store.collection("product_requests").doc(body.id);
     const saved = await store.runTransaction(async (tx) => {
       const before = await tx.get(ref); if (!before.exists) return false;
-      const next = { ...values, updatedBy: access.user.displayName || access.user.uid, updatedAt: FieldValue.serverTimestamp() };
+      const next = { ...values, ...(before.data().status !== values.status ? { statusHistory: [...(before.data().statusHistory || []), { status: values.status, at: new Date().toISOString() }] } : {}), updatedBy: access.user.displayName || access.user.uid, updatedAt: FieldValue.serverTimestamp() };
       tx.update(ref, next);
       tx.create(store.collection("admin_audit").doc(), auditPayload(access.user, "UPDATE_PRODUCT_REQUEST", "product-request", body.id, `Updated ${before.data().reference}: ${values.status}.`, { status: before.data().status, quoteTotal: before.data().quoteTotal ?? null }, next));
       return true;

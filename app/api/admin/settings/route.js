@@ -8,7 +8,11 @@ import { isGoogleMapsUrl } from "@/lib/location.mjs";
 
 import { normalizeTypography, validTypography, TYPOGRAPHY_KEY } from "@/lib/typography.mjs";
 
+import { CHECKOUT_KEY, SYNONYMS_KEY, normalizeCheckoutPreferences, validCheckoutPreferences } from "@/lib/shopPreferences.mjs";
+import { validSynonyms } from "@/lib/friendlySearch.mjs";
+
 const allowed = new Set([
+  CHECKOUT_KEY, SYNONYMS_KEY,
   TYPOGRAPHY_KEY,
   "DEFAULT_LOW_STOCK_LEVEL", "DISCOUNT_STACKING", "TAX_ENABLED", "PRICES_INCLUDE_TAX", "VAT_RATE", "NHIL_RATE", "GETFUND_RATE", "RECEIPT_TAX_NOTE",
   "STORE_NAME", "STORE_LOCATION", "GOOGLE_MAPS_URL", "OPENING_HOURS", "WHATSAPP_NUMBER", "RECEIPT_FOOTER", "DELIVERY_OPTIONS", "DELIVERY_FEE", "PAM_DEALS_ACTIVE", "HERO_FLYER_URL", "HERO_WEB_IMAGE_PATH", "HERO_MOBILE_IMAGE_PATH", "HERO_WEB_IMAGES", "HERO_MOBILE_IMAGES",
@@ -31,11 +35,14 @@ export async function POST(request) {
 
   if (key === TYPOGRAPHY_KEY && !validTypography(body.value)) return NextResponse.json({ error: "Choose valid font, size, style and colour options." }, { status: 400 });
 
+  if (key === CHECKOUT_KEY && !validCheckoutPreferences(body.value)) return NextResponse.json({ error: "Choose valid courier fees, working-hour estimates and payment details." }, { status: 400 });
+  if (key === SYNONYMS_KEY && !validSynonyms(body.value)) return NextResponse.json({ error: "Use up to 100 synonym groups with two to twelve terms each." }, { status: 400 });
   const store = adminDb();
   const ref = store.collection("settings").doc(key);
   const existing = await ref.get();
   let value = typeof body.value === "string" ? text(body.value, 2000) : body.value;
   if (key === TYPOGRAPHY_KEY) value = normalizeTypography(body.value);
+  if (key === CHECKOUT_KEY) value = normalizeCheckoutPreferences(body.value);
   if (booleans.has(key)) value = body.value === true || body.value === "true";
   if (numbers.has(key)) value = nullableNumber(body.value);
   const setting = { key, value, description: text(body.description, 500), updatedAt: FieldValue.serverTimestamp(), updatedBy: access.user.uid };
@@ -45,4 +52,3 @@ export async function POST(request) {
   await batch.commit();
   return NextResponse.json({ ok: true, key });
 }
-

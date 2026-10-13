@@ -30,6 +30,12 @@ import { sortProducts } from "@/lib/catalogueSort.mjs";
 import { quantityOfferMessage } from "@/lib/quantityOffer.mjs";
 import { hasSellingPrice, requiresPricingInquiry } from "@/lib/productPricing.mjs";
 import PricingInquiryButton from "@/components/PricingInquiryButton";
+import CartUndoToast from "@/components/CartUndoToast";
+import FulfilmentEstimate from "@/components/FulfilmentEstimate";
+import { useShopInformation } from "@/components/ShopInformation";
+import { courierFeeLabel } from "@/lib/shopPreferences.mjs";
+import { searchCatalogue } from "@/lib/friendlySearch.mjs";
+import { removeCartItem, restoreCartItem } from "@/lib/cartUndo.mjs";
 import { variantDetail } from "@/lib/variantDisplay.mjs";
 
 const money = new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS" });
@@ -47,6 +53,9 @@ function FilterSection({ title, collapsible, children, actions, defaultOpen = fa
 
 export default function Storefront() {
   const { user, role } = useAuth();
+  const { synonyms, checkout: shopPreferences } = useShopInformation();
+  const [exactSearch, setExactSearch] = useState(false);
+  const [cartRemoval, setCartRemoval] = useState(null);
   const [products, setProducts] = useState([]);
   const [categoryList, setCategoryList] = useState([]);
   const [subcategoryList, setSubcategoryList] = useState([]);
@@ -73,6 +82,7 @@ export default function Storefront() {
   const [openingHours, setOpeningHours] = useState(OPENING_HOURS);
   const [discountRules, setDiscountRules] = useState([]);
   const [query, setQuery] = useState("");
+  useEffect(() => setExactSearch(false), [query]);
   const [searchOpen, setSearchOpen] = useState(false);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [mobileTabsHidden, setMobileTabsHidden] = useState(false);
@@ -331,7 +341,9 @@ export default function Storefront() {
     return ["All categories", ...(ordered.length ? ordered : [...new Set(products.map((product) => product.category))])];
   }, [products, categoryList]);
   const currentCategory = categoryList.find((item) => item.name === category);
-  const suggestions = useMemo(() => query.trim() ? products.filter((item) => matchesSearch(item, query)).sort((a, b) => Number(b.name.toLowerCase().startsWith(query.trim().toLowerCase())) - Number(a.name.toLowerCase().startsWith(query.trim().toLowerCase())) || a.name.localeCompare(b.name)) : [], [products, query]);
+  const searchResult = useMemo(() => searchCatalogue(products, query, synonyms, exactSearch), [products, query, synonyms, exactSearch]);
+  const searchIds = useMemo(() => new Set(searchResult.products.map((p) => p.id)), [searchResult]);
+  const suggestions = useMemo(() => query.trim() ? [...searchResult.products].sort((a, b) => Number(b.name.toLowerCase().startsWith(query.trim().toLowerCase())) - Number(a.name.toLowerCase().startsWith(query.trim().toLowerCase())) || a.name.localeCompare(b.name)) : [], [searchResult, query]);
   const currentCategoryId = currentCategory?.categoryId || currentCategory?.id || "";
   const selectedNodes = [
     ...selectedSubcategories.map((id) => subcategoryList.find((item) => item.subcategoryId === id)).filter(Boolean),
@@ -346,7 +358,7 @@ export default function Storefront() {
     singleSelection ? `Home / ${category} / ${singleSelection.name}` : `Home / ${category}`;
   const visible = useMemo(() => {
     const filtered = products.filter((product) =>
-      matchesSearch(product, query) &&
+      searchIds.has(product.id) &&
       (category === "All categories" || product.category === category) &&
       (!selectedSubcategories.length && !selectedSubSubcategories.length ||
         selectedSubcategories.includes(product.subcategoryId) || selectedSubSubcategories.includes(product.subSubcategoryId)) &&
@@ -357,7 +369,7 @@ export default function Storefront() {
       (browseMode === "products" || (browseMode === "new" ? isNewArrival(product) : browseMode === "promotions" ? isPromotion(product, discountRules) : dealsActive && hasCollection(product, "PAM Deals")))
     );
     return sortProducts(filtered, sort, discountRules, categoryList, subcategoryList);
-  }, [products, categoryList, subcategoryList, discountRules, query, category, selectedSubcategories, selectedSubSubcategories, sort, browseMode, priceMin, priceMax, availability, offer, collection, publicLaunch, dealsActive]);
+  }, [products, categoryList, subcategoryList, discountRules, query, category, selectedSubcategories, selectedSubSubcategories, sort, browseMode, priceMin, priceMax, availability, offer, collection, publicLaunch, dealsActive, searchIds]);
   const dealProducts = products.filter((product) => hasCollection(product, "PAM Deals"));
   const dealPercent = Math.max(0, ...discountRules.filter((rule) => rule.discountType === "PERCENT" && Number(rule.value) <= 20 && rule.scopeType !== "GLOBAL" && dealProducts.some((product) => rule.scopeType === "PRODUCT" ? rule.scopeId === product.id : rule.scopeType === "CATEGORY" && rule.scopeId === product.categoryId)).map((rule) => Number(rule.value || 0)));
   const pageCount = Math.max(1, Math.ceil(visible.length / pageSize));
@@ -524,7 +536,19 @@ export default function Storefront() {
   }
 
   function updateQuantity(id, quantity) {
-    setCart((current) => { const next = current.map((item) => item.id === id ? { ...item, quantity: Math.min(item.stock, Math.max(0, quantity)) } : item).filter((item) => item.quantity > 0); saveCart(next); return next; });
+    if (orderRequest.current) return;
+    const current = readCart();
+    if (quantity <= 0) { const result = removeCartItem(current, id); saveCart(result.cart); setCart(result.cart); if (result.removed) setCartRemoval(result.removed); return; }
+    const next = current.map((item) => item.id === id ? { ...item, quantity: Math.min(item.stock, Math.max(1, Math.floor(quantity))) } : item);
+    saveCart(next); setCart(next);
+  }
+  function undoCartRemoval() {
+    if (orderRequest.current) return;
+    const result = restoreCartItem(readCart(), cartRemoval, products);
+    setCartRemoval(null);
+    if (result.error) { setSaveNotice(result.error); return; }
+    saveCart(result.cart); setCart(result.cart); setCartOpen(true);
+    if (result.limited) setSaveNotice("Restored up to the available stock. Stock is checked again when you order.");
   }
 
   function compareProduct(product) {
@@ -564,7 +588,7 @@ export default function Storefront() {
   async function placeOrder(event) {
     event.preventDefault();
     const data = await createOrder("website");
-    if (data) { setConfirmation(data); setCart([]); saveCart([]); setCheckout(false); }
+    if (data) { setConfirmation(data); setCartRemoval(null); setCart([]); saveCart([]); setCheckout(false); }
   }
 
   async function orderOnWhatsApp() {
@@ -578,7 +602,7 @@ export default function Storefront() {
     const whatsappUrl = `https://wa.me/${PRIMARY_WHATSAPP}?text=${encodeURIComponent(message)}`;
     if (whatsappWindow) whatsappWindow.location.href = whatsappUrl;
     else window.location.href = whatsappUrl;
-    setConfirmation(data); setCart([]); saveCart([]); setCheckout(false);
+    setConfirmation(data); setCartRemoval(null); setCart([]); saveCart([]); setCheckout(false);
   }
 
   const navigationItems = (compact = false, section = "all") => <>
@@ -637,7 +661,7 @@ export default function Storefront() {
 
   const renderSearch = (compact = false, panel = false) => <div className={`header-search${searchOpen && !query.trim() ? " search-active" : ""}`} ref={panel ? filterSearchRef : compact ? compactSearchRef : searchRef}>
             <div className="search-field"><input type="search" aria-label="Search products, categories, or brands" aria-expanded={searchOpen && query.trim().length > 0 && (panel || compact || !mobileTabsHidden)} aria-controls={panel ? "filter-search-suggestions" : compact ? "compact-search-suggestions" : "search-suggestions"} placeholder="Search products, categories, or brands" value={query} onFocus={() => setSearchOpen(true)} onKeyDown={(event) => { if (event.key === "Escape") { setSearchOpen(false); if (compact) closeCompactSearch(); } if (event.key === "Enter") { event.preventDefault(); submitSearch(panel); } }} onChange={(event) => { setBrowseMode("products"); setQuery(event.target.value); setSearchOpen(true); }} /><button type="button" aria-label="Show matching products" onClick={() => submitSearch(panel)}>⌕</button></div>
-            {searchOpen && query.trim() && (panel || compact || !mobileTabsHidden) && <div id={panel ? "filter-search-suggestions" : compact ? "compact-search-suggestions" : "search-suggestions"} className="search-suggestions" role="listbox" aria-label="Matching products">{suggestions.length ? <><p>Suggested products</p>{suggestions.map((item) => <button type="button" role="option" aria-selected="false" key={item.id} onClick={() => { recordClick(item); setMobileMenuOpen(false); setQuickProduct(item); setSearchOpen(false); setCompactSearchOpen(false); }}><span className="suggestion-preview"><ProductImage product={item} width={100} className="search-preview-image" /></span><span className="suggestion-copy"><b>{item.name}</b><small>{item.category}</small></span><strong>{requiresPricingInquiry(item) ? "Request a quote" : money.format(item.price)}</strong></button>)}</> : <div className="search-request-empty"><p>No matching products. Try another name or keyword.</p><RequestProductLink role="option" className="button secondary">Request a Product</RequestProductLink></div>}</div>}
+            {searchOpen && query.trim() && (panel || compact || !mobileTabsHidden) && <div id={panel ? "filter-search-suggestions" : compact ? "compact-search-suggestions" : "search-suggestions"} className="search-suggestions" role="listbox" aria-label="Matching products">{suggestions.length ? <><p>{searchResult.correction ? `Showing results for “${searchResult.correction}”` : searchResult.synonym ? "Suggested products · includes related search terms" : "Suggested products"}</p>{searchResult.correction && <button type="button" className="search-exact-option" onClick={() => setExactSearch(true)}>Search exact wording: {query}</button>}{suggestions.map((item) => <button type="button" role="option" aria-selected="false" key={item.id} onClick={() => { recordClick(item); setMobileMenuOpen(false); setQuickProduct(item); setSearchOpen(false); setCompactSearchOpen(false); }}><span className="suggestion-preview"><ProductImage product={item} width={100} className="search-preview-image" /></span><span className="suggestion-copy"><b>{item.name}</b><small>{item.category}</small></span><strong>{requiresPricingInquiry(item) ? "Request a quote" : money.format(item.price)}</strong></button>)}</> : <div className="search-request-empty"><p>No matching products. Try another name or keyword.</p><RequestProductLink role="option" className="button secondary">Request a Product</RequestProductLink></div>}</div>}
             <div className="popular-searches" role="region" aria-label="Popular searches, scroll left or right" tabIndex={0}><span><span className="popular-full">Popular Searches:</span><span className="popular-short">Popular:</span></span>{[...curatedSearches, ...popularProducts.map((product) => product.name)].map((term) => <button key={term} type="button" onClick={() => searchPopular(term)}>{term}</button>)}</div>
           </div>;
 
@@ -694,7 +718,7 @@ export default function Storefront() {
             <Dropdown label="Menu"><button type="button" onClick={() => browse("new")}>New arrivals</button><button type="button" onClick={() => browse("promotions")}>Promotions</button>{dealsActive && <button type="button" onClick={() => browse("deals")}>PAM Deals</button>}<a href="/info/delivery">Payment &amp; delivery</a><a href="/info/contact#location">Pickup location</a><a href="/info/contact">Contact us</a><a href="/account#orders">Track order</a><a href="/account#wishlist">Wishlist</a><a href="/compare">Compare products</a><a href="/account?mode=signin">{user && !role ? "My account" : "Sign in"}</a>{(!user || role) && <a href="/account?mode=register">Create account</a>}</Dropdown>
           </nav>
           <button type="button" className="compact-search-toggle desktop-search-toggle" aria-label={compactSearchOpen ? "Close product search" : "Open product search"} aria-expanded={compactSearchOpen} aria-controls="desktop-search-panel" onClick={() => { setCompactSearchOpen((open) => !open); setSearchOpen(true); requestAnimationFrame(() => compactSearchRef.current?.querySelector("input")?.focus({ preventScroll: true })); }}><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></svg></button>
-          <button type="button" className="desktop-thin-cart" onClick={() => setCartOpen(true)} aria-label={`View cart, ${cartCount} items`}><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M3 4h2l2.1 10.4a2 2 0 0 0 2 1.6H19a2 2 0 0 0 2-1.6L22 8H6"/><circle cx="10" cy="20" r="1"/><circle cx="19" cy="20" r="1"/></svg><span>Cart</span><b>{cartCount}</b></button>
+          <button type="button" className="desktop-thin-cart" onClick={() => setCartOpen(true)} aria-label={`View cart, ${cartCount} items`}><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M3 4h2l2.1 10.4a2 2 0 0 0 2 1.6H19a2 2 0 0 0 2-1.6L22 8H6"/><circle cx="10" cy="20" r="1"/><circle cx="19" cy="20" r="1"/></svg><b>{cartCount}</b></button>
         </div>
         {desktopHeaderHidden && compactSearchOpen && <div id="desktop-search-panel" className="desktop-search-panel">{renderSearch(true)}</div>}
       </header>
@@ -747,6 +771,7 @@ export default function Storefront() {
 
       {quickProduct && <div className="modal-backdrop" style={{ display: detailProduct ? "none" : undefined }} role="presentation" onMouseDown={() => setQuickProduct(null)}><div className="modal quick-view-modal" role="dialog" aria-modal="true" aria-label={`Quick View ${quickProduct.name}`} onMouseDown={(event) => event.stopPropagation()}><ProductOptions key={quickProduct.id} initialProduct={quickProduct} products={products} discountRules={discountRules} compact onImageOverlayChange={handleQuickImageOverlayChange} onClose={() => setQuickProduct(null)} onAdd={add} onNavigateDetail={(event, selected) => { if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) { rememberListingContext(); return; } event.preventDefault(); window.history.pushState({ ...window.history.state, pamQuickDetail: true, pamStoreOverlay: "detail" }, "", window.location.href); setDetailProduct(selected); }} /></div></div>}
       {detailProduct && <div className="quick-detail-overlay" role="dialog" aria-modal="true" aria-label={`Product details ${detailProduct.name}`}><ProductDetailView id={detailProduct.id} initialCatalogue={{ products, discountRules, storeLocation, mapsUrl, dealsActive }} embedded onBack={closeDetailView} onOverlayChange={handleDetailOverlayChange} onCartChange={() => setCart(readCart())} /></div>}
+      {cartRemoval && <CartUndoToast removal={cartRemoval} onUndo={undoCartRemoval} onExpire={() => setCartRemoval(null)} busy={placingOrder} />}
       {saveNotice && <div className="save-toast" role="status"><span>{saveNotice}</span><button type="button" onClick={() => setSaveNotice("")} aria-label="Dismiss notification">×</button></div>}
       {announcementOpen && <div className="modal-backdrop announcement-backdrop" role="presentation"><div className="modal announcement-modal" role="dialog" aria-modal="true" aria-label="Store announcements"><div className="drawer-title"><div><p className="eyebrow">PAM Essentials &amp; More</p><h2>Announcements</h2></div><button type="button" className="icon-button" onClick={dismissAnnouncement} aria-label="Close announcements">×</button></div><div className="announcement-list">{announcements.map((item) => <article key={item.announcementId} className={item.style === "crawler" ? "announcement-crawler" : "announcement-static"}><h3>{item.title}</h3><div className="announcement-message"><p>{item.body}</p></div>{item.actionLabel && item.actionUrl && <a className="button secondary" href={item.actionUrl} onClick={dismissAnnouncement}>{item.actionLabel}</a>}</article>)}</div><label className="announcement-optout"><input type="checkbox" checked={announcementOptOut} onChange={(event) => { announcementOptOutRef.current = event.target.checked; setAnnouncementOptOut(event.target.checked); }} /> Do not show announcements again</label><button type="button" className="button primary full" onClick={dismissAnnouncement}>Continue to shop</button></div></div>}
       {servicesOpen && <div className="modal-backdrop" role="presentation" onMouseDown={() => setServicesOpen(false)}><div className="modal services-modal" role="dialog" aria-modal="true" aria-label="PAM services" onMouseDown={(event) => event.stopPropagation()}><button className="icon-button services-close" type="button" aria-label="Close services" onClick={() => setServicesOpen(false)}>×</button><p className="eyebrow">PAM Essentials &amp; More</p><h2>Services</h2><ul><li><RequestProductLink /></li><li><a href="/services/secretarial">Secretarial services</a></li><li><a href="/services/printing">Printing</a></li><li><a href="/services/communication">Communication consultancy</a></li><li><a href="/services/laptop-repairs">Laptop repairs and purchases</a></li></ul><p>{storeLocation}</p><div className="services-contact"><a className="button primary" href="tel:+233596661439">Call {PRIMARY_PHONE_LABEL}</a><a className="button whatsapp" href={`https://wa.me/${PRIMARY_WHATSAPP}`} target="_blank" rel="noreferrer"><WhatsAppIcon size={18} /> Message us</a></div></div></div>}
@@ -756,11 +781,11 @@ export default function Storefront() {
         <div className="drawer-title"><div><p className="eyebrow">Your order</p><h2>Shopping cart</h2></div><button className="icon-button" onClick={closeCart} aria-label="Close cart">×</button></div>
         {error && <p className="notice error-notice">{error}</p>}
         {!cart.length ? <div className="empty-state"><h3>Your cart is empty</h3><p>Add a product to get started.</p><button type="button" className="button secondary full" onClick={closeCart}>Continue browsing</button></div> : <>
-          {discountRules.some((rule) => rule.scopeType === "GLOBAL" && rule.discountType === "PERCENT" && Number(rule.value) === 5 && Number(rule.minQty) === 3) && <div className="cart-rule-summary" role="status"><strong>Buy 3 or more of the same product to get 5% off that product.</strong>{pricing.lines.some((line) => line.rule?.discountType === "PERCENT" && Number(line.rule.value) === 5 && line.ruleDiscountCents > 0) && <p>5% quantity discount applied to eligible products</p>}</div>}
-          <div className="cart-lines">{cart.map((item) => { const line = pricing.lines.find((entry) => entry.id === item.id); return <div className="cart-line" key={item.id}><ProductArt name={item.name} category={item.category} /><div><h3>{item.name}</h3><p>{[variantDetail(item), `SKU: ${item.sku || item.id}`].filter(Boolean).join(" · ")}</p>{randomSelectionNote(item, order.notes) && <p className="colour-note">{randomSelectionNote(item, order.notes)}</p>}<p>{money.format(item.price)}</p><div className="stepper"><button aria-label={`Decrease ${item.name} quantity`} onClick={() => updateQuantity(item.id, item.quantity - 1)}>−</button><input type="number" min="1" max={item.stock} aria-label={`Quantity of ${item.name}`} value={item.quantity} onChange={(event) => updateQuantity(item.id, Math.max(1, Number(event.target.value) || 1))} /><button aria-label={`Increase ${item.name} quantity`} onClick={() => updateQuantity(item.id, item.quantity + 1)} disabled={item.quantity >= item.stock}>+</button></div><button type="button" className="cart-remove-line" onClick={() => updateQuantity(item.id, 0)} aria-label={`Remove ${item.name} from cart`}>Remove item</button></div><div className="cart-line-total">{line?.rule && line.ruleDiscountCents > 0 && <span className="cart-line-discount">−{line.rule.discountType === "PERCENT" ? `${line.rule.value}%` : money.format(line.ruleDiscountCents / 100)}</span>}<b>{money.format(line?.lineTotal || 0)}</b></div></div>; })}</div>
-          <div className="cart-total"><span>Subtotal</span><strong>{money.format(subtotal)}</strong></div>{discount > 0 && <div className="cart-total discount-total"><span>Discount</span><strong>−{money.format(discount)}</strong></div>}<div className="cart-total grand-total"><span>Total</span><strong>{money.format(total)}</strong></div>
-          <button type="button" className="button primary full" onClick={closeCart}>Continue browsing</button>
-          {!checkout ? <button className="button accent full" onClick={() => setCheckout(true)}>Proceed to checkout</button> : <form className="checkout-form" onSubmit={placeOrder}><label>Full name<input required value={order.customer} onChange={(e) => setOrder({ ...order, customer: e.target.value })} /></label><label>Mobile number<input required type="tel" value={order.phone} onChange={(e) => setOrder({ ...order, phone: e.target.value })} /></label><label>Fulfilment<select value={order.deliveryMethod} onChange={(e) => setOrder({ ...order, deliveryMethod: e.target.value })}><option value="pickup">Pickup</option><option value="delivery-self">Delivery – self initiated</option><option value="delivery-shop">Delivery – arranged by shop</option></select></label>{order.deliveryMethod === "delivery-self" && <p className="pickup-address">Your courier collects from: <b>{storeLocation}</b></p>}{order.deliveryMethod !== "pickup" && <label>Delivery destination or landmark<input required={order.deliveryMethod === "delivery-shop"} value={order.deliveryAddress} onChange={(e) => setOrder({ ...order, deliveryAddress: e.target.value })} /></label>}<label>Order notes (optional)<textarea rows={3} maxLength={1000} placeholder="type specific details or requests here" value={order.notes} onChange={(e) => setOrder({ ...order, notes: e.target.value })} /></label><button className="button secondary full" type="button" disabled title="Payment provider has not been selected yet">Pay now · coming soon</button><button className="button accent full" type="submit" disabled={placingOrder}>{placingOrder ? "Creating order…" : `Pay on pickup/delivery · ${money.format(total)}`}</button><button className="button whatsapp full" type="button" disabled={placingOrder} onClick={orderOnWhatsApp}>Order on WhatsApp</button></form>}
+          <div className="cart-content-scroll">          {discountRules.some((rule) => rule.scopeType === "GLOBAL" && rule.discountType === "PERCENT" && Number(rule.value) === 5 && Number(rule.minQty) === 3) && <div className="cart-rule-summary" role="status"><strong>Buy 3 or more of the same product to get 5% off that product.</strong>{pricing.lines.some((line) => line.rule?.discountType === "PERCENT" && Number(line.rule.value) === 5 && line.ruleDiscountCents > 0) && <p>5% quantity discount applied to eligible products</p>}</div>}
+          <div className="cart-lines">{cart.map((item) => { const line = pricing.lines.find((entry) => entry.id === item.id); return <div className="cart-line" key={item.id}><ProductImage product={item} width={180} className="cart-product-photo" /><div><h3>{item.name}</h3><p>{[variantDetail(item), `SKU: ${item.sku || item.id}`].filter(Boolean).join(" · ")}</p>{randomSelectionNote(item, order.notes) && <p className="colour-note">{randomSelectionNote(item, order.notes)}</p>}<p>{money.format(item.price)}</p><div className="stepper"><button aria-label={`Decrease ${item.name} quantity`} onClick={() => updateQuantity(item.id, item.quantity - 1)}>−</button><input type="number" min="1" max={item.stock} aria-label={`Quantity of ${item.name}`} value={item.quantity} onChange={(event) => updateQuantity(item.id, Math.max(1, Number(event.target.value) || 1))} /><button aria-label={`Increase ${item.name} quantity`} onClick={() => updateQuantity(item.id, item.quantity + 1)} disabled={item.quantity >= item.stock}>+</button></div><button type="button" className="cart-remove-line" onClick={() => updateQuantity(item.id, 0)} aria-label={`Remove ${item.name} from cart`}>Remove item</button></div><div className="cart-line-total">{line?.rule && line.ruleDiscountCents > 0 && <span className="cart-line-discount">−{line.rule.discountType === "PERCENT" ? `${line.rule.value}%` : money.format(line.ruleDiscountCents / 100)}</span>}<b>{money.format(line?.lineTotal || 0)}</b></div></div>; })}</div>
+{checkout && <form id="store-checkout-form" className="checkout-form" onSubmit={placeOrder}><FulfilmentEstimate method={order.deliveryMethod} /><label>Full name<input required value={order.customer} onChange={(e) => setOrder({ ...order, customer: e.target.value })} /></label><label>Mobile number<input required type="tel" value={order.phone} onChange={(e) => setOrder({ ...order, phone: e.target.value })} /></label><label>Fulfilment<select value={order.deliveryMethod} onChange={(e) => setOrder({ ...order, deliveryMethod: e.target.value })}><option value="pickup">Pickup</option><option value="delivery-self">Delivery – self initiated</option><option value="delivery-shop">Delivery – arranged by shop</option></select></label>{order.deliveryMethod === "delivery-self" && <p className="pickup-address">Your courier collects from: <b>{storeLocation}</b>. Keep your order reference handy for confirmation.</p>}{order.deliveryMethod !== "pickup" && <label>Delivery destination or landmark<input required={order.deliveryMethod === "delivery-shop"} value={order.deliveryAddress} onChange={(e) => setOrder({ ...order, deliveryAddress: e.target.value })} /></label>}<label>Order notes (optional)<textarea rows={3} maxLength={1000} placeholder="type specific details or requests here" value={order.notes} onChange={(e) => setOrder({ ...order, notes: e.target.value })} /></label></form>}</div>
+          <div className="cart-checkout-summary">          <div className="cart-total"><span>Subtotal</span><strong>{money.format(subtotal)}</strong></div>{discount > 0 && <div className="cart-total discount-total"><span>Discount</span><strong>−{money.format(discount)}</strong></div>}<div className="cart-total grand-total"><span>PAM product total</span><strong>{money.format(total)}</strong></div>
+<p className="cart-fee-note">Shop-arranged delivery: {courierFeeLabel({ feeMode: shopPreferences.feeMode, feeAmount: shopPreferences.feeAmount })}. Courier charges are separate from the product total.</p><div className="cart-footer-actions"><button type="button" className="button secondary full" onClick={closeCart}>Continue browsing</button>{!checkout ? <button className="button accent full" onClick={() => setCheckout(true)}>Proceed to checkout</button> : <div className="cart-payment-actions"><button className="button secondary full" type="button" disabled title="Payment provider has not been selected yet">Pay now · coming soon</button><button className="button accent full" type="submit" form="store-checkout-form" disabled={placingOrder}>{placingOrder ? "Creating order…" : `Pay on pickup/delivery · ${money.format(total)}`}</button><button className="button whatsapp full" type="button" disabled={placingOrder} onClick={orderOnWhatsApp}>Order on WhatsApp</button></div>}</div></div>
         </>}
       </aside></div>}
       {confirmation && <div className="modal-backdrop"><div className="modal"><span className="success-mark">✓</span><h2>Order received</h2><p>Keep this reference for pickup or delivery.</p><strong className="order-reference">{confirmation.orderId}</strong><p>{user && !role ? "Track this order in your account." : "Create a customer account and link this guest order to track it."}</p><a className="button secondary full" href="/account#orders">Track my order</a><button className="button primary full" onClick={() => { setConfirmation(null); setCartOpen(false); }}>Continue shopping</button></div></div>}

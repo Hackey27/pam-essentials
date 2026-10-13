@@ -5,6 +5,8 @@ import { createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswor
 import { auth } from "@/lib/firebase";
 import { signOut, useAuth } from "@/components/AuthProvider";
 import CustomerProfile from "@/components/CustomerProfile";
+import CustomerOrderDetails from "@/components/CustomerOrderDetails";
+import CustomerRequestTracking from "@/components/CustomerRequestTracking";
 import BrandLogo from "@/components/BrandLogo";
 
 const money = new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS" });
@@ -22,6 +24,7 @@ export default function CustomerAccount() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [products, setProducts] = useState([]);
+  useEffect(() => { setOrders([]); setWishlist([]); setError(""); setNotice(""); }, [user?.uid]);
   useEffect(() => { if (new URLSearchParams(window.location.search).get("mode") === "signin") setMode("signin"); }, []);
 
   const request = useCallback(async (path, options = {}) => {
@@ -33,7 +36,9 @@ export default function CustomerAccount() {
   }, []);
 
   const refresh = useCallback(async () => {
+    const scope = auth.currentUser?.uid;
     const [orderData, wishlistData, catalogue] = await Promise.all([request("/api/orders"), request("/api/customer/wishlist"), fetch("/api/catalog/products").then((response) => response.json())]);
+    if (auth.currentUser?.uid !== scope) return;
     setOrders(orderData.orders || []);
     setWishlist(wishlistData.wishlist || []);
     setProducts(catalogue.products || []);
@@ -78,13 +83,13 @@ export default function CustomerAccount() {
     {error && <p className="notice error-notice">{error}</p>}{notice && <p className="notice">{notice}</p>}
     {loading ? <p>Checking account…</p> : role ? <div className="panel account-panel"><h2>Staff session active</h2><p>Customer accounts are separate from staff access.</p><button className="button secondary" onClick={() => signOut()}>Sign out of staff account</button></div> : !user ? <form className="panel account-panel" onSubmit={handleAuth}><div className="account-tabs"><button type="button" className={mode === "register" ? "active" : ""} disabled={busy} onClick={() => { setMode("register"); setError(""); setNotice(""); }}>Create account</button><button type="button" className={mode === "signin" ? "active" : ""} disabled={busy} onClick={() => { setMode("signin"); setError(""); setNotice(""); }}>Sign in</button></div>{mode === "reset" && <h2>Reset your password</h2>}<label>Email<input required type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} /></label>{mode !== "reset" && <label>Password<input required type="password" minLength={6} autoComplete={mode === "register" ? "new-password" : "current-password"} value={password} onChange={(event) => setPassword(event.target.value)} /></label>}<button className="button primary" disabled={busy}>{busy ? "Please wait…" : mode === "reset" ? "Send reset link" : mode === "register" ? "Create account" : "Sign in"}</button>{mode !== "register" && <button type="button" className="account-recovery" disabled={busy} onClick={() => { setMode(mode === "reset" ? "signin" : "reset"); setError(""); setNotice(""); }}>{mode === "reset" ? "Back to sign in" : "Forgot password?"}</button>}{mode === "reset" && <p>Enter your account email to request a password reset link.</p>}</form> : <>
       <div className="account-hero"><div><p className="eyebrow">Welcome back</p><h2>Your PAM account</h2><p>{user.email}</p></div><div className="account-hero-stats"><a href="#orders"><strong>{orders.length}</strong><span>Orders</span></a><a href="#wishlist"><strong>{wishlist.length}</strong><span>Saved products</span></a></div></div>
-      <CustomerProfile key={user.uid} />
-      <div className="account-heading"><nav aria-label="Account sections"><a href="#orders">My orders</a><a href="#wishlist">Wishlist</a><a href="/#catalogue">Shop more</a></nav><button type="button" onClick={() => signOut()}>Sign out</button></div>
-      <section className="panel account-panel" id="orders"><h2>My orders</h2>{orders.length ? <div className="account-orders">{orders.map((order) => <article key={order.orderId}><div><b>{order.orderId}</b><span className="badge warning">{order.status}</span></div><p>{order.items.map((item) => `${item.quantity} × ${item.name}`).join(", ")}</p><p>{order.deliveryMethod} · {order.paymentStatus}{order.pickupCode && ` · Pickup code ${order.pickupCode}`}</p><strong>{money.format(order.total)}</strong></article>)}</div> : <p>No orders are linked to this account yet.</p>}
+      <CustomerProfile key={`profile:${user.uid}`} />
+      <div className="account-heading"><nav aria-label="Account sections"><a href="#orders">My orders</a><a href="#requests">My Requests &amp; Quotes</a><a href="#wishlist">Wishlist</a><a href="/#catalogue">Shop more</a></nav><button type="button" onClick={() => signOut()}>Sign out</button></div>
+      <section className="panel account-panel" id="orders"><h2>My orders</h2>{orders.length ? <div className="account-orders">{orders.map((order) => <CustomerOrderDetails key={order.orderId} order={order} />)}</div> : <p>No orders are linked to this account yet.</p>}
         <form className="claim-form" onSubmit={claim}><h3>Link an earlier guest order</h3><p>Enter the reference and phone number used at checkout.</p><input required placeholder="Order reference" value={reference} onChange={(event) => setReference(event.target.value)} /><input required type="tel" placeholder="Phone number" value={phone} onChange={(event) => setPhone(event.target.value)} /><button className="button secondary" disabled={busy}>Link order</button></form>
       </section>
+      <CustomerRequestTracking key={`requests:${user.uid}`} request={request} />
       <section className="panel account-panel" id="wishlist"><h2>Wishlist</h2>{wishlist.length ? <div className="wishlist-list">{wishlist.map((id) => { const product = products.find((item) => item.id === id); return <div key={id}><a href={`/products/${encodeURIComponent(id)}`}>{product?.name || id}</a><button type="button" onClick={() => removeWish(id)}>Remove</button></div>; })}</div> : <p>Save a product from its detail page to see it here.</p>}</section>
     </>}
   </main></div>;
 }
-

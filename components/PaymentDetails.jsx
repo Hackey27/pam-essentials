@@ -1,5 +1,3 @@
-import { MOMO_NUMBER, MOMO_MERCHANT_ID } from "@/lib/shop";
-
-export default function PaymentDetails() {
-  return <section className="detail-info-card payment-details"><h2>Secure payment</h2><p>Pay on pickup or delivery is available. Online payment is coming soon.</p><h3>Mobile Money</h3><dl><dt>Number</dt><dd>{MOMO_NUMBER}</dd><dt>Merchant ID</dt><dd>{MOMO_MERCHANT_ID}</dd></dl><p>Confirm the amount and recipient with us before sending payment.</p></section>;
-}
+"use client";
+import {useShopInformation} from "@/components/ShopInformation";
+export default function PaymentDetails(){const {checkout}=useShopInformation();return <section className="detail-info-card payment-details"><h2>Payment information</h2><p>{checkout.paymentInstructions}</p><p><b>Accepted methods:</b> {checkout.acceptedMethods.join(" · ")}</p>{checkout.acceptedMethods.includes("Mobile Money")&&<><h3>Mobile Money</h3><dl><dt>Number</dt><dd>{checkout.momoNumber||"Contact us for payment details"}</dd><dt>Merchant ID</dt><dd>{checkout.momoMerchantId||"Confirm with our team"}</dd></dl></>}<p>Confirm the amount and recipient with us before sending payment. Online payment is coming soon.</p></section>;}

@@ -7,6 +7,9 @@ import { availableForSale, catalogueContext, priceCart } from "@/lib/commerce";
 import { deliveryMethods } from "@/lib/shop";
 import { CURRENT_SHOP_ADDRESS } from "@/lib/shopAddress.mjs";
 
+import { publicOrder } from "@/lib/customerTracking.mjs";
+import { CHECKOUT_KEY, normalizeCheckoutPreferences, fulfilmentEstimate } from "@/lib/shopPreferences.mjs";
+
 export const dynamic = "force-dynamic";
 
 export async function GET(request) {
@@ -17,11 +20,10 @@ export async function GET(request) {
   const store = adminDb();
   const snaps = orderId ? [await store.collection("orders").doc(orderId).get()] : (await store.collection("orders").where("customerUid", "==", account.uid).get()).docs;
   const orders = snaps.filter((snap) => snap.exists && snap.data().customerUid === account.uid).map((snap) => {
-    const order = snap.data();
-    return { orderId: snap.id, status: order.status, paymentStatus: order.paymentStatus, deliveryMethod: order.deliveryMethod, originAddress: order.originAddress || "", deliveryAddress: order.deliveryAddress || "", total: Number(order.total || 0), pickupCode: order.pickupCode || null, items: (order.items || []).map(({ name, quantity, sku, colour, size, variantOptions }) => ({ name, quantity, sku, colour, size, variantOptions: variantOptions || {} })), createdAt: order.createdAt?.toDate?.()?.toISOString?.() || null, updatedAt: order.updatedAt?.toDate?.()?.toISOString?.() || null };
+    return publicOrder(snap.id, snap.data());
   }).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
-  if (orderId) return orders[0] ? NextResponse.json({ order: orders[0] }) : NextResponse.json({ error: "This order is not linked to your account." }, { status: 404 });
-  return NextResponse.json({ orders });
+  if (orderId) return orders[0] ? NextResponse.json({ order: orders[0] }, { headers: { "cache-control": "private, no-store" } }) : NextResponse.json({ error: "This order is not linked to your account." }, { status: 404 });
+  return NextResponse.json({ orders }, { headers: { "cache-control": "private, no-store" } });
 }
 
 export async function POST(request) {
@@ -42,6 +44,8 @@ export async function POST(request) {
 
   const store = adminDb();
   const context = await catalogueContext(store);
+  const checkoutSetting = await store.collection("settings").doc(CHECKOUT_KEY).get();
+  const fulfilmentDetails = fulfilmentEstimate(new Date(), deliveryMethod, normalizeCheckoutPreferences(checkoutSetting.data()?.value));
   const quantities = new Map();
   for (const item of requested) {
     const id = String(item.id || "").trim();
@@ -101,6 +105,7 @@ export async function POST(request) {
     channel: body.channel === "whatsapp" ? "whatsapp" : "website",
     deliveryMethod,
     originAddress: CURRENT_SHOP_ADDRESS,
+    fulfilmentDetails,
     deliveryAddress: deliveryMethod === "pickup" ? "" : deliveryAddress,
     landmark: deliveryMethod === "pickup" ? "" : deliveryAddress,
     notes,
@@ -110,6 +115,5 @@ export async function POST(request) {
     createdAt: FieldValue.serverTimestamp(),
   };
   await store.collection("orders").doc(orderId).create(orderSnapshot);
-  return NextResponse.json({ orderId, subtotal: orderSnapshot.subtotal, discount: orderSnapshot.discount, total, items: items.map(({ name, sku, colour, size, variantOptions, quantity, unitPrice, lineTotal }) => ({ name, sku, colour, size, variantOptions, quantity, unitPrice, lineTotal })), deliveryMethod, originAddress: CURRENT_SHOP_ADDRESS, deliveryAddress: orderSnapshot.deliveryAddress, notes });
+  return NextResponse.json({ orderId, subtotal: orderSnapshot.subtotal, discount: orderSnapshot.discount, total, items: items.map(({ name, sku, colour, size, variantOptions, quantity, unitPrice, lineTotal }) => ({ name, sku, colour, size, variantOptions, quantity, unitPrice, lineTotal })), deliveryMethod, originAddress: CURRENT_SHOP_ADDRESS, deliveryAddress: orderSnapshot.deliveryAddress, notes, fulfilmentDetails });
 }
-
