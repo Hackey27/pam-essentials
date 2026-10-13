@@ -2372,6 +2372,9 @@ body > div > main h1 { color: var(--navy); }
 .checkout-order-items { flex: 1; min-height: 72px; overflow-y: auto; }
 .checkout-order-item { display: grid; grid-template-columns: 24px 52px minmax(0,1fr) auto; align-items: start; gap: .5rem; padding: .7rem 0; border-bottom: 1px solid var(--line); }
 .checkout-order-item .cart-product-photo { width: 52px; height: 64px; }
+.checkout-order-item .product-art.cart-product-photo { min-height: 64px; overflow: hidden; }
+.checkout-order-item .product-art.cart-product-photo span { font-size: 1rem; }
+.checkout-order-item .product-art.cart-product-photo small { display: none; }
 .checkout-item-remove { display: grid; place-items: center; width: 24px; min-height: 36px; padding: 0; border: 0; background: transparent; color: #a33434; font-size: 1.2rem; }
 .checkout-item-info { min-width: 0; }
 .checkout-item-info h4 { font-size: .8rem; line-height: 1.35; margin: 0 0 .2rem; }
