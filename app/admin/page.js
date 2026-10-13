@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import RequireRole from "@/components/RequireRole";
 import { signOut, useAuth } from "@/components/AuthProvider";
 import AdminReceipts from "@/components/AdminReceipts";
@@ -19,6 +19,15 @@ import AdminAnnouncements from "@/components/AdminAnnouncements";
 import AdminLocationSettings from "@/components/AdminLocationSettings";
 import AdminProductBarcodes from "@/components/AdminProductBarcodes";
 import AdminProductSearch from "@/components/AdminProductSearch";
+import AdminAttention from "@/components/AdminAttention";
+import AdminReadiness from "@/components/AdminReadiness";
+import AdminPricingPreview from "@/components/AdminPricingPreview";
+import AdminProductWorkspace from "@/components/AdminProductWorkspace";
+import AdminDraftRecovery, { AdminLeaveConfirmation } from "@/components/AdminDraftRecovery";
+import useProductEditorProtection from "@/components/useProductEditorProtection";
+import AdminGroupedNavigation from "@/components/AdminGroupedNavigation";
+import { matchesReadiness, productReadiness } from "@/lib/adminWorkspace.mjs";
+import { requiresPricingInquiry } from "@/lib/productPricing.mjs";
 import { activeBarcodes } from "@/lib/barcodes.mjs";
 import { ruleScopeOptions } from "@/lib/ruleScopeOptions.mjs";
 import BrandLogo from "@/components/BrandLogo";
@@ -35,7 +44,7 @@ const emptyData = { products: [], orders: [], movements: [], categories: [], sub
 function dateTime(value) {
   if (!value) return "—";
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString("en-GH", { dateStyle: "medium", timeStyle: "short" });
+  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString("en-GH", { dateStyle: "medium", timeStyle: "short", timeZone: "Africa/Accra" });
 }
 
 function CategoryHierarchy({ categories, subcategories, subSubcategories, onEdit }) {
@@ -108,7 +117,7 @@ function periodBounds(period, customRange) {
 
 function AdminPortal() {
   const { user, role } = useAuth();
-  const [section, setSection] = useState("Overview");
+  const [requestedSection, setSection] = useState("Overview");
   const [data, setData] = useState(emptyData);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -131,8 +140,32 @@ function AdminPortal() {
   const [inventory, setInventory] = useState({ type: "receive", productId: "", quantity: "", supplier: "", reason: "", notes: "" });
   const [period, setPeriod] = useState("today");
   const [customRange, setCustomRange] = useState({ start: "", end: "" });
+  const [readinessFilter, setReadinessFilter] = useState("all");
+  const [attention, setAttention] = useState({ queues: [], updatedAt: null });
+  const [attentionLoading, setAttentionLoading] = useState(false), [attentionError, setAttentionError] = useState("");
+  const [sectionRecord, setSectionRecord] = useState(null), [saveState, setSaveState] = useState("idle");
+  const mutationLock = useRef(false), attentionLock = useRef(false);
+  const loadGeneration = useRef(0), authScope = useRef("");
+  authScope.current = `${user?.uid || ""}:${role || ""}`;
+  const protection = useProductEditorProtection({ editor, setEditor, uid: user?.uid, saving, uploadingImages });
+  const readiness = useMemo(() => Object.fromEntries(data.products.map((product) => [product.id, productReadiness(product, data.products, data)])), [data.products, data.categories, data.subcategories, data.subSubcategories]);
+  function setProductFilters(filters) { setQuery(filters.query); setProductCategory(filters.category); setStatus(filters.status); setReadinessFilter(filters.readiness); }
+  function navigate(tab, record = null) { protection.request(() => { setEditor(null); setSection(tab); setSectionRecord(record); setMobileNavOpen(false); if (tab === "Orders" && record) { setOrderStatus("all"); setOrderQuery(""); setSelectedOrder(record); } }); }
+  function viewReadiness(filter) { protection.request(() => { setEditor(null); setProductFilters({ query: "", category: "all", status: "all", readiness: filter }); setSection("Products"); setSectionRecord(null); }); }
+  async function loadAttention() {
+    const scope = authScope.current;
+    if (!user || attentionLock.current === scope) return;
+    attentionLock.current = scope; setAttentionLoading(true); setAttentionError("");
+    try { const response = await authorizedFetch("/api/admin/attention"), payload = await response.json(); if (!response.ok) throw new Error(payload.error); if (scope === authScope.current) setAttention(payload); }
+    catch (reason) { if (scope === authScope.current) setAttentionError(reason.message || "The inbox could not be refreshed."); }
+    finally { if (attentionLock.current === scope) { attentionLock.current = false; setAttentionLoading(false); } }
+  }
+
   const isAdmin = ["owner", "admin"].includes(role);
   const nav = isAdmin ? allNav : supervisorNav;
+  const section = nav.includes(requestedSection) ? requestedSection : "Overview";
+  const navCounts = Object.fromEntries(nav.map((item) => [item, item === "Orders" ? data.metrics.openOrders || 0 : item === "Inventory" ? data.metrics.lowStock || 0 : attention.queues.find((queue) => queue.section === item)?.count || 0]));
+  const visibleAttention = { ...attention, queues: attention.queues.filter((queue) => isAdmin || queue.section === "Orders") };
 
   async function authorizedFetch(url, options = {}) {
     const token = await user.getIdToken();
@@ -141,17 +174,19 @@ function AdminPortal() {
 
   async function load() {
     if (!user) return;
+    const generation = ++loadGeneration.current, scope = authScope.current;
     setLoading(true); setError("");
     try {
       const response = await authorizedFetch("/api/admin/catalog");
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error);
-      setData({ ...emptyData, ...payload });
-    } catch (err) { setError(err.message || "Admin data could not be loaded."); }
-    finally { setLoading(false); }
+      if (generation === loadGeneration.current && scope === authScope.current) setData({ ...emptyData, ...payload });
+    } catch (err) { if (generation === loadGeneration.current && scope === authScope.current) setError(err.message || "Admin data could not be loaded."); }
+    finally { if (generation === loadGeneration.current && scope === authScope.current) setLoading(false); }
   }
 
-  useEffect(() => { load(); }, [user]);
+  useEffect(() => { load(); loadAttention(); if (!isAdmin) { setEditor(null); setSectionRecord(null); } }, [user, role]);
+  useEffect(() => { if (section !== "Overview") return; loadAttention(); const timer = setInterval(loadAttention, 60000); return () => clearInterval(timer); }, [section, user, role]);
   useEffect(() => {
     if (!isAdmin || new URLSearchParams(window.location.search).get("newExpense") !== "1") return;
     setSection("Analytics");
@@ -160,17 +195,18 @@ function AdminPortal() {
   }, [isAdmin]);
 
   async function mutate(url, payload, successMessage) {
-    setSaving(true); setError(""); setNotice("");
+    if (mutationLock.current) return null;
+    mutationLock.current = true; setSaving(true); setError(""); setNotice(""); setSaveState("saving");
     try {
       const response = await authorizedFetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error);
-      setNotice(successMessage);
-      setEditor(null);
+      setNotice(successMessage); setSaveState("saved");
+      protection.saved(); setEditor(null);
       await load();
       return result;
-    } catch (err) { setError(err.message || "The change could not be saved."); return null; }
-    finally { setSaving(false); }
+    } catch (err) { setError(err.message || "The change could not be saved."); setSaveState("failed"); if (editor?.type === "product") protection.persist(); return null; }
+    finally { setSaving(false); mutationLock.current = false; }
   }
 
   async function seedCatalogue() {
@@ -199,10 +235,11 @@ function AdminPortal() {
       setting: { create: true, key: settingKeys.find((key) => !data.settings[key]) || "STORE_NAME", value: "", description: "" },
       expense: { amount: "", category: "Operating expense", description: "", paymentMethod: "cash" },
     };
-    setEditor({ type, data: { ...(item ? { ...item, create: false, ...(type === "product" ? { barcodeAdditions: "", archiveBarcodes: [], deleteBarcodes: [], multipleBarcodes: item.multipleBarcodes === true || activeBarcodes(item).length > 1, ...editorVariantState(item, data.products) } : {}) } : defaults[type]), acknowledgeOverlap: false } });
+    protection.request(() => { setSaveState("idle"); protection.start({ type, data: { ...(item ? { ...item, create: false, ...(type === "product" ? { barcodeAdditions: "", archiveBarcodes: [], deleteBarcodes: [], multipleBarcodes: item.multipleBarcodes === true || activeBarcodes(item).length > 1, expectedVersion: item.editVersion, ...editorVariantState(item, data.products) } : {}) } : defaults[type]), acknowledgeOverlap: false } }); });
   }
 
   function updateEditor(key, value) {
+    if (mutationLock.current) return;
     setEditor((current) => ({ ...current, data: { ...current.data, [key]: typeof value === "function" ? value(current.data[key]) : value, ...(key.startsWith("variant") ? { variantDirty: true } : {}), ...(key === "acknowledgeOverlap" ? {} : { acknowledgeOverlap: false }) } }));
   }
 
@@ -233,10 +270,10 @@ function AdminPortal() {
 
   const products = useMemo(() => data.products.filter((product) => {
     const matches = `${product.name} ${product.id} ${product.sku || ""} ${activeBarcodes(product).join(" ")} ${product.category}`.toLowerCase().includes(query.trim().toLowerCase());
-    const state = status === "all" || (status === "priced" && Number(product.price) > 0) || (status === "needs-pricing" && !(Number(product.price) > 0)) || (status === "low" && Number(product.stock) <= Number(product.lowStockLevel || 8)) || (status === "archived" && product.archived);
+    const state = status === "all" || (status === "priced" && Number(product.price) > 0) || (status === "needs-pricing" && !(Number(product.price) > 0) && !requiresPricingInquiry(product)) || (status === "quote" && requiresPricingInquiry(product)) || (status === "active" && product.active !== false && !product.archived) || (status === "inactive" && product.active === false && !product.archived) || (status === "low" && Number(product.stock) <= Number(product.lowStockLevel || 8)) || (status === "archived" && product.archived);
     const category = productCategory === "all" || product.categoryId === productCategory;
-    return matches && state && category;
-  }), [data.products, query, status, productCategory]);
+    return matches && state && category && matchesReadiness(readiness[product.id], readinessFilter);
+  }), [data.products, query, status, productCategory, readiness, readinessFilter]);
 
   const filteredOrders = useMemo(() => data.orders.filter((order) => {
     const searchable = `${order.customer || ""} ${order.phone || ""} ${order.orderId || ""} ${order.createdAt || ""}`.toLowerCase();
@@ -347,17 +384,17 @@ function AdminPortal() {
       : [];
 
   return <div className="admin-shell">
-    <aside className="admin-sidebar"><div><a className="admin-brand" href="/" aria-label="PAM Essentials home"><BrandLogo background="navy" symbolOnMobile /></a><p className="admin-user">{user?.email}<br /><b>{role}</b></p></div><nav>{nav.map((item) => <button key={item} onClick={() => setSection(item)} className={section === item ? "active" : ""}><span className="nav-dot" /><span>{item}</span>{item === "Orders" && data.metrics.openOrders > 0 && <b>{data.metrics.openOrders}</b>}{item === "Inventory" && data.metrics.lowStock > 0 && <b>{data.metrics.lowStock}</b>}</button>)}</nav><div className="sidebar-actions"><a href="/pos">Open till</a><a href="/">View store</a></div></aside>
+    <aside className="admin-sidebar"><div><a className="admin-brand" href="/" aria-label="PAM Essentials home"><BrandLogo background="navy" symbolOnMobile /></a><p className="admin-user">{user?.email}<br /><b>{role}</b></p></div><nav className="admin-grouped-nav" aria-label="Admin sections"><AdminGroupedNavigation allowed={nav} current={section} counts={navCounts} onNavigate={navigate} /></nav><div className="sidebar-actions"><a href="/pos">Open till</a><a href="/">View store</a></div></aside>
     {importOpen && <AdminCatalogueImport products={data.products} authorizedFetch={authorizedFetch} onImported={load} onClose={() => setImportOpen(false)} />}
     <main className="admin-main">
-      <header className="admin-topbar"><div className="admin-topbar-identity"><span className="admin-mobile-brand"><BrandLogo symbol /></span><div><p>PAM Essentials & More Admin</p><span>{user?.email}</span></div></div><div><button className="icon-button" onClick={load} aria-label="Refresh">↻</button><button className="icon-button" onClick={signOut} aria-label="Sign out">↪</button></div></header>
+      <header className="admin-topbar"><div className="admin-topbar-identity"><span className="admin-mobile-brand"><BrandLogo symbol /></span><div><p>PAM Essentials & More Admin</p><span>{user?.email}</span></div></div><div><button className="icon-button" onClick={() => protection.request(() => { setEditor(null); load(); loadAttention(); })} aria-label="Refresh">↻</button><button className="icon-button" onClick={() => protection.request(signOut)} aria-label="Sign out">↪</button></div></header>
       <section className="admin-content">
         <div className="page-title"><div><p className="eyebrow">Admin Portal</p><h1>{section}</h1><p>{section === "Overview" ? "Current sales, stock and order health." : `Manage ${section.toLowerCase()} across the store and till.`}</p></div><div className="page-actions">{isAdmin && ["Overview", "Analytics"].includes(section) && <><select aria-label="Reporting period" value={period} onChange={(event) => setPeriod(event.target.value)}><option value="today">Today</option><option value="week">This week</option><option value="month">This month</option><option value="custom">Custom</option><option value="all">All time</option></select>{period === "custom" && <div className="period-custom"><input aria-label="Custom period start" type="date" value={customRange.start} onChange={(event) => setCustomRange((current) => ({ ...current, start: event.target.value }))} /><span>to</span><input aria-label="Custom period end" type="date" min={customRange.start} value={customRange.end} onChange={(event) => setCustomRange((current) => ({ ...current, end: event.target.value }))} /></div>}</>}{primaryAction}</div></div>
         {notice && <p className="notice success-notice">{notice}</p>}{error && <p className="notice error-notice">{error}</p>}
         {loading ? <div className="empty-state"><div className="spinner" /><p>Loading admin data…</p></div> : <>
-          {section === "Overview" && <><div className="metric-grid">{metricCards.map(([label, value, note]) => <article className="metric-card" key={label}><p>{label}</p><strong>{value}</strong><span>{note}</span></article>)}</div>{isAdmin && <div className="metric-grid compact current-state">{stateCards.map(([label, value, note]) => <article className="metric-card" key={label}><p>{label}</p><strong>{value}</strong><span>{note} · current state</span></article>)}</div>}<div className="admin-panels"><article className="panel"><div className="panel-title"><h2>Attention needed</h2>{isAdmin && <button onClick={() => { setSection("Products"); setStatus("needs-pricing"); }}>View products</button>}</div>{isAdmin && <div className="attention-row"><span className="status-icon warning">!</span><div><b>{data.metrics.needsPricing || 0} products need pricing</b><p>Unpriced products stay hidden unless customer pricing inquiries are enabled; they cannot be sold in POS.</p></div></div>}<div className="attention-row"><span className="status-icon danger">↓</span><div><b>{data.metrics.lowStock || 0} products are low in stock</b><p>Review quantities before the next trading period.</p></div></div></article><article className="panel"><div className="panel-title"><h2>Open orders</h2><button onClick={() => setSection("Orders")}>View queue</button></div><div className="status-strip">{openOrderStatuses.map(([value, count]) => <button key={value} onClick={() => { setOrderStatus(value); setSection("Orders"); }}><span>{value.replace("-", " ")}</span><b>{count}</b></button>)}</div>{!data.orders.length ? <p className="muted">No orders yet.</p> : data.orders.filter((order) => !["completed", "cancelled"].includes(order.status)).slice(0, 4).map((order) => <div className="order-row" key={order.orderId}><div><b>{order.customer}</b><span>{order.orderId}</span></div><strong>{money.format(order.total || 0)}</strong><span className="badge warning">{order.status}</span></div>)}</article></div></>}
+          {section === "Overview" && <><AdminAttention attention={visibleAttention} loading={attentionLoading} error={attentionError} onRefresh={loadAttention} onNavigate={navigate} />{isAdmin && <AdminReadiness readiness={readiness} onView={viewReadiness} />}<div className="metric-grid">{metricCards.map(([label, value, note]) => <article className="metric-card" key={label}><p>{label}</p><strong>{value}</strong><span>{note}</span></article>)}</div>{isAdmin && <div className="metric-grid compact current-state">{stateCards.map(([label, value, note]) => <article className="metric-card" key={label}><p>{label}</p><strong>{value}</strong><span>{note} · current state</span></article>)}</div>}<div className="admin-panels"><article className="panel"><div className="panel-title"><h2>Stock attention</h2><button type="button" onClick={() => navigate("Inventory")}>View inventory</button></div><div className="attention-row"><span className="status-icon danger">↓</span><div><b>{data.metrics.lowStock || 0} products are low in stock</b><p>Review quantities before the next trading period.</p></div></div></article><article className="panel"><div className="panel-title"><h2>Open orders</h2><button onClick={() => setSection("Orders")}>View queue</button></div><div className="status-strip">{openOrderStatuses.map(([value, count]) => <button key={value} onClick={() => { setOrderStatus(value); setSection("Orders"); }}><span>{value.replace("-", " ")}</span><b>{count}</b></button>)}</div>{!data.orders.length ? <p className="muted">No orders yet.</p> : data.orders.filter((order) => !["completed", "cancelled"].includes(order.status)).slice(0, 4).map((order) => <div className="order-row" key={order.orderId}><div><b>{order.customer}</b><span>{order.orderId}</span></div><strong>{money.format(order.total || 0)}</strong><span className="badge warning">{order.status}</span></div>)}</article></div></>}
 
-          {section === "Products" && <><AdminProductSearch query={query} setQuery={setQuery} category={productCategory} setCategory={setProductCategory} status={status} setStatus={setStatus} categories={data.categories} products={products} onSelect={(product) => openEditor("product", product)} /><div className="summary-grid">{products.map((product) => <button type="button" className="summary-card" key={product.id} onClick={() => openEditor("product", product)} aria-label={`Edit ${product.name}`}><strong>{product.name}</strong><span>Price: {Number(product.price) > 0 ? money.format(product.price) : "Not set"}</span><span>Stock: {product.stock}</span><span className={product.archived ? "badge danger" : Number(product.price) > 0 ? "badge success" : "badge warning"}>{product.archived ? "Archived" : Number(product.price) > 0 ? "Sellable" : product.contactForPrice ? "Customer quote" : "Needs pricing"}</span></button>)}</div></>}
+          {section === "Products" && <><AdminProductSearch query={query} setQuery={setQuery} category={productCategory} setCategory={setProductCategory} status={status} setStatus={setStatus} categories={data.categories} products={products} onSelect={(product) => openEditor("product", product)} /><AdminProductWorkspace products={products} data={data} readiness={readiness} filters={{ query, category: productCategory, status, readiness: readinessFilter }} onFilters={setProductFilters} onEdit={(product) => openEditor("product", product)} authorizedFetch={authorizedFetch} onApplied={(result) => { setNotice(`${result.changedCount} product updates saved together and recorded in Audit.`); load(); }} /></>}
 
           {section === "Categories" && <CategoryHierarchy categories={data.categories} subcategories={data.subcategories} subSubcategories={data.subSubcategories} onEdit={openEditor} />}
 
@@ -365,15 +402,16 @@ function AdminPortal() {
 
           {section === "Orders" && <><div className="table-tools"><input placeholder="Search name, phone or reference" value={orderQuery} onChange={(event) => setOrderQuery(event.target.value)} /><select value={orderStatus} onChange={(event) => setOrderStatus(event.target.value)}><option value="all">All orders</option><option value="pending-payment">Pending payment</option>{["pending", "confirmed", "paid", "processing", "ready", "completed", "cancelled"].map((value) => <option key={value}>{value}</option>)}</select><span>{filteredOrders.length} orders</span></div>{filteredOrders.length ? <div className="summary-grid">{filteredOrders.map((order) => <button type="button" className="summary-card" key={order.orderId} onClick={() => setSelectedOrder(order)} aria-label={`Open order for ${order.customer || "Guest"}`}><strong>{order.customer || "Guest"}</strong><span>{order.phone || "No phone"}</span><div className="summary-statuses"><span className={order.paymentStatus === "paid" ? "badge success" : "badge neutral"}>{order.paymentStatus || "unpaid"}</span><span className={order.status === "completed" ? "badge success" : order.status === "cancelled" ? "badge danger" : "badge warning"}>{order.status || "pending"}</span></div></button>)}</div> : <div className="empty-state">No orders match these filters.</div>}</>}
 
+          {["Discounts", "Promotions"].includes(section) && <AdminPricingPreview data={data} />}
           {section === "Discounts" && <div className="summary-grid">{data.discounts.filter((rule) => rule.kind !== "promotion").map((rule) => <RuleSummaryCard key={rule.ruleId} rule={rule} onOpen={() => openEditor("discount", rule)} />)}</div>}
           {section === "Promotions" && <div className="summary-grid">{data.discounts.filter((rule) => rule.kind === "promotion").map((rule) => <RuleSummaryCard key={rule.ruleId} rule={rule} onOpen={() => openEditor("promotion", rule)} />)}</div>}
 
           {section === "Staff" && <div className="data-table-wrap"><table className="data-table"><thead><tr><th>Staff member</th><th>Role</th><th>Status</th><th>Action</th></tr></thead><tbody>{data.users.map((staff) => <tr key={staff.id}><td><b>{staff.displayName || staff.email}</b><span>{staff.email}</span></td><td>{staff.role}</td><td><span className={staff.active ? "badge success" : "badge danger"}>{staff.active ? "Active" : "Inactive"}</span></td><td><button className="table-action" onClick={() => openEditor("staff", { ...staff, uid: staff.id })}>Edit</button></td></tr>)}</tbody></table></div>}
 
           {section === "Customers" && <AdminCustomers authorizedFetch={authorizedFetch} orders={data.orders} />}
-          {section === "Inquiries" && <AdminInquiries authorizedFetch={authorizedFetch} />}
-          {section === "Product Requests" && <AdminProductRequests authorizedFetch={authorizedFetch} />}
-          {section === "Reviews" && <AdminReviews authorizedFetch={authorizedFetch} />}
+          {section === "Inquiries" && <AdminInquiries initialRecord={sectionRecord} authorizedFetch={authorizedFetch} onChanged={loadAttention} />}
+          {section === "Product Requests" && <AdminProductRequests initialRecord={sectionRecord} authorizedFetch={authorizedFetch} onChanged={loadAttention} />}
+          {section === "Reviews" && <AdminReviews initialRecord={sectionRecord} authorizedFetch={authorizedFetch} onChanged={loadAttention} />}
           {section === "Analytics" && <><AdminWishlistAnalytics authorizedFetch={authorizedFetch} products={data.products} /><div className="metric-grid">{metricCards.map(([label, value, note]) => <article className="metric-card" key={label}><p>{label}</p><strong>{value}</strong><span>{note}</span></article>)}</div><div className="table-tools analytics-tools"><span>Rank performance by</span><select value={rankBy} onChange={(event) => setRankBy(event.target.value)}><option value="revenue">Revenue</option><option value="quantity">Quantity</option><option value="profit">Profit</option></select></div><div className="admin-panels"><article className="panel"><div className="panel-title"><h2>Top products</h2></div>{performance.products.length ? performance.products.map(([id, value]) => <div className="order-row" key={id}><div><b>{value.name}</b><span>{value.quantity} units · {money.format(value.revenue)} revenue</span></div><strong>{rankBy === "quantity" ? whole.format(value.quantity) : money.format(value[rankBy])}</strong></div>) : <p className="muted">Sales will appear here after checkout.</p>}</article><article className="panel"><div className="panel-title"><h2>Category performance</h2></div>{performance.categories.length ? performance.categories.map(([name, value]) => <div className="order-row" key={name}><div><b>{name}</b><span>{value.quantity} units · {money.format(value.revenue)} revenue</span></div><strong>{rankBy === "quantity" ? whole.format(value.quantity) : money.format(value[rankBy])}</strong></div>) : <p className="muted">No category sales yet.</p>}</article><article className="panel"><div className="panel-title"><h2>Channel split</h2></div>{performance.channels.length ? performance.channels.map(([name, revenue]) => <div className="order-row" key={name}><div><b>{name}</b><span>Sales channel</span></div><strong>{money.format(revenue)}</strong></div>) : <p className="muted">No channel sales yet.</p>}</article><article className="panel"><div className="panel-title"><h2>No-sale products</h2></div>{performance.noSales.length ? performance.noSales.map((product) => <div className="order-row" key={product.id}><div><b>{product.name}</b><span>{product.category} · {product.stock} in stock</span></div><span className="badge warning">No sales</span></div>) : <p className="muted">Every active product sold in this period.</p>}</article><article className="panel"><div className="panel-title"><h2>Recent expenses</h2></div>{data.expenses.length ? data.expenses.slice(0, 10).map((expense) => <div className="order-row" key={expense.id}><div><b>{expense.description}</b><span>{expense.category} · {dateTime(expense.createdAt)}</span></div><strong>{money.format(expense.amount)}</strong></div>) : <p className="muted">No expenses recorded.</p>}</article></div></>}
 
           {section === "Transactions" && <AdminReceipts sales={data.sales} />}
@@ -386,18 +424,20 @@ function AdminPortal() {
 
           {section === "Settings" && <><div className="panel deals-admin-control"><div><h2>PAM Deals</h2><p>{data.settings.PAM_DEALS_ACTIVE?.value === true ? "Active on the storefront" : "Hidden from the storefront"} · {data.products.filter((product) => (product.collections || []).includes("PAM Deals")).length} products tagged</p><small>Tag selected products in Products and add a targeted discount rule before advertising a percentage.</small></div><button type="button" className={data.settings.PAM_DEALS_ACTIVE?.value === true ? "button secondary" : "button primary"} disabled={saving} onClick={() => mutate("/api/admin/settings", { key: "PAM_DEALS_ACTIVE", value: data.settings.PAM_DEALS_ACTIVE?.value !== true, description: "Show PAM Deals collection on the storefront" }, "PAM Deals visibility updated.")}>{data.settings.PAM_DEALS_ACTIVE?.value === true ? "Deactivate PAM Deals" : "Activate PAM Deals"}</button></div><div className="data-table-wrap"><table className="data-table"><thead><tr><th>Setting</th><th>Value</th><th>Description</th><th>Action</th></tr></thead><tbody>{Object.values(data.settings).map((setting) => <tr key={setting.key}><td><b>{setting.key}</b></td><td>{String(setting.value ?? "")}</td><td>{setting.description || "—"}</td><td><button className="table-action" onClick={() => setting.key === "STOREFRONT_TYPOGRAPHY" ? setSection("Appearance") : openEditor("setting", setting)}>Edit</button></td></tr>)}</tbody></table></div><div className="panel"><div className="panel-title"><div><h2>PAM Deals bundles</h2><p>Combine two or more products and set one final selling price.</p></div><button className="button primary" onClick={() => openEditor("dealBundle")}>New bundle</button></div><div className="data-table-wrap"><table className="data-table"><thead><tr><th>Bundle</th><th>Products</th><th>Combined price</th><th>Final price</th><th>Status</th><th>Action</th></tr></thead><tbody>{data.dealBundles.length ? data.dealBundles.map((deal) => <tr key={deal.dealId}><td><b>{deal.name}</b><span>{deal.dealId}</span></td><td>{(deal.productIds || []).length}</td><td>{money.format(deal.aggregatePrice || 0)}</td><td>{money.format(deal.finalPrice || 0)}</td><td>{deal.archived ? "Archived" : deal.active !== false ? "Active" : "Inactive"}</td><td><button className="table-action" onClick={() => openEditor("dealBundle", deal)}>Edit</button></td></tr>) : <tr><td colSpan="6" className="empty-cell">No deal bundles configured yet.</td></tr>}</tbody></table></div></div></>}
 
-          {section === "Audit" && <div className="data-table-wrap"><table className="data-table"><thead><tr><th>Timestamp</th><th>Admin</th><th>Action</th><th>Entity</th><th>Description</th></tr></thead><tbody>{data.audit.map((entry) => <tr key={entry.id}><td>{dateTime(entry.timestamp)}</td><td>{entry.adminEmail || entry.admin}</td><td>{entry.action}</td><td><b>{entry.entityType}</b><span>{entry.entityId}</span></td><td>{entry.description}</td></tr>)}</tbody></table></div>}
+          {section === "Audit" && <div className="data-table-wrap"><table className="data-table"><thead><tr><th>Timestamp</th><th>Admin</th><th>Action</th><th>Entity</th><th>Description</th></tr></thead><tbody>{data.audit.map((entry) => <tr key={entry.id}><td>{dateTime(entry.timestamp)}</td><td>{entry.adminEmail || entry.admin}</td><td>{entry.action}</td><td><b>{entry.entityType}</b><span>{entry.entityId}</span></td><td>{entry.description}{(entry.oldValue || entry.newValue) && <details className="audit-change-details"><summary>View changes</summary><pre>{JSON.stringify({ before: entry.oldValue, after: entry.newValue }, null, 2)}</pre></details>}</td></tr>)}</tbody></table></div>}
         </>}
       </section>
     </main>
-    <div className="admin-mobile-nav"><button type="button" className="admin-mobile-nav-toggle" aria-expanded={mobileNavOpen} onClick={() => setMobileNavOpen((open) => !open)}>Admin: {section} <span>{mobileNavOpen ? "Close" : "Sections"} ▴</span></button>{mobileNavOpen && <div className="admin-mobile-nav-panel" role="navigation" aria-label="Admin sections">{nav.map((item) => <button type="button" key={item} className={section === item ? "active" : ""} onClick={() => { setSection(item); setMobileNavOpen(false); }}>{item}</button>)}<a href="/pos">Open Till</a><a href="/">Open Store</a></div>}</div>
-    {editor && <div className="modal-backdrop"><form className="modal editor-modal admin-form" onSubmit={saveEditor}>
-      <div className="drawer-title"><div><p className="eyebrow">{editor.data.create ? "Create" : "Edit"}</p><h2>{editor.type}</h2></div><button type="button" className="icon-button" disabled={uploadingImages} onClick={() => setEditor(null)}>×</button></div>
-      <EditorFields editor={editor} update={updateEditor} data={data} currentRole={role} onImageBusyChange={setUploadingImages} />
+    <div className="admin-mobile-nav"><button type="button" className="admin-mobile-nav-toggle" aria-expanded={mobileNavOpen} onClick={() => setMobileNavOpen((open) => !open)}>Admin: {section} <span>{mobileNavOpen ? "Close" : "Sections"} ▴</span></button>{mobileNavOpen && <div className="admin-mobile-nav-panel" role="navigation" aria-label="Admin sections"><AdminGroupedNavigation allowed={nav} current={section} counts={navCounts} onNavigate={navigate} mobile /><a href="/pos">Open Till</a><a href="/">Open Store</a></div>}</div>
+    {isAdmin && editor && <div className="modal-backdrop"><form className="modal editor-modal admin-form" role="dialog" aria-modal="true" aria-labelledby="admin-editor-title" onSubmit={saveEditor}>
+      <div className="drawer-title"><div><p className="eyebrow">{editor.data.create ? "Create" : "Edit"}</p><h2 id="admin-editor-title">{editor.type}</h2></div><button type="button" className="icon-button" disabled={saving || uploadingImages} onClick={protection.close}>×</button></div>
+      {editor.type === "product" && <AdminDraftRecovery key={editor.data.id || "new"} protection={protection} saveState={saveState} error={error} />}
+      <fieldset className="editor-fields-shell" disabled={saving}><EditorFields editor={editor} update={updateEditor} data={data} currentRole={role} onImageBusyChange={setUploadingImages} /></fieldset>
       {["discount", "promotion"].includes(editor.type) && <div className="rule-lifecycle"><p>Minimum quantity is counted separately for each product/SKU. Archiving disables this rule but keeps its history.</p><label><input type="checkbox" checked={editor.data.archived === true} onChange={(event) => updateEditor("archived", event.target.checked)} /> Archived</label></div>}
       {overlaps.length > 0 && <div className="discount-overlap-warning" role="alert"><strong>Possible discount overlap</strong><p>{overlaps.map((item) => `${item.name} (${item.type})`).join(", ")} may cover the same product. Discounts never stack: bundle deals take precedence, then promotions, then standard discounts.</p><label><input type="checkbox" required checked={editor.data.acknowledgeOverlap === true} onChange={(event) => updateEditor("acknowledgeOverlap", event.target.checked)} /> I reviewed the overlap and understand the precedence.</label></div>}
-      <div className="editor-actions"><button type="button" className="button secondary" disabled={uploadingImages} onClick={() => setEditor(null)}>Cancel</button><button className="button primary" disabled={saving || uploadingImages}>{uploadingImages ? "Uploading image…" : saving ? "Saving…" : "Save changes"}</button></div>
+      <div className="editor-actions"><button type="button" className="button secondary" disabled={saving || uploadingImages} onClick={protection.close}>Cancel</button><button className="button primary" disabled={saving || uploadingImages}>{uploadingImages ? "Uploading image…" : saving ? "Saving…" : "Save changes"}</button></div>
     </form></div>}
+    <AdminLeaveConfirmation protection={protection} />
     {selectedOrder && <div className="modal-backdrop"><div className="modal editor-modal order-detail"><div className="drawer-title"><div><p className="eyebrow">Order detail</p><h2>{selectedOrder.orderId}</h2></div><button type="button" className="icon-button" onClick={() => setSelectedOrder(null)}>×</button></div><div className="detail-grid"><div><span>Customer</span><b>{selectedOrder.customer}</b></div><div><span>Phone</span><b>{selectedOrder.phone}</b></div><div><span>Created</span><b>{dateTime(selectedOrder.createdAt)}</b></div><div><span>Channel</span><b>{selectedOrder.channel}</b></div><div><span>Fulfilment</span><b>{selectedOrder.deliveryMethod}</b></div><div><span>Shop collection</span><b>{selectedOrder.originAddress || "PAM Essentials & More, Awoshie, Accra, Ghana"}</b></div><div><span>Delivery destination</span><b>{selectedOrder.deliveryAddress || selectedOrder.landmark || "—"}</b></div><div><span>Payment</span><b>{selectedOrder.paymentStatus}</b></div><div><span>Status</span><b>{selectedOrder.status}</b></div>{selectedOrder.pickupCode && <div><span>Handover code</span><b>{selectedOrder.pickupCode}</b></div>}</div><h3>Items</h3><div className="order-items">{(selectedOrder.items || []).map((item) => <div className="order-row" key={item.productId}><div><b>{item.name}</b><span>{item.productId} · {item.quantity} × {money.format(item.unitPrice || 0)}</span></div><strong>{money.format(item.lineTotal || 0)}</strong></div>)}</div><div className="order-total"><span>Total</span><strong>{money.format(selectedOrder.total || 0)}</strong></div><div className="editor-actions"><button className="button secondary" onClick={() => setSelectedOrder(null)}>Close</button><select aria-label={`Update ${selectedOrder.orderId}`} value={selectedOrder.status} onChange={async (event) => { await updateOrder(selectedOrder.orderId, event.target.value); setSelectedOrder(null); }}>{["pending", "confirmed", "paid", "processing", "ready", "completed", "cancelled"].map((value) => <option key={value}>{value}</option>)}</select></div></div></div>}
   </div>;
 }

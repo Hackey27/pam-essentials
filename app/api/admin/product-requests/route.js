@@ -30,7 +30,11 @@ export async function GET(request) {
       if (!snap.exists) return NextResponse.json({ error: "Refresh the request list." }, { status: 400 });
       query = query.startAfter(snap);
     }
-    const result = await query.get(), page = result.docs.slice(0, 100);
+    const focusId = params.get("id");
+    if (focusId && !uuid.test(focusId)) return NextResponse.json({ error: "Choose a valid request." }, { status: 400 });
+    const focused = focusId ? await store.collection("product_requests").doc(focusId).get() : null;
+    if (focused && !focused.exists) return NextResponse.json({ error: "This request is no longer available." }, { status: 404 });
+    const result = focused ? { docs: [focused] } : await query.get(), page = result.docs.slice(0, 100);
     const requests = page.map((doc) => {
       const v = doc.data();
       return { id: doc.id, reference: v.reference, name: v.name, phone: v.phone || "", email: v.email || "", productName: v.productName, description: v.description, quantity: v.quantity, measurements: v.measurements || "", preferences: v.preferences || "", productLink: v.productLink || "", budget: v.budget ?? null, preferredDate: v.preferredDate || "", allowAlternatives: v.allowAlternatives === true, imageCount: v.imageIds?.length || 0, status: v.status || "new", internalNotes: v.internalNotes || "", quotation: v.quotation || "", quoteTotal: v.quoteTotal ?? null, updatedBy: v.updatedBy || "", createdAt: date(v.createdAt), updatedAt: date(v.updatedAt) };

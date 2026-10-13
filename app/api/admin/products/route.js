@@ -4,6 +4,7 @@ import { adminDb, requireRole } from "@/lib/admin";
 import { auditPayload, nullableNumber, text } from "@/lib/serverData";
 import { isProductImagePath, productImageFolder, variantCombinationKey } from "@/lib/productImages.mjs";
 import { allBarcodeCodes, normalizeBarcode, planBarcodes } from "@/lib/barcodes.mjs";
+import { documentVersion } from "@/lib/documentVersion.mjs";
 import { planVariantGroup, remapVariantImages } from "@/lib/adminVariants.mjs";
 
 export async function POST(request) {
@@ -24,6 +25,7 @@ export async function POST(request) {
   if (body.create && existing.exists) return NextResponse.json({ error: "That product ID already exists." }, { status: 409 });
   if (!body.create && !existing.exists) return NextResponse.json({ error: "Product not found." }, { status: 404 });
 
+  if (!body.create && body.expectedVersion !== undefined && (typeof body.expectedVersion !== "string" || body.expectedVersion !== documentVersion(existing))) return NextResponse.json({ error: "This product changed after the editor was opened. Your edits remain in the form. Reload the product and recover the fields you want to apply." }, { status: 409 });
   const oldValue = existing.exists ? existing.data() : null;
   const managingVariants = body.variantEnabled !== undefined;
   const variantProducts = managingVariants ? (await store.collection("products").get()).docs.map((doc) => ({ ...doc.data(), id: doc.data().id || decodeURIComponent(doc.id) })) : [];

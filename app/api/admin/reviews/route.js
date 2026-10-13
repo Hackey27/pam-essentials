@@ -11,7 +11,11 @@ export async function GET(request) {
   try {
     const store = adminDb(), cursor = new URL(request.url).searchParams.get("cursor"); let query = store.collection("product_reviews").orderBy("updatedAt", "desc").limit(101);
     if (cursor) { if (!valid(cursor)) return NextResponse.json({ error: "Refresh the review list." }, { status: 400 }); const snap = await store.collection("product_reviews").doc(cursor).get(); if (!snap.exists) return NextResponse.json({ error: "Refresh the review list." }, { status: 409 }); query = query.startAfter(snap); }
-    const result = await query.get(), page = result.docs.slice(0, 100);
+    const focusId = new URL(request.url).searchParams.get("id");
+    if (focusId && !valid(focusId)) return NextResponse.json({ error: "Choose a valid review." }, { status: 400 });
+    const focused = focusId ? await store.collection("product_reviews").doc(focusId).get() : null;
+    if (focused && !focused.exists) return NextResponse.json({ error: "This review is no longer available." }, { status: 404 });
+    const result = focused ? { docs: [focused] } : await query.get(), page = result.docs.slice(0, 100);
     return NextResponse.json({ reviews: page.map((doc) => { const v = doc.data(); return { ...publicReview(doc.id, v), productId: v.productId, sku: v.sku, status: v.status, reason: v.reason, revision: v.revision, moderatedBy: v.moderatedBy || "", moderatedAt: reviewDate(v.moderatedAt) }; }), nextCursor: result.docs.length > 100 ? page.at(-1).id : null, updatedAt: new Date().toISOString() }, { headers: noReviewCache });
   } catch { return NextResponse.json({ error: "Reviews could not be loaded. Please retry." }, { status: 503 }); }
 }

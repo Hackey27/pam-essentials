@@ -18,7 +18,11 @@ export async function GET(request) {
       if (!snap.exists) return NextResponse.json({ error: "Refresh the inquiry list." }, { status: 400 });
       query = query.startAfter(snap);
     }
-    const snapshot = await query.get();
+    const focusId = new URL(request.url).searchParams.get("id");
+    if (focusId && !/^[0-9a-f-]{36}$/i.test(focusId)) return NextResponse.json({ error: "Choose a valid inquiry." }, { status: 400 });
+    const focused = focusId ? await store.collection("inquiries").doc(focusId).get() : null;
+    if (focused && !focused.exists) return NextResponse.json({ error: "This inquiry is no longer available." }, { status: 404 });
+    const snapshot = focused ? { docs: [focused] } : await query.get();
     const page = snapshot.docs.slice(0, 100);
     const inquiries = page.map((doc) => {
       const value = doc.data();

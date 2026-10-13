@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { adminDb, requireRole } from "@/lib/admin";
 import { serializeDoc } from "@/lib/productData";
 import { categoryLabels, loadHierarchy } from "@/lib/categoryHierarchy";
+import { documentVersion } from "@/lib/documentVersion.mjs";
+import { requiresPricingInquiry } from "@/lib/productPricing.mjs";
 import { currentShopAddress } from "@/lib/shopAddress.mjs";
 
 export const dynamic = "force-dynamic";
@@ -26,7 +28,7 @@ export async function GET(request) {
     isAdmin ? store.collection("deal_bundles").get() : Promise.resolve({ docs: [] }),
   ]);
 
-  const fullProducts = productsSnap.docs.map(serializeDoc).map((product) => ({ ...product, ...categoryLabels(product, hierarchy) })).sort((a, b) => a.name.localeCompare(b.name));
+  const fullProducts = productsSnap.docs.map((doc) => ({ ...serializeDoc(doc), editVersion: documentVersion(doc) })).map((product) => ({ ...product, ...categoryLabels(product, hierarchy) })).sort((a, b) => a.name.localeCompare(b.name));
   const products = isAdmin ? fullProducts : fullProducts.map(({ costPrice, wholesalePackPrice, ...product }) => product);
   const orders = ordersSnap.docs.map(serializeDoc).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
   const movements = movementsSnap.docs.map(serializeDoc);
@@ -35,7 +37,7 @@ export async function GET(request) {
   const settings = Object.fromEntries(settingsSnap.docs.map((doc) => [doc.id, serializeDoc(doc)]));
   if (settings.STORE_LOCATION) settings.STORE_LOCATION.value = currentShopAddress(settings.STORE_LOCATION.value);
   const users = usersSnap.docs.map(serializeDoc).map(({ email = "", displayName = "", role = "", active = true, id }) => ({ id, email, displayName, role, active }));
-  const audit = auditSnap.docs.map(serializeDoc);
+  const audit = auditSnap.docs.map((doc) => ({ ...serializeDoc(doc), timestamp: doc.data().timestamp?.toDate?.()?.toISOString?.() || doc.data().timestamp || null }));
   const sales = salesSnap.docs.map(serializeDoc);
   const expenses = expensesSnap.docs.map(serializeDoc);
   const dealBundles = dealsSnap.docs.map(serializeDoc).map((deal) => ({ ...deal, aggregatePrice: Math.round((deal.productIds || []).reduce((sum, id) => sum + Number(fullProducts.find((product) => product.id === id)?.price || 0), 0) * 100) / 100 }));
@@ -43,7 +45,8 @@ export async function GET(request) {
   const metrics = {
     products: fullProducts.length,
     active: fullProducts.filter((p) => p.active !== false && !p.archived && Number(p.price) > 0).length,
-    needsPricing: fullProducts.filter((p) => !(Number(p.price) > 0)).length,
+    needsPricing: fullProducts.filter((p) => !(Number(p.price) > 0) && !requiresPricingInquiry(p)).length,
+    quoteProducts: fullProducts.filter(requiresPricingInquiry).length,
     lowStock: fullProducts.filter((p) => Number(p.price) > 0 && Number(p.stock) > 0 && Number(p.stock) <= Number(p.lowStockLevel || 8)).length,
     outOfStock: fullProducts.filter((p) => Number(p.price) > 0 && Number(p.stock) <= 0).length,
     openOrders: orders.filter((o) => !["completed", "cancelled"].includes(o.status)).length,
@@ -60,4 +63,3 @@ export async function GET(request) {
 
   return NextResponse.json({ products, orders, movements, categories, subcategories, subSubcategories, discounts, dealBundles, settings, users, audit, sales, expenses, metrics, permissions: { isAdmin } });
 }
-

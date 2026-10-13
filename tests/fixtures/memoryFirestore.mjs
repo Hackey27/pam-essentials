@@ -32,11 +32,22 @@ export function memoryFirestore(seed) {
   });
   const snap = (name, id) => ({ id, ref: ref(name, id), updateTime: version(name, id) || -1, exists: table(name).has(id), data: () => table(name).get(id) });
   return {
-    collection(name) { return {
-      doc(id) { return ref(name, id || `test-auto-${nextId++}`); },
-      async get() { return { docs: [...table(name).keys()].map((id) => snap(name, id)) }; },
-      where(field, op, value) { if (op !== "==") throw new Error("Unsupported query"); return { async get() { return { docs: [...table(name).keys()].filter((id) => table(name).get(id)?.[field] === value).map((id) => snap(name, id)) }; } }; },
-    }; },
+    collection(name) {
+      const query = (filters = [], sort = null, cap = Infinity, cursor = null) => ({
+        doc(id) { return ref(name, id || `test-auto-${nextId++}`); },
+        where(field, op, value) { if (!["==", "in"].includes(op)) throw new Error("Unsupported query"); return query([...filters, [field, op, value]], sort, cap, cursor); },
+        orderBy(field, direction = "asc") { return query(filters, [field, direction], cap, cursor); },
+        limit(value) { return query(filters, sort, value, cursor); },
+        startAfter(value) { return query(filters, sort, cap, value); },
+        async get() {
+          let ids = [...table(name).keys()].filter((id) => filters.every(([field, op, value]) => op === "==" ? table(name).get(id)?.[field] === value : value.includes(table(name).get(id)?.[field])));
+          if (sort) { const [field, direction] = sort; ids = ids.filter((id) => table(name).get(id)?.[field] !== undefined); const val = (id) => { const v = table(name).get(id)[field]; return v?.toDate?.()?.getTime() ?? (v instanceof Date ? v.getTime() : v); }; ids.sort((a, b) => { const x = val(a), y = val(b), delta = typeof x === "number" && typeof y === "number" ? x-y : String(x).localeCompare(String(y)); return (direction === "desc" ? -delta : delta) || a.localeCompare(b); }); }
+          if (cursor) ids = ids.slice(ids.indexOf(cursor.id) + 1);
+          return { docs: ids.slice(0, cap).map((id) => snap(name, id)) };
+        },
+      });
+      return query();
+    },
     batch() {
       const operations = [];
       return {
