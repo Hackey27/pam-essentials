@@ -19,7 +19,7 @@ export default function PosExpenses({ user, shift }) {
     const token = await user.getIdToken();
     const response = await fetch(url, { ...options, headers: { ...(options.headers || {}), authorization: `Bearer ${token}` } });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "Expense request failed.");
+    if (!response.ok) { const error = new Error(data.error || "Expense request failed."); error.status = response.status; throw error; }
     return data;
   }
 
@@ -50,7 +50,7 @@ export default function PosExpenses({ user, shift }) {
       setForm((current) => ({ ...current, description: "", amount: "" }));
       setNotice("Expense recorded for this shift.");
       await load();
-    } catch (err) { setError(err.message || "Expense could not be saved."); }
+    } catch (err) { if (err.status === 400) expenseAttempt.current = null; setError(err.message || "Expense could not be saved."); }
     finally { saveAction.current = false; setSaving(false); }
   }
 
