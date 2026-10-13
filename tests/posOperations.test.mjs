@@ -1,11 +1,25 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {cashCents,cashPosition,restoreBasket,basketDraft,validateDraft,capturedPricing} from "../lib/posOperations.mjs";
+import {cashCents,cashPosition,restoreBasket,basketDraft,validateDraft,capturedPricing,correctionCashImpact} from "../lib/posOperations.mjs";
 import {receiptSnapshot,formatReceiptText} from "../lib/receiptData.mjs";
 test("drawer calculations use integer cents, net cash sales, cash expenses and movements",()=>{
- assert.deepEqual(cashPosition({openingCash:100.1,cashLedgerVersion:1,paymentMix:{cash:45.23,"mobile-money":100},cashExpenses:5.1,cashMovementNet:-20}),{openingRecorded:true,openingCash:100.1,cashSales:45.23,cashExpenses:5.1,cashMovementNet:-20,expectedCash:120.23});
+ assert.deepEqual(cashPosition({openingCash:100.1,cashLedgerVersion:1,paymentMix:{cash:45.23,"mobile-money":100},cashExpenses:5.1,cashMovementNet:-20}),{openingRecorded:true,openingCash:100.1,cashSales:45.23,cashExpenses:5.1,cashMovementNet:-20,cashCorrectionNet:0,cashChangePaid:0,expectedCash:120.23});
  assert.equal(cashPosition({paymentMix:{cash:10}},[{paymentMethod:"cash",amount:2},{paymentMethod:"card",amount:30}]).expectedCash,8);
  for(const amount of [null,"",NaN,Infinity,-1,1.001,[],{},true," "])assert.throws(()=>cashCents(amount));assert.equal(cashCents("12.30"),1230);
+});
+test("corrections distinguish missing payments, drawer refunds and outside refunds",()=>{
+ const cash={shiftId:"S",paymentMethod:"cash",total:20},card={...cash,paymentMethod:"card"};
+ assert.deepEqual(correctionCashImpact(cash,"not-collected","M"),{currentDelta:20,sourceDelta:-20});
+ assert.deepEqual(correctionCashImpact(cash,"not-collected","S"),{currentDelta:0,sourceDelta:0});
+ assert.deepEqual(correctionCashImpact(cash,"cash-refund","M"),{currentDelta:0,sourceDelta:0});
+ assert.deepEqual(correctionCashImpact(cash,"external-refund","M"),{currentDelta:20,sourceDelta:0});
+ assert.deepEqual(correctionCashImpact(card,"cash-refund","M"),{currentDelta:-20,sourceDelta:0});
+ assert.deepEqual(correctionCashImpact(card,"external-refund","M"),{currentDelta:0,sourceDelta:0});
+ assert.deepEqual(correctionCashImpact({...card,cashChangePaid:5},"not-collected","M"),{currentDelta:0,sourceDelta:5});
+ assert.equal(cashPosition({openingCash:100,cashChangePaid:5}).expectedCash,95);
+ assert.equal(cashPosition({openingCash:100,cashChangePaid:5,cashCorrectionNet:5}).expectedCash,100);
+ assert.equal(cashPosition({openingCash:100},[{paymentMethod:"cash",amount:10,fromTill:false}]).expectedCash,100);
+ assert.throws(()=>correctionCashImpact(cash,"","M"));
 });
 test("basket recovery preserves exact SKU, bounds stock and discards payment confirmation",()=>{
  const draft=basketDraft({cart:[{id:"A",name:"Pink 500ml",quantity:4,price:20},{id:"B",name:"Blue",quantity:1,price:10}],staffId:"cashier",shift:{shiftId:"S1"},orderChannel:"walk-in",attemptId:"attempt-123"});

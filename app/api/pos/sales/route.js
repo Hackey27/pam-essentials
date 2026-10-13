@@ -150,6 +150,9 @@ export async function POST(request) {
       const tendered = Number(body.amountPaid);
       if (!Number.isFinite(tendered) || tendered < total) throw new Error("Amount paid cannot be less than the sale total.");
       const change = Math.round((tendered - total) * 100) / 100;
+      const cashChangeSource = body.cashChangeSource || "cash";
+      if (!["cash","payment-method"].includes(cashChangeSource)) throw new Error("Choose how change was returned.");
+      const cashChangePaid = paymentMethod !== "cash" && cashChangeSource === "cash" ? change : 0;
       if (!offlineFinal) tx.set(sequenceRef, { lastNumber: receiptNumber, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
       const saleData = {
         receiptId,
@@ -163,6 +166,8 @@ export async function POST(request) {
         paymentMethod,
         amountPaid: tendered,
         change,
+        cashChangeSource,
+        cashChangePaid,
         salesChannel,
         orderReference,
         customerName,
@@ -182,6 +187,7 @@ export async function POST(request) {
       if (reconciliation) tx.create(store.collection("admin_audit").doc(), auditPayload(access.user, "RECONCILE_OFFLINE_SALE", "sale", transactionId, text(reconciliation.reason, 500), { currentTotal: currentPricing.total }, { capturedTotal: pricing.total, receiptId, shiftId }));
       if (shiftSnap.data().aggregationVersion === 1) tx.update(shiftRef, { transactionCount: FieldValue.increment(1), salesTotal: FieldValue.increment(total), [`paymentMix.${paymentMethod}`]: FieldValue.increment(total) });
       else tx.update(shiftRef, { lastSaleAt: FieldValue.serverTimestamp() });
+      if (cashChangePaid) tx.update(shiftRef, { cashChangePaid: FieldValue.increment(cashChangePaid) });
       return { ...receiptSnapshot({ ...saleData, createdAt: new Date().toISOString() }), duplicate: false };
     });
     return NextResponse.json(result);
