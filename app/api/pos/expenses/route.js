@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { adminDb, requireRole } from "@/lib/admin";
 import { auditPayload, nullableNumber, text } from "@/lib/serverData";
 import { serializeDoc } from "@/lib/productData";
+import { cashCents } from "@/lib/posOperations.mjs";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +35,7 @@ export async function POST(request) {
   const store = adminDb();
   if (!await activeShift(store, shiftId, access.user.uid)) return NextResponse.json({ error: "An open shift is required." }, { status: 403 });
   const amount = nullableNumber(body.amount);
+  try { cashCents(body.amount); } catch (e) { return NextResponse.json({ error: e.message }, { status: 400 }); }
   const description = text(body.description, 500);
   const category = text(body.category, 100);
   const paymentMethod = text(body.paymentMethod, 40);
@@ -55,10 +57,18 @@ export async function POST(request) {
     createdAt: expenseDate === today ? FieldValue.serverTimestamp() : Timestamp.fromDate(new Date(`${expenseDate}T12:00:00Z`)),
     recordedAt: FieldValue.serverTimestamp(),
   };
-  const batch = store.batch();
-  batch.create(ref, value);
-  batch.create(store.collection("admin_audit").doc(), auditPayload(access.user, "RECORD_EXPENSE", "expense", ref.id, `Recorded ${amount.toFixed(2)} expense for ${description}.`, null, value));
-  await batch.commit();
-  return NextResponse.json({ ok: true, expenseId: ref.id });
+  const requestId = text(body.requestId, 120);
+  const target = requestId && /^[a-zA-Z0-9-]{8,120}$/.test(requestId) ? store.collection("expenses").doc(requestId) : ref;
+  value.expenseId = target.id;
+  try {
+    await store.runTransaction(async tx => {
+      const [shift, existing] = await tx.getAll(store.collection("shifts").doc(shiftId), target);
+      if (!shift.exists || shift.data().status !== "open" || shift.data().staffId !== access.user.uid) throw new Error("Your shift has ended. Expense was not saved.");
+      if (existing.exists) { const old=existing.data(); if (old.staffId !== access.user.uid || old.shiftId !== shiftId || old.amount!==amount || old.description!==description || old.paymentMethod!==paymentMethod || old.category!==category || old.expenseDate!==expenseDate) throw new Error("Expense reference is already in use for different details."); return; }
+      tx.create(target, value);
+      if (paymentMethod === "cash" && shift.data().cashLedgerVersion === 1) tx.update(shift.ref, { cashExpenses: Math.round((Number(shift.data().cashExpenses || 0) + amount) * 100) / 100 });
+      tx.create(store.collection("admin_audit").doc(), auditPayload(access.user, "RECORD_EXPENSE", "expense", target.id, `Recorded ${amount.toFixed(2)} expense for ${description}.`, null, value));
+    });
+  } catch (e) { return NextResponse.json({ error: e.message }, { status: 409 }); }
+  return NextResponse.json({ ok: true, expenseId: target.id });
 }
-

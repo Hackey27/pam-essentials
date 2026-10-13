@@ -9,6 +9,10 @@ import PosTill from "@/components/PosTill";
 import PosReceipts from "@/components/PosReceipts";
 import PosExpenses from "@/components/PosExpenses";
 import PosOrders from "@/components/PosOrders";
+import PosShiftCash from "@/components/PosShiftCash";
+import PosSyncCentre from "@/components/PosSyncCentre";
+import PosBasketTools from "@/components/PosBasketTools";
+import usePosBaskets from "@/components/usePosBaskets";
 import { planPosScan, planScannedProduct } from "@/lib/scannerWorkflow.mjs";
 import ReceiptPanel from "@/components/ReceiptPanel";
 import { priceCart } from "@/lib/commerce";
@@ -17,7 +21,7 @@ import { offlineSaleReceipt } from "@/lib/offlineSale.mjs";
 import { applyPendingOrderActions } from "@/lib/offlineOrder.mjs";
 
 const money = new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS" });
-const navIcons = { dashboard: "▦", sale: "+", orders: "☷", receipts: "▤", inventory: "▥", expenses: "◫", admin: "⚙" };
+const navIcons = { dashboard: "▦", sale: "+", orders: "☷", receipts: "▤", inventory: "▥", expenses: "◫", cash: "₵", sync: "↻", admin: "⚙" };
 
 function Till() {
   const { user, role } = useAuth();
@@ -74,11 +78,39 @@ function Till() {
   const [customerPhone, setCustomerPhone] = useState("");
   const [transactionVerified, setTransactionVerified] = useState(false);
   const [confirmSale, setConfirmSale] = useState(false);
+  const [openingCash, setOpeningCash] = useState("0");
+  const [shortcut, setShortcut] = useState(null);
+  const [shortcutHelp, setShortcutHelp] = useState(false);
 
   async function request(url, options = {}) {
     const token = await user.getIdToken();
     return fetch(url, { ...options, headers: { ...(options.headers || {}), authorization: `Bearer ${token}` } });
   }
+
+  function clearBasketFields() { setCart([]); setOrderReference(""); setOrderChannel("walk-in"); setCustomerName(""); setCustomerPhone(""); setAmountPaid(""); setTransactionVerified(false); saleAttempt.current = null; }
+  const baskets = usePosBaskets({ user, shift, cart, orderChannel, orderReference, customerName, customerPhone, request, attempt: saleAttempt,
+    onRestore: (draft, restored, fresh) => { setProducts(fresh.products || []); setDiscountRules(fresh.discountRules || []); setDealBundles(fresh.dealBundles || []); setCart(restored); setOrderChannel(draft.orderChannel || "walk-in"); setOrderReference(draft.orderReference || ""); setCustomerName(draft.customerName || ""); setCustomerPhone(draft.customerPhone || ""); setAmountPaid(""); setTransactionVerified(false); setPaymentMethod("cash"); saleAttempt.current = draft.attemptId ? { transactionId: draft.attemptId, fingerprint: null, uncertain: false } : null; setView("sale"); setCartNotice("Restored with current stock, prices and promotions. Review the total and enter payment again."); },
+    onFoundSale: (saved) => { clearBasketFields(); setReceipt(saved); }
+  });
+  function holdSale(name) { if (!baskets.hold(name)) return false; clearBasketFields(); return true; }
+  function basketEditable() { if (baskets.recovery) { setError("Recover or discard the unfinished basket before starting another."); return false; } if (saleAttempt.current?.uncertain) { setError("A sale attempt is awaiting confirmation. Check sale status before changing this basket."); return false; } return true; }
+  async function checkAttempt() {
+    if (!saleAttempt.current || busy) return;
+    setBusy(true); setError("");
+    try { const response=await request(`/api/pos/sales?transactionId=${encodeURIComponent(saleAttempt.current.transactionId)}`),data=await response.json();if(!response.ok)throw new Error(data.error);if(data.found){baskets.finish();clearBasketFields();setReceipt(data.receipt);await loadProducts();}else{saleAttempt.current.uncertain=false;setCartNotice("No saved receipt was found. Review this basket before retrying; its original transaction reference will be retained.");} }
+    catch(e){setError(e.message||"Sale status could not be checked. Keep this basket.");}finally{setBusy(false);}
+  }
+  useEffect(() => {
+    if (!shift || locked) return;
+    function keys(event) {
+      if (event.ctrlKey || event.altKey || event.metaKey || event.repeat || !["F2","F3","F4","F8","F9"].includes(event.key)) return;
+      if (document.querySelector('[role="dialog"]')) { if (event.key === "F9" && receipt && !cart.length) { event.preventDefault(); setReceipt(null); setView("sale"); } return; }
+      event.preventDefault();
+      if (event.key === "F9") { if (cart.length) { setCartNotice("Hold the current sale before starting another."); return; } setReceipt(null); setView("sale"); setShortcut({key:"F2",at:Date.now()}); return; }
+      setView("sale"); setShortcut({key:event.key,at:Date.now()});
+    }
+    window.addEventListener("keydown",keys); return () => window.removeEventListener("keydown",keys);
+  }, [shift?.shiftId,locked,cart.length,receipt]);
 
   async function loadProducts() {
     try {
@@ -151,7 +183,7 @@ function Till() {
       if (staffEmail.trim().toLowerCase() !== String(user?.email || "").toLowerCase()) throw new Error("Sign in with the account currently assigned to this till.");
       await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, staffPassword));
       if (!shift) {
-        const response = await request("/api/pos/shifts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "open", deviceId }) });
+        const response = await request("/api/pos/shifts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "open", deviceId, openingCash }) });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || "Shift could not be started.");
         setShift(data.shift);
@@ -172,6 +204,7 @@ function Till() {
     for (let index = 0; index < queued.length; index += 1) {
       try {
         const entry = queued[index];
+        if (entry.staffId && entry.staffId !== user.uid) throw new Error("This offline sale belongs to another cashier. An owner or admin must reconcile it on this device.");
         const response = await request("/api/pos/sales", {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -179,12 +212,14 @@ function Till() {
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || "sync failed");
-        localStorage.setItem("pam-pos-queue", JSON.stringify(queued.slice(index + 1)));
-        setQueuedCount(queued.length - index - 1);
+        const acknowledged = (entry.payload || entry).transactionId;
+        const remaining = JSON.parse(localStorage.getItem("pam-pos-queue") || "[]").filter(e => (e.payload || e).transactionId !== acknowledged);
+        localStorage.setItem("pam-pos-queue", JSON.stringify(remaining));
+        setQueuedCount(remaining.length);
         setReceipt((current) => current?.id === (entry.payload || entry).transactionId ? data : current);
       } catch (err) {
-        const remaining = queued.slice(index);
-        remaining[0] = { ...remaining[0], syncError: err.message || "sync failed" };
+        const failedId = (queued[index].payload || queued[index]).transactionId;
+        const remaining = JSON.parse(localStorage.getItem("pam-pos-queue") || "[]").map(e => (e.payload || e).transactionId === failedId ? { ...e, syncError: err.message || "sync failed" } : e);
         localStorage.setItem("pam-pos-queue", JSON.stringify(remaining));
         setQueuedCount(remaining.length);
         setError(`Offline sale ${remaining[0]?.receipt?.receiptId || (remaining[0]?.payload || remaining[0])?.transactionId} needs reconciliation: ${err.message || "sync failed"}. The sale remains final at this till; do not delete browser data.`);
@@ -202,7 +237,7 @@ function Till() {
 
   function enqueueOrderAction(action) {
     const queued = JSON.parse(localStorage.getItem("pam-pos-order-queue") || "[]");
-    const next = [...queued, { ...action, actionId: crypto.randomUUID() }];
+    const next = [...queued, { ...action, actionId: crypto.randomUUID(), staffId: user.uid, createdAt: new Date().toISOString() }];
     localStorage.setItem("pam-pos-order-queue", JSON.stringify(next));
     if (JSON.parse(localStorage.getItem("pam-pos-order-queue") || "[]").length !== next.length) throw new Error("Could not safely save the offline order update.");
     setQueuedOrderCount(next.length);
@@ -219,13 +254,15 @@ function Till() {
     syncOrderAction.current = true;
     for (let index = 0; index < queued.length; index += 1) {
       try {
+        if (queued[index].staffId && queued[index].staffId !== user.uid && !["owner","admin"].includes(role)) throw new Error("This update belongs to another staff member; ask a manager to review it.");
         const response = await request("/api/admin/orders", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(queued[index]) });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || "order sync failed");
-        localStorage.setItem("pam-pos-order-queue", JSON.stringify(queued.slice(index + 1)));
-        setQueuedOrderCount(queued.length - index - 1);
+        const remaining = JSON.parse(localStorage.getItem("pam-pos-order-queue") || "[]").filter(e => e.actionId !== queued[index].actionId);
+        localStorage.setItem("pam-pos-order-queue", JSON.stringify(remaining));
+        setQueuedOrderCount(remaining.length);
       } catch (err) {
-        const remaining = queued.slice(index);
+        const remaining = JSON.parse(localStorage.getItem("pam-pos-order-queue") || "[]").map(e => e.actionId === queued[index].actionId ? { ...e, syncError: err.message || "sync failed" } : e);
         localStorage.setItem("pam-pos-order-queue", JSON.stringify(remaining));
         setError(`Offline order ${remaining[0].orderId} needs reconciliation: ${err.message || "sync failed"}. Keep this device and its browser data.`);
         syncOrderAction.current = false;
@@ -309,6 +346,7 @@ function Till() {
   const paymentReady = Number.isFinite(tendered) && tendered >= total && (paymentMethod === "cash" || transactionVerified);
 
   function add(product) {
+    if (!basketEditable()) return;
     if (product.stock <= 0) return;
     setCartNotice("");
     setCart((current) => {
@@ -354,10 +392,12 @@ function Till() {
   }
 
   function change(id, delta) {
+    if (!basketEditable()) return;
     setCartNotice("");
     setCart((current) => current.map((item) => item.id === id ? { ...item, quantity: Math.min(item.stock, Math.max(0, item.quantity + delta)) } : item).filter((item) => item.quantity));
   }
   function setQuantity(id, quantity) {
+    if (!basketEditable()) return;
     if (!Number.isInteger(quantity) || quantity < 1) return;
     setCartNotice("");
     setCart((current) => current.map((item) => item.id === id ? { ...item, quantity: Math.max(1, Math.min(Number(item.stock), quantity)) } : item));
@@ -368,7 +408,7 @@ function Till() {
     const localReceipt = offlineSaleReceipt({ transactionId, cart, pricing, shift, staffEmail: user?.email || "", staffName: shift?.staffName || user?.displayName || "", paymentMethod, amountPaid: tendered, salesChannel: orderChannel, orderReference, customerName, customerPhone });
     const payload = { transactionId, offlineFinal: true, offlineTotal: total, paymentMethod, transactionVerified, salesChannel: orderChannel, orderReference: orderReference || null, customerName, customerPhone, amountPaid: tendered, shiftId: shift.shiftId, deviceId, items: cart.map(({ id, quantity }) => ({ id, quantity })) };
     const queued = JSON.parse(localStorage.getItem("pam-pos-queue") || "[]");
-    const next = [...queued, { payload, receipt: localReceipt, createdAt: localReceipt.createdAt }];
+    const next = [...queued, { payload, receipt: localReceipt, createdAt: localReceipt.createdAt, staffId: user.uid }];
     localStorage.setItem("pam-pos-queue", JSON.stringify(next));
     if (JSON.parse(localStorage.getItem("pam-pos-queue") || "[]").length !== next.length) throw new Error("Could not safely store this offline sale. Do not take payment until device storage is available.");
     navigator.storage?.persist?.()?.catch(() => {});
@@ -380,6 +420,7 @@ function Till() {
       localStorage.setItem("pam-pos-catalogue", JSON.stringify({ products: adjustedProducts, categories: categoryList, discountRules, dealBundles }));
     } catch { catalogueCacheWarning = true; }
     setQueuedCount(next.length);
+    baskets.finish();
     setReceipt(localReceipt);
     saleAttempt.current = null;
     setConfirmSale(false);
@@ -389,6 +430,7 @@ function Till() {
   }
 
   function openOrderAtTill(order) {
+    if (!basketEditable() || cart.length) { setError("Hold the current basket before opening an order at the till."); return; }
     const nextCart = [];
     for (const line of order.items || []) {
       const product = products.find((item) => item.id === line.productId);
@@ -413,10 +455,17 @@ function Till() {
     if (!shift) { setError("Open a till shift before checkout."); return; }
     if (!referenceReady) { setError("Add an order reference or the customer name and phone for this sales channel."); return; }
     if (!paymentReady) { setError("Enter the amount paid and verify electronic payment before completing the sale."); return; }
+    if (!online && saleAttempt.current) { setError("Reconnect to confirm the previous sale attempt before recording another payment."); return; }
     if (!online) { try { finalizeOfflineSale(); } catch (err) { setError(err.message || "Offline sale could not be stored."); } return; }
     checkoutAction.current = true;
     setBusy(true); setError("");
     try {
+      if (saleAttempt.current) {
+        const checkResponse = await request(`/api/pos/sales?transactionId=${encodeURIComponent(saleAttempt.current.transactionId)}`), check = await checkResponse.json();
+        if (!checkResponse.ok) throw new Error(check.error || "Previous sale status could not be checked.");
+        if (check.found) { baskets.finish(); clearBasketFields(); setConfirmSale(false); setReceipt(check.receipt); await loadProducts(); return; }
+        saleAttempt.current.uncertain = false;
+      }
       const fingerprint = JSON.stringify({ cart: cart.map(({ id, quantity }) => [id, quantity]), paymentMethod, tendered, orderChannel, orderReference, customerName, customerPhone });
       if (saleAttempt.current?.fingerprint !== fingerprint) {
       const freshResponse = await request("/api/pos/products");
@@ -428,18 +477,21 @@ function Till() {
       setProducts(fresh.products || []); setDiscountRules(fresh.discountRules || []); setDealBundles(fresh.dealBundles || []);
       if (changed || freshPricing.total !== total) {
         setCart(cart.map((item) => freshMap.has(item.id) ? { ...freshMap.get(item.id), quantity: Math.min(item.quantity, freshMap.get(item.id).stock) } : { ...item, stock: 0 }).filter((item) => item.quantity > 0 && item.stock > 0));
-        setConfirmSale(false); saleAttempt.current = null;
+        setConfirmSale(false);
         setCartNotice("Stock, price or promotion changed. The cart was refreshed. Review it before checkout.");
         throw new Error("Stock, price or promotion changed. The cart has been refreshed; review the new total before confirming.");
       }
       setCartNotice("");
       }
       const linkedOrder = orders.find((item) => item.orderId === orderReference);
-      if (saleAttempt.current?.fingerprint !== fingerprint) saleAttempt.current = { fingerprint, transactionId: crypto.randomUUID() };
+      if (saleAttempt.current?.fingerprint !== fingerprint) saleAttempt.current = { fingerprint, transactionId: saleAttempt.current?.transactionId || crypto.randomUUID() };
+      baskets.captureAttempt();
       const payload = { transactionId: saleAttempt.current.transactionId, paymentMethod, transactionVerified, salesChannel: orderChannel, orderReference: orderReference || null, customerName, customerPhone, amountPaid: tendered, shiftId: shift.shiftId, deviceId, items: cart.map(({ id, quantity }) => ({ id, quantity })) };
+      saleAttempt.current.uncertain = true;
       const response = await request("/api/pos/sales", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
       const data = await response.json();
-      if (!response.ok) { saleAttempt.current = null; setConfirmSale(false); throw new Error(data.error); }
+      if (!response.ok) { if (response.status < 500) saleAttempt.current = null; setConfirmSale(false); throw new Error(data.error); }
+      baskets.finish();
       setReceipt(data);
       saleAttempt.current = null;
       setConfirmSale(false);
@@ -495,37 +547,29 @@ function Till() {
     finally { setBusy(false); }
   }
 
-  async function toggleShift() {
-    if (!shift || shiftAction.current) return;
-    if (JSON.parse(localStorage.getItem("pam-pos-queue") || "[]").length || JSON.parse(localStorage.getItem("pam-pos-order-queue") || "[]").length) {
-      setError("Sync queued offline sales and order updates before closing this shift."); return;
-    }
-    shiftAction.current = true;
-    setBusy(true); setError("");
-    try {
-      const response = await request("/api/pos/shifts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "close", shiftId: shift.shiftId }) });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error);
-      setShift(null); setConfirmEndShift(false); setEntryOpen(false);
-      setReceipt({ receiptId: "Shift closed", total: data.shift.summary?.salesTotal || 0, shiftSummary: data.shift.summary });
-    } catch (err) { setError(err.message || "Shift could not be updated."); }
-    finally { shiftAction.current = false; setBusy(false); }
+  function prepareEndShift() {
+    if (cart.length || saleAttempt.current?.uncertain) { setError("Hold or complete the current basket and confirm any sale attempt before ending the shift."); return; }
+    if (JSON.parse(localStorage.getItem("pam-pos-queue") || "[]").length || JSON.parse(localStorage.getItem("pam-pos-order-queue") || "[]").length) { setError("Sync queued sales and order updates before closing this shift."); setView("sync"); return; }
+    setConfirmEndShift(true);
   }
+  function shiftClosed(closed) { setShift(null); setConfirmEndShift(false); setEntryOpen(false); setReceipt({ receiptId: "Shift closed", total: closed.summary?.salesTotal || 0, shiftSummary: closed.summary }); }
 
   if (!shiftLoaded) return <div className="pos-entry"><p>Loading shift status…</p></div>;
-  if (!shift || locked) return <div className="pos-entry"><div className="pos-entry-card"><button className="pos-entry-logo" onClick={() => setEntryOpen(true)} aria-label="Open staff shift sign in"><BrandLogo symbol /></button><h1>PAM Essentials &amp; More</h1><p>Sales &amp; inventory</p><p>{shift ? "Shift paused after inactivity" : "Start a shift to process sales"}</p>{entryOpen ? <form onSubmit={startOrResume}><label>Staff email<input required type="email" autoComplete="username" value={staffEmail} onChange={(event) => setStaffEmail(event.target.value)} /></label><label>Password<input required type="password" autoComplete="current-password" value={staffPassword} onChange={(event) => setStaffPassword(event.target.value)} /></label><button className="button primary full" disabled={busy || !deviceId}>{busy ? "Verifying…" : shift ? "Resume Shift" : "Start Shift"}</button></form> : <button className="button primary" onClick={() => setEntryOpen(true)}>{shift ? "Resume Shift / Sign In" : "Staff Sign In"}</button>}{receipt?.shiftSummary && <div className="pos-shift-summary"><b>Last shift</b><span>{receipt.shiftSummary.transactions} transactions · {money.format(receipt.shiftSummary.salesTotal)}</span>{Object.entries(receipt.shiftSummary.paymentMix || {}).map(([method, value]) => <span key={method}>{method.replaceAll("-", " ")}: {money.format(value)}</span>)}</div>}{error && <p className="notice error-notice" role="alert">{error}</p>}<button className="text-button" onClick={signOut}>Use another staff account</button></div></div>;
+  if (!shift || locked) return <div className="pos-entry"><div className="pos-entry-card"><button className="pos-entry-logo" onClick={() => setEntryOpen(true)} aria-label="Open staff shift sign in"><BrandLogo symbol /></button><h1>PAM Essentials &amp; More</h1><p>Sales &amp; inventory</p><p>{shift ? "Shift paused after inactivity" : "Start a shift to process sales"}</p>{entryOpen ? <form onSubmit={startOrResume}><label>Staff email<input required type="email" autoComplete="username" value={staffEmail} onChange={(event) => setStaffEmail(event.target.value)} /></label><label>Password<input required type="password" autoComplete="current-password" value={staffPassword} onChange={(event) => setStaffPassword(event.target.value)} /></label>{!shift && <label>Opening cash float (GH₵)<input required type="number" min="0" step="0.01" value={openingCash} onChange={event => setOpeningCash(event.target.value)} /></label>}<button className="button primary full" disabled={busy || !deviceId}>{busy ? "Verifying…" : shift ? "Resume Shift" : "Start Shift"}</button></form> : <button className="button primary" onClick={() => setEntryOpen(true)}>{shift ? "Resume Shift / Sign In" : "Staff Sign In"}</button>}{receipt?.shiftSummary && <div className="pos-shift-summary"><b>Last shift</b>{receipt.shiftSummary.cashReconciliation && <><span>Expected cash: {money.format(receipt.shiftSummary.cashReconciliation.expectedCash)}</span><span>Counted: {money.format(receipt.shiftSummary.cashReconciliation.countedCash)}</span><span>Difference: {money.format(receipt.shiftSummary.cashReconciliation.variance)}</span></>}<span>{receipt.shiftSummary.transactions} transactions · {money.format(receipt.shiftSummary.salesTotal)}</span>{Object.entries(receipt.shiftSummary.paymentMix || {}).map(([method, value]) => <span key={method}>{method.replaceAll("-", " ")}: {money.format(value)}</span>)}</div>}{error && <p className="notice error-notice" role="alert">{error}</p>}<button className="text-button" onClick={signOut}>Use another staff account</button></div></div>;
 
   return <div className={`pos-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
-    <aside className={"pos-sidebar " + (sidebarOpen ? "open" : "")}><div className="pos-sidebar-brand"><a href="/" className="admin-brand" aria-label="PAM Essentials home"><BrandLogo background="navy" /></a><small>Sales &amp; inventory</small></div><nav aria-label="POS navigation">{[["dashboard", "Dashboard"], ["sale", "New Sale"], ["orders", "Orders"], ["receipts", "Receipts"], ...(["owner", "admin", "supervisor"].includes(role) ? [["inventory", "Inventory"]] : []), ["expenses", "Expenses"], ...(["owner", "admin"].includes(role) ? [["admin", "Admin"]] : [])].map(([id, label]) => <button key={id} title={label} aria-label={label} className={view === id ? "active" : ""} onClick={() => { if (id === "admin") window.location.href = "/admin"; else setView(id); setSidebarOpen(false); setSidebarCollapsed(true); }}><span className="pos-nav-icon" aria-hidden="true">{navIcons[id]}</span><span className="pos-nav-label">{label}</span>{id === "orders" && openOrderCount > 0 && <b className={`pos-order-badge ${orderNotice ? "arrived" : ""}`}>{openOrderCount}</b>}</button>)}</nav></aside>
-    <header className="pos-header"><div className="pos-header-title"><button className="pos-menu-button" aria-label="Toggle POS navigation" onClick={() => setSidebarOpen((open) => !open)}>☰</button><div><h2>{({ dashboard: "Dashboard", sale: "New Sale", orders: "Orders", receipts: "Receipts", inventory: "Inventory", expenses: "Expenses" })[view]}</h2><p>{view === "dashboard" ? "Current sales and stock health" : view === "receipts" ? "Search and reprint saved sales" : view === "sale" ? "Find products and complete a sale" : "Sales & inventory"}</p></div></div><div className="pos-actions"><span className={online ? "connection online" : "connection offline"}>{syncing ? "Syncing sales…" : online ? "Online" : "Offline"}</span><span className="pos-staff">{user?.email} · {role?.toUpperCase()}<small>Shift started {shift.startedAt ? new Date(shift.startedAt).toLocaleTimeString("en-GH", { hour: "numeric", minute: "2-digit" }) : "—"}</small></span><time>{clock.toLocaleString("en-GH", { dateStyle: "short", timeStyle: "short" })}</time><button className="button secondary" onClick={() => { loadProducts(); loadOrders(); loadShift(); }}>Refresh</button><button className="shift-button open" onClick={() => setConfirmEndShift(true)} disabled={busy}>End Shift</button></div></header>
+    <aside className={"pos-sidebar " + (sidebarOpen ? "open" : "")}><div className="pos-sidebar-brand"><a href="/" className="admin-brand" aria-label="PAM Essentials home"><BrandLogo background="navy" /></a><small>Sales &amp; inventory</small></div><nav aria-label="POS navigation">{[["dashboard", "Dashboard"], ["sale", "New Sale"], ["orders", "Orders"], ["receipts", "Receipts"], ...(["owner", "admin", "supervisor"].includes(role) ? [["inventory", "Inventory"]] : []), ["expenses", "Expenses"], ["cash", "Shift cash"], ["sync", "Sync centre"], ...(["owner", "admin"].includes(role) ? [["admin", "Admin"]] : [])].map(([id, label]) => <button key={id} title={label} aria-label={label} className={view === id ? "active" : ""} onClick={() => { if (id === "admin") window.location.href = "/admin"; else setView(id); setSidebarOpen(false); setSidebarCollapsed(true); }}><span className="pos-nav-icon" aria-hidden="true">{navIcons[id]}</span><span className="pos-nav-label">{label}</span>{id === "orders" && openOrderCount > 0 && <b className={`pos-order-badge ${orderNotice ? "arrived" : ""}`}>{openOrderCount}</b>}</button>)}</nav></aside>
+    <header className="pos-header"><div className="pos-header-title"><button className="pos-menu-button" aria-label="Toggle POS navigation" onClick={() => { if (window.matchMedia("(min-width: 901px)").matches) setSidebarCollapsed(v => !v); else setSidebarOpen(v => !v); }}>☰</button><div><h2>{({ dashboard: "Dashboard", sale: "New Sale", orders: "Orders", receipts: "Receipts", inventory: "Inventory", expenses: "Expenses", cash: "Shift cash", sync: "Sync centre" })[view]}</h2><p>{view === "dashboard" ? "Current sales and stock health" : view === "receipts" ? "Search and reprint saved sales" : view === "sale" ? "Find products and complete a sale" : "Sales & inventory"}</p></div></div><div className="pos-actions"><span className={online ? "connection online" : "connection offline"}>{syncing ? "Syncing sales…" : online ? "Online" : "Offline"}</span><span className="pos-staff">{shift.staffName || user?.displayName || user?.email} · {role?.toUpperCase()}<small>Shift started {shift.startedAt ? new Date(shift.startedAt).toLocaleTimeString("en-GH", { hour: "numeric", minute: "2-digit" }) : "—"}</small></span><time>{clock.toLocaleString("en-GH", { dateStyle: "short", timeStyle: "short" })}</time><button className="button secondary" onClick={() => { setError(""); loadProducts(); loadOrders(); loadShift(); }}>Refresh</button><button className="shift-button open" onClick={prepareEndShift} disabled={busy}>End Shift</button></div></header>
     {(!online || queuedCount > 0 || queuedOrderCount > 0) && <div className="offline-banner">{!online ? "Offline till: sales and order updates finalize locally and sync when connected." : `${queuedCount} finalized ${queuedCount === 1 ? "sale" : "sales"} and ${queuedOrderCount} order ${queuedOrderCount === 1 ? "update" : "updates"} awaiting sync.`} {(queuedCount > 0 || queuedOrderCount > 0) && <button type="button" onClick={() => { flushQueue(); flushOrderQueue(); }} disabled={!online || syncing}>{syncing ? "Syncing…" : "Retry sync"}</button>} Do not clear this browser&apos;s data until everything syncs.</div>}
     {error && <div className="pos-global-error notice error-notice" role="alert">{error}</div>}
     {offlineNotice && <div className="pos-global-error notice success-notice" role="status"><span>{offlineNotice}</span><button type="button" onClick={() => setOfflineNotice("")} aria-label="Dismiss offline notice">×</button></div>}
     {orderNotice && view !== "orders" && <div className="pos-global-error notice success-notice pos-order-notice" role="status"><span>{orderNotice}</span><button type="button" onClick={() => { setView("orders"); setOrderNotice(""); }}>View orders</button></div>}
-    {view === "dashboard" ? <PosDashboard user={user} role={role} onNewSale={() => setView("sale")} onScan={() => { setView("sale"); setTimeout(() => barcodeInput.current?.focus(), 0); }} onOrders={() => setView("orders")} onInventory={() => setView("inventory")} onExpense={() => setView("expenses")} /> : view === "inventory" ? <main className="pos-simple-view"><h1>Inventory</h1><p>Current priced products and stock status.</p><div className="data-table-wrap"><table className="data-table"><thead><tr><th>Product</th><th>SKU</th><th>Stock</th><th>Status</th></tr></thead><tbody>{products.map((product) => <tr key={product.id}><td>{product.name}</td><td>{product.id}</td><td>{product.stock}</td><td><span className={product.stock <= 0 ? "badge danger" : product.stock < Number(product.lowStockLevel ?? 8) ? "badge warning" : "badge success"}>{product.stock <= 0 ? "Out of stock" : product.stock < Number(product.lowStockLevel ?? 8) ? "Low stock" : "In stock"}</span></td></tr>)}</tbody></table></div></main> : view === "expenses" ? <PosExpenses user={user} shift={shift} /> : view === "receipts" ? <PosReceipts user={user} onNewSale={() => setView("sale")} /> : view === "sale" ?
-      <PosTill products={products} scanPrompt={scanPrompt} scanFeedback={scanFeedback} dismissScanPrompt={dismissScanPrompt} confirmScanIncrease={confirmScanIncrease} onSelectScannedProduct={chooseScannedProduct} shift={shift} role={role} query={query} setQuery={setQuery} barcode={barcode} setBarcode={setBarcode} barcodeInput={barcodeInput} scanBarcode={scanBarcode} onScannedCode={resolveScannedCode} scanMatches={scanMatches} setScanMatches={setScanMatches} category={category} setCategory={setCategory} categories={categories} stockFilter={stockFilter} setStockFilter={setStockFilter} visible={visible} add={add} cart={cart} setCart={setCart} cartNotice={cartNotice} setCartNotice={setCartNotice} change={change} setQuantity={setQuantity} pricing={pricing} discountRules={discountRules} orderReference={orderReference} setOrderReference={setOrderReference} orderChannel={orderChannel} setOrderChannel={setOrderChannel} customerName={customerName} setCustomerName={setCustomerName} customerPhone={customerPhone} setCustomerPhone={setCustomerPhone} paymentMethod={paymentMethod} setPaymentMethod={setPaymentMethod} amountPaid={amountPaid} setAmountPaid={setAmountPaid} transactionVerified={transactionVerified} setTransactionVerified={setTransactionVerified} changeDue={changeDue} paymentReady={paymentReady} referenceReady={referenceReady} online={online} busy={busy} setConfirmSale={setConfirmSale} /> : <PosOrders role={role} orders={orders} products={products} visibleOrders={visibleOrders} orderQuery={orderQuery} setOrderQuery={setOrderQuery} orderStatus={orderStatus} setOrderStatus={setOrderStatus} busy={busy} error={error} openOrderAtTill={openOrderAtTill} updateOrder={updateOrder} confirmOrderItem={confirmOrderItem} newOrderNotice={orderNotice} clearNewOrderNotice={() => setOrderNotice("")} />}
+    <PosBasketTools pendingAttempt={Boolean(saleAttempt.current?.uncertain)} onCheckAttempt={checkAttempt} baskets={baskets} cart={cart} onHold={holdSale} busy={busy} />
+    <div className="pos-shortcuts"><button type="button" className="text-button" onClick={() => setShortcutHelp(v => !v)} aria-expanded={shortcutHelp}>Keyboard shortcuts</button>{shortcutHelp && <span>F2 Search · F3 Barcode · F4 Basket · F8 Payment · F9 New sale. Payment still requires confirmation.</span>}</div>
+    {view === "cash" ? <PosShiftCash request={request} shift={shift} /> : view === "sync" ? <PosSyncCentre request={request} role={role} online={online} syncing={syncing} onRetrySales={flushQueue} onRetryOrders={flushOrderQueue} onResolved={() => { setError(""); setOfflineNotice(""); setQueuedCount(JSON.parse(localStorage.getItem("pam-pos-queue") || "[]").length); loadProducts(); loadShift(); }} /> : view === "dashboard" ? <PosDashboard user={user} role={role} onNewSale={() => setView("sale")} onScan={() => { setView("sale"); setTimeout(() => barcodeInput.current?.focus(), 0); }} onOrders={() => setView("orders")} onInventory={() => setView("inventory")} onExpense={() => setView("expenses")} /> : view === "inventory" ? <main className="pos-simple-view"><h1>Inventory</h1><p>Current priced products and stock status.</p><div className="data-table-wrap"><table className="data-table"><thead><tr><th>Product</th><th>SKU</th><th>Stock</th><th>Status</th></tr></thead><tbody>{products.map((product) => <tr key={product.id}><td>{product.name}</td><td>{product.id}</td><td>{product.stock}</td><td><span className={product.stock <= 0 ? "badge danger" : product.stock < Number(product.lowStockLevel ?? 8) ? "badge warning" : "badge success"}>{product.stock <= 0 ? "Out of stock" : product.stock < Number(product.lowStockLevel ?? 8) ? "Low stock" : "In stock"}</span></td></tr>)}</tbody></table></div></main> : view === "expenses" ? <PosExpenses user={user} shift={shift} /> : view === "receipts" ? <PosReceipts user={user} role={role} shift={shift} request={request} deviceId={deviceId} onCorrected={() => { loadProducts(); loadShift(); }} onNewSale={() => setView("sale")} /> : view === "sale" ?
+      <PosTill shortcut={shortcut} products={products} scanPrompt={scanPrompt} scanFeedback={scanFeedback} dismissScanPrompt={dismissScanPrompt} confirmScanIncrease={confirmScanIncrease} onSelectScannedProduct={chooseScannedProduct} shift={shift} role={role} query={query} setQuery={setQuery} barcode={barcode} setBarcode={setBarcode} barcodeInput={barcodeInput} scanBarcode={scanBarcode} onScannedCode={resolveScannedCode} scanMatches={scanMatches} setScanMatches={setScanMatches} category={category} setCategory={setCategory} categories={categories} stockFilter={stockFilter} setStockFilter={setStockFilter} visible={visible} add={add} cart={cart} setCart={value => { if (basketEditable()) setCart(value); }} cartNotice={cartNotice} setCartNotice={setCartNotice} change={change} setQuantity={setQuantity} pricing={pricing} discountRules={discountRules} orderReference={orderReference} setOrderReference={setOrderReference} orderChannel={orderChannel} setOrderChannel={setOrderChannel} customerName={customerName} setCustomerName={setCustomerName} customerPhone={customerPhone} setCustomerPhone={setCustomerPhone} paymentMethod={paymentMethod} setPaymentMethod={setPaymentMethod} amountPaid={amountPaid} setAmountPaid={setAmountPaid} transactionVerified={transactionVerified} setTransactionVerified={setTransactionVerified} changeDue={changeDue} paymentReady={paymentReady} referenceReady={referenceReady} online={online} busy={busy} setConfirmSale={setConfirmSale} /> : <PosOrders role={role} orders={orders} products={products} visibleOrders={visibleOrders} orderQuery={orderQuery} setOrderQuery={setOrderQuery} orderStatus={orderStatus} setOrderStatus={setOrderStatus} busy={busy} error={error} openOrderAtTill={openOrderAtTill} updateOrder={updateOrder} confirmOrderItem={confirmOrderItem} newOrderNotice={orderNotice} clearNewOrderNotice={() => setOrderNotice("")} />}
     {receipt && !receipt.shiftSummary && <ReceiptPanel sale={receipt} onClose={() => setReceipt(null)} onNewSale={() => { setReceipt(null); setView("sale"); }} />}
-    {confirmEndShift && <div className="modal-backdrop"><div className="modal" role="dialog" aria-modal="true" aria-label="Confirm end shift"><h2>End this shift?</h2><p>Sales and payment totals will be recorded. This action cannot be undone.</p><div className="editor-actions"><button className="button secondary" onClick={() => setConfirmEndShift(false)} disabled={busy}>Keep shift open</button><button className="button primary" onClick={toggleShift} disabled={busy}>{busy ? "Ending shift…" : "Confirm End Shift"}</button></div></div></div>}
+    {confirmEndShift && <PosShiftCash request={request} shift={shift} closing onClosed={shiftClosed} onCancel={() => setConfirmEndShift(false)} />}
     {confirmSale && <div className="modal-backdrop"><div className="modal" role="dialog" aria-modal="true" aria-label="Confirm sale"><h2>Complete this sale?</h2><p>{cart.reduce((count, item) => count + item.quantity, 0)} items · {money.format(total)} · {paymentMethod.replaceAll("-", " ")}</p><p>{online ? "Check the amount paid and customer details before saving." : "This sale becomes final at this till now, using cached prices and stock. Server sync may require manager reconciliation if they changed elsewhere."}</p><div className="editor-actions"><button className="button secondary" onClick={() => setConfirmSale(false)} disabled={busy}>Review cart</button><button className="button primary" onClick={checkout} disabled={busy}>{busy ? "Saving sale…" : online ? "Confirm Complete Sale" : "Finalize Offline Sale"}</button></div></div></div>}
   </div>;
 }
@@ -533,4 +577,3 @@ function Till() {
 export default function PosPage() {
   return <RequireRole allow={["owner", "admin", "supervisor", "cashier"]}><Till /></RequireRole>;
 }
-

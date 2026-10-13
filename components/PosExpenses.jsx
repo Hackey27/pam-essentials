@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const money = new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS" });
 const today = () => new Date().toISOString().slice(0, 10);
@@ -13,6 +13,7 @@ export default function PosExpenses({ user, shift }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const expenseAttempt = useRef(null), saveAction = useRef(false);
 
   async function request(url, options = {}) {
     const token = await user.getIdToken();
@@ -36,15 +37,21 @@ export default function PosExpenses({ user, shift }) {
 
   async function save(event) {
     event.preventDefault();
-    if (saving) return;
+    if (saveAction.current) return;
+    saveAction.current = true;
     setSaving(true); setError(""); setNotice("");
     try {
-      await request("/api/pos/expenses", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ shiftId: shift.shiftId, expenseDate: form.expenseDate, category: form.category === "Other" ? form.otherCategory.trim() : form.category, description: form.description.trim(), amount: Number(form.amount), paymentMethod: form.paymentMethod }) });
+      const payload = { shiftId: shift.shiftId, expenseDate: form.expenseDate, category: form.category === "Other" ? form.otherCategory.trim() : form.category, description: form.description.trim(), amount: Number(form.amount), paymentMethod: form.paymentMethod };
+      const fingerprint = JSON.stringify(payload);
+      if (expenseAttempt.current && expenseAttempt.current.fingerprint !== fingerprint) throw new Error("Retry the unchanged expense first; it may already have been recorded.");
+      if (!expenseAttempt.current) expenseAttempt.current = { fingerprint, id: crypto.randomUUID() };
+      await request("/api/pos/expenses", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...payload, requestId: expenseAttempt.current.id }) });
+      expenseAttempt.current = null;
       setForm((current) => ({ ...current, description: "", amount: "" }));
       setNotice("Expense recorded for this shift.");
       await load();
     } catch (err) { setError(err.message || "Expense could not be saved."); }
-    finally { setSaving(false); }
+    finally { saveAction.current = false; setSaving(false); }
   }
 
   return <main className="pos-simple-view pos-expenses"><div className="pos-title"><div><p className="eyebrow">Shift {shift.shiftId}</p><h1>Expenses</h1><p>Record operating costs without leaving the POS.</p></div></div>
@@ -53,4 +60,3 @@ export default function PosExpenses({ user, shift }) {
       <section className="panel pos-expense-list"><div className="panel-title"><h2>This shift</h2><b>{money.format(expenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0))}</b></div>{loading ? <p>Loading expenses…</p> : expenses.length ? <div className="data-table-wrap"><table className="data-table"><thead><tr><th>Date</th><th>Category / description</th><th>Payment</th><th>Entered by</th><th>Amount</th></tr></thead><tbody>{expenses.map((expense) => <tr key={expense.expenseId || expense.id}><td>{expense.expenseDate || expense.createdAt?.slice(0, 10)}</td><td><b>{expense.category}</b><span>{expense.description}</span></td><td>{expense.paymentMethod?.replaceAll("-", " ")}</td><td>{expense.staffEmail}</td><td className="num">{money.format(expense.amount || 0)}</td></tr>)}</tbody></table></div> : <p>No expenses recorded for this shift.</p>}</section></div>
   </main>;
 }
-

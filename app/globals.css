@@ -2286,3 +2286,47 @@ body > div > main h1 { color: var(--navy); }
 .restock-table td { vertical-align: top; }
 .restock-table td a:not(.button) { display: block; margin-top: .5rem; color: var(--navy); }
 @media (width < 1180px) { .mobile-browse-menu .product-attribute-filters { font-size: .84rem; } .mobile-browse-menu .attribute-facet { border-top: 1px solid var(--line); margin-top: .4rem; } }
+
+/* POS operations: local baskets, drawer accounting and conflict resolution. */
+.pos-basket-tools,.pos-shortcuts { margin-left:218px; padding:12px 20px; color:var(--navy); }
+.pos-basket-tools { background:white; border-bottom:1px solid var(--line); }
+.pos-basket-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:12px; }
+.pos-basket-toolbar>span { font-size:.8rem; color:var(--muted); }
+.pos-basket-tools summary { cursor:pointer; padding:10px; font-weight:800; }
+.pos-held-list { display:grid; gap:12px; max-height:45vh; overflow:auto; padding:12px; }
+.pos-held-list article { padding:12px; border:1px solid var(--line); border-radius:10px; }
+.pos-held-list article p { overflow-wrap:anywhere; font-size:.85rem; }
+.pos-held-list .button,.pos-basket-tools .notice .button { margin:4px; }
+.pos-shortcuts { padding-top:6px; padding-bottom:6px; font-size:.8rem; }
+.pos-shortcuts span { margin-left:12px; }
+.pos-product-photo { display:grid; width:100%; height:100px; place-items:center; background:#f5f8fb; border-radius:8px; overflow:hidden; }
+.pos-product-photo img { width:100%; height:100%; object-fit:contain; }
+.pos-product .pos-product-photo .product-monogram { display:grid; width:100%; height:100%; place-items:center; }
+.pos-cash-panel { width:100%; }
+.pos-cash-panel form { max-width:700px; }
+.pos-cash-panel form,.pos-cash-modal form,.pos-operation-modal { display:grid; gap:14px; }
+.pos-cash-panel label,.pos-cash-modal label,.pos-operation-modal label { display:grid; gap:6px; color:var(--navy); font-weight:700; }
+.pos-cash-panel input,.pos-cash-panel select,.pos-cash-panel textarea,.pos-cash-modal input,.pos-operation-modal input,.pos-operation-modal textarea,.pos-operation-modal select { min-height:44px; width:100%; }
+.pos-cash-summary { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin:16px 0; }
+.pos-cash-summary>div { padding:16px; border:1px solid var(--line); border-radius:12px; background:var(--soft-blue); }
+.pos-cash-summary span,.pos-cash-summary strong { display:block; }
+.pos-cash-summary strong { margin-top:8px; font-size:1.4rem; }
+.pos-cash-modal,.pos-operation-modal { width:min(760px,94vw); max-height:90dvh; overflow:auto; }
+.pos-operation-modal .pos-consent { display:flex; align-items:flex-start; gap:12px; }
+.pos-operation-modal .pos-consent input { width:22px; min-width:22px; min-height:22px; margin-top:2px; accent-color:var(--navy); }
+.pos-simple-view .panel + .panel { margin-top:18px; }
+.pos-simple-view td small { display:block; margin-top:6px; color:var(--muted); }
+@media(min-width:901px) { .sidebar-collapsed .pos-basket-tools,.sidebar-collapsed .pos-shortcuts { margin-left:68px; } }
+@media(max-width:900px) { .pos-basket-tools,.pos-shortcuts { margin-left:0; padding-left:14px; padding-right:14px; } }
+@media(max-width:600px) { .pos-product-photo { height:78px; } .pos-cash-summary { grid-template-columns:repeat(2,minmax(0,1fr)); } .pos-cash-summary strong { font-size:1.05rem; } }
+@media(min-width:901px) {
+ .pos-menu-button { display:inline-block; }
+ .sidebar-collapsed .pos-sidebar:hover,.sidebar-collapsed .pos-sidebar:focus-within { width:68px; box-shadow:none; }
+ .sidebar-collapsed .pos-sidebar:hover .brand-logo,.sidebar-collapsed .pos-sidebar:focus-within .brand-logo,.sidebar-collapsed .pos-sidebar:hover small,.sidebar-collapsed .pos-sidebar:focus-within small,.sidebar-collapsed .pos-sidebar:hover .pos-nav-label,.sidebar-collapsed .pos-sidebar:focus-within .pos-nav-label { opacity:0; }
+ .sidebar-collapsed .pos-sidebar:hover .pos-order-badge,.sidebar-collapsed .pos-sidebar:focus-within .pos-order-badge { position:absolute; right:0; top:0; min-width:17px; height:17px; font-size:.6rem; }
+}
+@media(min-width:901px) {
+ .sidebar-collapsed .pos-sidebar nav { width:40px; }
+ .sidebar-collapsed .pos-sidebar nav button { width:40px; min-width:0; padding:12px 8px; }
+ .sidebar-collapsed .pos-nav-label { display:none; }
+}

@@ -54,7 +54,8 @@ export async function GET(request) {
   if (isAdmin) {
     metrics.sales = sales.reduce((sum, sale) => sum + Number(sale.total || 0), 0);
     metrics.profit = sales.reduce((sum, sale) => sum + Number(sale.profit || 0), 0);
-    metrics.transactions = sales.length;
+    metrics.transactions = sales.filter(sale => sale.saleType !== "reversal").length;
+    metrics.reversals = sales.filter(sale => sale.saleType === "reversal").length;
     metrics.unitsSold = sales.reduce((sum, sale) => sum + (sale.items || []).reduce((qty, item) => qty + Number(item.quantity || 0), 0), 0);
     metrics.stockValuation = fullProducts.reduce((sum, product) => sum + Number(product.stock || 0) * Number(product.costPrice || 0), 0);
     metrics.expenses = expenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);

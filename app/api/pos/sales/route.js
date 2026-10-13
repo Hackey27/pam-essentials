@@ -5,12 +5,28 @@ import { availableForSale, catalogueContext, priceCart } from "@/lib/commerce";
 import { CURRENT_SHOP_ADDRESS } from "@/lib/shopAddress.mjs";
 import { receiptSnapshot } from "@/lib/receiptData.mjs";
 import { offlineReceiptId } from "@/lib/offlineSale.mjs";
+import { managerRoles, capturedPricing, posRoles } from "@/lib/posOperations.mjs";
+import { auditPayload, text } from "@/lib/serverData";
+
+export async function GET(request) {
+  const access = await requireRole(request, posRoles);
+  if (access.error) return NextResponse.json({ error: access.error }, { status: access.status });
+  const id = text(new URL(request.url).searchParams.get("transactionId"), 120);
+  if (!id || id.includes("/")) return NextResponse.json({ error: "Transaction reference is required." }, { status: 400 });
+  const snap = await adminDb().collection("sales").doc(id).get();
+  if (!snap.exists) return NextResponse.json({ found: false }, { headers: { "Cache-Control": "private, no-store" } });
+  if (snap.data().staffId !== access.user.uid && !managerRoles.includes(access.user.role)) return NextResponse.json({ error: "This transaction belongs to another staff member." }, { status: 403 });
+  return NextResponse.json({ found: true, receipt: receiptSnapshot({ ...snap.data(), id: snap.id, createdAt: snap.data().createdAt?.toDate?.()?.toISOString?.() || null }) }, { headers: { "Cache-Control": "private, no-store" } });
+}
 
 export async function POST(request) {
   const access = await requireRole(request, ["owner", "admin", "supervisor", "cashier"]);
   if (access.error) return NextResponse.json({ error: access.error }, { status: access.status });
 
   const body = await request.json().catch(() => ({}));
+  const reconciliation = body.reconciliation;
+  if (reconciliation && !managerRoles.includes(access.user.role)) return NextResponse.json({ error: "Only an owner or admin may reconcile an offline sale." }, { status: 403 });
+  if (reconciliation && (body.offlineFinal !== true || !text(reconciliation.reason, 500) || reconciliation.confirmCaptured !== true)) return NextResponse.json({ error: "Confirm the captured receipt and give a reconciliation reason." }, { status: 400 });
   const requested = Array.isArray(body.items) ? body.items : [];
   if (!requested.length) return NextResponse.json({ error: "Add at least one product." }, { status: 400 });
 
@@ -29,10 +45,11 @@ export async function POST(request) {
   }
 
   const transactionId = String(body.transactionId || "").trim();
-  if (!transactionId) return NextResponse.json({ error: "A transaction ID is required." }, { status: 400 });
+  if (!/^[A-Za-z0-9-]{1,120}$/.test(transactionId)) return NextResponse.json({ error: "A valid transaction ID is required." }, { status: 400 });
   const offlineFinal = body.offlineFinal === true;
   if (offlineFinal && (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(transactionId) || !Number.isFinite(Number(body.offlineTotal)))) return NextResponse.json({ error: "Offline sale needs a valid transaction ID and captured total." }, { status: 400 });
   const shiftId = String(body.shiftId || "").trim();
+  if (reconciliation && reconciliation.receipt?.receiptId !== offlineReceiptId(transactionId)) return NextResponse.json({ error: "Captured receipt number does not match the offline transaction." }, { status: 400 });
   const deviceId = String(body.deviceId || "").trim().slice(0, 120);
   if (!shiftId || !deviceId) return NextResponse.json({ error: "Open a till shift before checkout." }, { status: 409 });
 
@@ -45,11 +62,12 @@ export async function POST(request) {
       const existing = await tx.get(saleRef);
       if (existing.exists) {
         const sale = existing.data();
+        if (sale.staffId !== access.user.uid && !managerRoles.includes(access.user.role)) throw new Error("This transaction belongs to another staff member.");
         return { ...receiptSnapshot({ ...sale, createdAt: sale.createdAt?.toDate?.()?.toISOString?.() || null }), duplicate: true };
       }
       const shiftRef = store.collection("shifts").doc(shiftId);
       const shiftSnap = await tx.get(shiftRef);
-      if (!shiftSnap.exists || shiftSnap.data().status !== "open" || shiftSnap.data().staffId !== access.user.uid) throw new Error("This till shift is no longer open.");
+      if (!shiftSnap.exists || shiftSnap.data().status !== "open" || (!reconciliation && shiftSnap.data().staffId !== access.user.uid)) throw new Error("This till shift is no longer open.");
 
       const normalizedItems = [...quantities].map(([id, quantity]) => ({ id, quantity }));
       const salesChannel = ["walk-in", "website", "whatsapp", "phone"].includes(body.salesChannel) ? body.salesChannel : "walk-in";
@@ -74,7 +92,8 @@ export async function POST(request) {
         if (!availableForSale(snap.data(), context)) throw new Error(`${snap.data().name} is not available for sale.`);
         if (Number(snap.data().stock) < quantity) throw new Error(`Only ${snap.data().stock} × ${snap.data().name} remain.`);
       }
-      const pricing = priceCart(productSnaps.map((snap, index) => ({ id: normalizedItems[index].id, categoryId: snap.data().categoryId, price: Number(snap.data().price), quantity: normalizedItems[index].quantity })), context.rules, context.deals);
+      const currentPricing = priceCart(productSnaps.map((snap, index) => ({ id: normalizedItems[index].id, categoryId: snap.data().categoryId, price: Number(snap.data().price), quantity: normalizedItems[index].quantity })), context.rules, context.deals);
+      const pricing = reconciliation ? capturedPricing(reconciliation.receipt, normalizedItems) : currentPricing;
       if (offlineFinal && Math.abs(pricing.total - Number(body.offlineTotal)) > 0.005) throw new Error("Offline total differs from current pricing. Keep the local receipt and ask a manager to reconcile this sale.");
       const lines = [];
       let cost = 0;
@@ -99,7 +118,7 @@ export async function POST(request) {
           variantOptions: product.variantOptions || {},
           name: product.name,
           quantity,
-          unitPrice: Number(product.price),
+          unitPrice: reconciliation ? priced.unitPrice : Number(product.price),
           lineTotal: netLineTotal,
           unitCost: Number(product.costPrice || 0),
           lineCost,
@@ -150,16 +169,19 @@ export async function POST(request) {
         customerPhone,
         fulfilmentSnapshot: { deliveryMethod: linkedOrder?.deliveryMethod || "pickup", originAddress: linkedOrder?.originAddress || CURRENT_SHOP_ADDRESS, deliveryAddress: linkedOrder?.deliveryAddress || linkedOrder?.landmark || "" },
         taxSnapshot: { enabled: false },
-        staffId: access.user.uid,
-        staffName: access.user.displayName,
-        staffEmail: access.user.email,
+        staffId: reconciliation ? shiftSnap.data().staffId : access.user.uid,
+        staffName: reconciliation ? shiftSnap.data().staffName || "Staff" : access.user.displayName,
+        staffEmail: reconciliation ? shiftSnap.data().staffEmail || "" : access.user.email,
         shiftId,
         deviceId,
         offlineFinal,
+        ...(reconciliation ? { reconciliation: { reason: text(reconciliation.reason, 500), managerId: access.user.uid, managerName: access.user.displayName, currentTotal: currentPricing.total, capturedTotal: pricing.total, reconciledAt: FieldValue.serverTimestamp() } } : {}),
         createdAt: FieldValue.serverTimestamp(),
       };
       tx.create(saleRef, saleData);
+      if (reconciliation) tx.create(store.collection("admin_audit").doc(), auditPayload(access.user, "RECONCILE_OFFLINE_SALE", "sale", transactionId, text(reconciliation.reason, 500), { currentTotal: currentPricing.total }, { capturedTotal: pricing.total, receiptId, shiftId }));
       if (shiftSnap.data().aggregationVersion === 1) tx.update(shiftRef, { transactionCount: FieldValue.increment(1), salesTotal: FieldValue.increment(total), [`paymentMix.${paymentMethod}`]: FieldValue.increment(total) });
+      else tx.update(shiftRef, { lastSaleAt: FieldValue.serverTimestamp() });
       return { ...receiptSnapshot({ ...saleData, createdAt: new Date().toISOString() }), duplicate: false };
     });
     return NextResponse.json(result);
