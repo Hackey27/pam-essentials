@@ -10,6 +10,7 @@ import { quantityOfferMessage } from "@/lib/quantityOffer.mjs";
 import { promotionPrice } from "@/lib/catalogueBrowse.mjs";
 import { priceCart } from "@/lib/cartPricing.mjs";
 import { requiresPricingInquiry } from "@/lib/productPricing.mjs";
+import RestockRequest from "@/components/RestockRequest";
 import PricingInquiryButton from "@/components/PricingInquiryButton";
 import { cardImageSource, detailImageSource, getProductImageUrl, productGallery } from "@/lib/productImages.mjs";
 import { randomSelectionNote } from "@/lib/randomSelection.mjs";
@@ -154,7 +155,7 @@ export default function ProductOptions({ initialProduct, products, discountRules
       {!quoteOnly && <><label className="quantity-control">Quantity <span className="stepper"><button type="button" onClick={() => setQuantity(Math.max(1, quantity - 1))} aria-label="Decrease quantity">−</button><input type="number" min="1" max={selected.stock} value={quantity} onChange={(event) => setQuantity(Math.max(1, Math.min(selected.stock, Number(event.target.value) || 1)))} aria-label={`Quantity of ${selected.name}`} /><button type="button" onClick={() => setQuantity(Math.min(selected.stock, quantity + 1))} aria-label="Increase quantity" disabled={quantity >= selected.stock}>+</button></span></label>
       {quantityOfferMessage(selected, quantity, discountRules) && <p className="quantity-offer-note">{quantityOfferMessage(selected, quantity, discountRules)}</p>}
       <button type="button" className="button primary full" disabled={selected.stock <= 0} onClick={() => onAdd(selected, quantity)}>{selected.stock > 0 ? "Add to cart" : "Out of Stock"}</button>
-      {selected.stock <= 0 ? <a className="button secondary full" target="_blank" rel="noreferrer" href={`https://wa.me/${PRIMARY_WHATSAPP}?text=${encodeURIComponent(`Please notify me when ${selected.name} (${selected.id}) is available.`)}`}>Notify me when available</a> : <a className="button whatsapp full" target="_blank" rel="noreferrer" href={`https://wa.me/${PRIMARY_WHATSAPP}?text=${encodeURIComponent(whatsappText)}`}><WhatsAppIcon size={18} /> Order via WhatsApp</a>}</>}
+      {selected.stock <= 0 ? <RestockRequest key={selected.id} product={selected} /> : <a className="button whatsapp full" target="_blank" rel="noreferrer" href={`https://wa.me/${PRIMARY_WHATSAPP}?text=${encodeURIComponent(whatsappText)}`}><WhatsAppIcon size={18} /> Order via WhatsApp</a>}</>}
       {compact && <a href={`/products/${encodeURIComponent(selected.id)}?quick=${encodeURIComponent(initialProduct.id)}`} className="detail-link" onClick={(event) => onNavigateDetail?.(event, selected)}>View full product details →</a>}
       {footer}
     </div>

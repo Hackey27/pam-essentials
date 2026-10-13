@@ -1,0 +1,4 @@
+"use client";
+export default function ProductAttributeFilters({facets,onToggle,collapsible=false}) {
+  return <div className="product-attribute-filters">{facets.map(facet=>{const choices=<div className="attribute-values">{facet.options.map(option=><label key={option.value} className={option.count===0&&!option.selected?"unavailable":""}><input type="checkbox" aria-label={`${facet.label}: ${option.value}`} checked={option.selected} disabled={option.count===0&&!option.selected} onChange={()=>onToggle(facet.key,option.value)}/><span>{option.value}</span><small>{option.count}</small></label>)}</div>;return collapsible?<details key={facet.key} className="attribute-facet"><summary>{facet.label}<span aria-hidden="true">▾</span></summary>{choices}</details>:<fieldset key={facet.key} className="attribute-facet"><legend>{facet.label}</legend>{choices}</fieldset>;})}</div>;
+}

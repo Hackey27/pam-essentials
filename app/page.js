@@ -36,6 +36,8 @@ import { useShopInformation } from "@/components/ShopInformation";
 import { courierFeeLabel } from "@/lib/shopPreferences.mjs";
 import { searchCatalogue } from "@/lib/friendlySearch.mjs";
 import { removeCartItem, restoreCartItem } from "@/lib/cartUndo.mjs";
+import ProductAttributeFilters from "@/components/ProductAttributeFilters";
+import {attributeFacets,matchesAttributes,normalizedAttributeSelection} from "@/lib/productFacets.mjs";
 import { variantDetail } from "@/lib/variantDisplay.mjs";
 
 const money = new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS" });
@@ -64,6 +66,7 @@ export default function Storefront() {
   const [expandedSubcategories, setExpandedSubcategories] = useState([]);
   const [selectedSubcategories, setSelectedSubcategories] = useState([]);
   const [selectedSubSubcategories, setSelectedSubSubcategories] = useState([]);
+  const [attributeSelection,setAttributeSelection] = useState({});
   const [availability, setAvailability] = useState("all");
   const [offer, setOffer] = useState("all");
   const [collection, setCollection] = useState("");
@@ -226,7 +229,7 @@ export default function Storefront() {
       listingRestore.current = saved;
       setQuery(saved.query || ""); setCategory(saved.category || "All categories");
       setSelectedSubcategories(saved.subcategories || []); setSelectedSubSubcategories(saved.subSubcategories || []);
-      setAvailability(saved.availability || "all"); setOffer(saved.offer || "all"); setCollection(saved.collection || "");
+      setAttributeSelection(normalizedAttributeSelection(saved.attributes)); setAvailability(saved.availability || "all"); setOffer(saved.offer || "all"); setCollection(saved.collection || "");
       setBrowseMode(saved.browseMode || "products"); setSort(saved.sort || "categories");
       setPageSize(saved.pageSize || 100); setPriceMin(saved.priceMin || ""); setPriceMax(saved.priceMax || "");
       sessionStorage.removeItem("pam-listing-return");
@@ -356,7 +359,7 @@ export default function Storefront() {
     category === "All categories" ? "Home / All categories" :
     singleSelection?.subSubcategoryId ? `Home / ${category} / ${subcategoryList.find((item) => item.subcategoryId === singleSelection.subcategoryId)?.name || ""} / ${singleSelection.name}` :
     singleSelection ? `Home / ${category} / ${singleSelection.name}` : `Home / ${category}`;
-  const visible = useMemo(() => {
+  const filteredContext = useMemo(() => {
     const filtered = products.filter((product) =>
       searchIds.has(product.id) &&
       (category === "All categories" || product.category === category) &&
@@ -368,8 +371,10 @@ export default function Storefront() {
       inCollection(product, collection, discountRules) &&
       (browseMode === "products" || (browseMode === "new" ? isNewArrival(product) : browseMode === "promotions" ? isPromotion(product, discountRules) : dealsActive && hasCollection(product, "PAM Deals")))
     );
-    return sortProducts(filtered, sort, discountRules, categoryList, subcategoryList);
+    return filtered;
   }, [products, categoryList, subcategoryList, discountRules, query, category, selectedSubcategories, selectedSubSubcategories, sort, browseMode, priceMin, priceMax, availability, offer, collection, publicLaunch, dealsActive, searchIds]);
+  const facets = useMemo(() => attributeFacets(filteredContext,attributeSelection),[filteredContext,attributeSelection]);
+  const visible = useMemo(() => sortProducts(filteredContext.filter(product=>matchesAttributes(product,attributeSelection)),sort,discountRules,categoryList,subcategoryList),[filteredContext,attributeSelection,sort,discountRules,categoryList,subcategoryList]);
   const dealProducts = products.filter((product) => hasCollection(product, "PAM Deals"));
   const dealPercent = Math.max(0, ...discountRules.filter((rule) => rule.discountType === "PERCENT" && Number(rule.value) <= 20 && rule.scopeType !== "GLOBAL" && dealProducts.some((product) => rule.scopeType === "PRODUCT" ? rule.scopeId === product.id : rule.scopeType === "CATEGORY" && rule.scopeId === product.categoryId)).map((rule) => Number(rule.value || 0)));
   const pageCount = Math.max(1, Math.ceil(visible.length / pageSize));
@@ -393,7 +398,7 @@ export default function Storefront() {
     requestAnimationFrame(() => requestAnimationFrame(() => window.scrollTo({ top: Number(saved.y) || 0, behavior: "instant" })));
   }, [loading, visible.length, pageSize]);
 
-  useEffect(() => { setPage(1); }, [query, category, selectedSubcategories, selectedSubSubcategories, availability, offer, collection, sort, browseMode, priceMin, priceMax, pageSize]);
+  useEffect(() => { setPage(1); }, [query, category, selectedSubcategories, selectedSubSubcategories, availability, offer, collection, sort, browseMode, priceMin, priceMax, pageSize, attributeSelection]);
 
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
   const addedCartLine = addedProduct && cart.find((item) => item.id === addedProduct.id);
@@ -442,7 +447,7 @@ export default function Storefront() {
   }
 
   function rememberListingContext() {
-    try { sessionStorage.setItem("pam-listing-return", JSON.stringify({ at: Date.now(), path: window.location.pathname + window.location.search, y: window.scrollY, query, category, subcategories: selectedSubcategories, subSubcategories: selectedSubSubcategories, availability, offer, collection, browseMode, sort, pageSize, page, priceMin, priceMax })); } catch {}
+    try { sessionStorage.setItem("pam-listing-return", JSON.stringify({ at: Date.now(), path: window.location.pathname + window.location.search, y: window.scrollY, attributes: attributeSelection, query, category, subcategories: selectedSubcategories, subSubcategories: selectedSubSubcategories, availability, offer, collection, browseMode, sort, pageSize, page, priceMin, priceMax })); } catch {}
     if (window.history.state?.pamStoreOverlay) window.history.replaceState({ ...window.history.state, pamStoreOverlay: null, pamStoreGuard: true }, "", window.location.href);
   }
 
@@ -452,7 +457,11 @@ export default function Storefront() {
     if (cartReturn.current) window.location.replace(cartReturn.current);
   }
 
+  function toggleAttribute(key,value) {
+    setAttributeSelection(old=>{const next={...old},values=old[key]||[];next[key]=values.includes(value)?values.filter(v=>v!==value):[...values,value];if(!next[key].length)delete next[key];return next;});
+  }
   function clearFilters() {
+    setAttributeSelection({});
     setPriceMin(""); setPriceMax(""); setCategory("All categories");
     setSelectedSubcategories([]); setSelectedSubSubcategories([]);
     setAvailability("all"); setOffer("all"); setCollection("");
@@ -656,6 +665,7 @@ export default function Storefront() {
           {!collapsible && <FilterSection title="Availability" collapsible={collapsible}><div className="facet-group" role="group" aria-label="Availability">{[["all", "All"], ["in", "In Stock"], ["out", "Out of Stock"]].map(([value, label]) => <label key={value}><input type="radio" name={collapsible ? "menu-availability" : "availability"} checked={availability === value} onChange={() => setAvailability(value)} /> {label}</label>)}</div></FilterSection>}
           {section !== "categories" && <FilterSection title="Offers" collapsible={collapsible}><div className="facet-group" role="group" aria-label="Offers">{[["all", "All"], ["sale", "On Sale"], ["promotions", "Promotions"]].map(([value, label]) => <label key={value}><input type="radio" name={collapsible ? "menu-offer" : "offer"} checked={offer === value} onChange={() => setOffer(value)} /> {label}</label>)}</div></FilterSection>}
           {!collapsible && <FilterSection title="Collections" collapsible={collapsible}><div className="facet-group" role="group" aria-label="Collections"><label><input type="radio" name={collapsible ? "menu-collection" : "collection"} checked={!collection} onChange={() => setCollection("")} /> All</label>{["New Arrivals", "Best Sellers", "Back to School", "Promotion", ...(dealsActive ? ["PAM Deals"] : [])].map((name) => <label key={name}><input type="radio" name={collapsible ? "menu-collection" : "collection"} checked={collection === name} onChange={() => setCollection(name)} /> {name}</label>)}</div></FilterSection>}
+    {!collapsible && <ProductAttributeFilters facets={facets} onToggle={toggleAttribute} />}
     {!collapsible && <button type="button" className="table-action" onClick={clearFilters}>Clear filters</button>}
   </>;
 
@@ -730,8 +740,10 @@ export default function Storefront() {
         <a href="/info/delivery">Payment &amp; delivery</a><a href="/info/contact#location">Pickup location</a><a href="/info/contact">Contact us</a><a href="/account#orders">Track order</a><a href="/account#wishlist">Wishlist</a><a href="/compare">Compare products</a><a href="/account?mode=signin">{user && !role ? "My account" : "Sign in"}</a>{(!user || role) && <a href="/account?mode=register">Create account</a>}
       </nav></details>} open={mobileMenuOpen} onClose={closeMobileMenu} onClear={clearFilters} resultCount={visible.length} search={renderSearch(false, true)} filters={<>
         <MobilePriceRange minimum={priceMin} maximum={priceMax} upperLimit={Math.max(1, ...products.map((item) => Math.ceil(Number(item.price) || 0)), Number(priceMin) || 0, Number(priceMax) || 0)} onChange={(minimum, maximum) => { setPriceMin(minimum); setPriceMax(maximum); }} />
+        <FilterSection title="Availability" collapsible><div className="facet-group" role="group" aria-label="Mobile availability">{[["all","All"],["in","In Stock"],["out","Out of Stock"]].map(([value,label])=><label key={value}><input type="radio" name="panel-availability" checked={availability===value} onChange={()=>setAvailability(value)}/>{label}</label>)}</div></FilterSection>
         {renderFilters(true, "offers")}
         <FilterSection title="Categories" collapsible defaultOpen resetKey={mobileMenuOpen}>{renderCategoryChoices()}</FilterSection>
+        <ProductAttributeFilters facets={facets} onToggle={toggleAttribute} collapsible />
       </>} />
 
       <StorefrontHero webUrl={webHeroUrl} mobileUrl={mobileHeroUrl} background={heroBackground} />
@@ -757,7 +769,7 @@ export default function Storefront() {
 
         <main className="catalogue-main" id="catalogue-results">
           <div className="catalogue-heading"><div><p className="breadcrumb">{breadcrumb}</p><h2>{heading}</h2>{selectedNodes.length > 1 && <p className="desktop-product-count">{selectedNodes.length} subcategories selected</p>}</div><div className="catalogue-controls-clip"><div ref={catalogueControlsRef} className="catalogue-controls"><button type="button" className="mobile-filter-inline" aria-expanded={mobileMenuOpen} aria-controls="mobile-browse-menu" onClick={() => setMobileMenuOpen((open) => !open)}><span aria-hidden="true">☰</span> Filters</button><label className="sort-control" htmlFor="store-sort">Sort by: <select id="store-sort" aria-label="Sort products" value={sort} onChange={(e) => setSort(e.target.value)}><option value="categories">Product categories</option><option value="types">Product Type</option><option value="popularity">Popularity</option><option value="price-low">Price: low to high</option><option value="price-high">Price: high to low</option><option value="rating">Rating</option><option value="latest">Latest</option><option value="promotions">Promotions</option></select></label><label className="page-size-control">Show: <select aria-label="Products per page" value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))}>{[30, 60, 80, 100].map((size) => <option key={size} value={size}>{size}</option>)}</select></label><div className="grid-density" role="group" aria-label="Grid density"><button type="button" aria-label="Standard grid" aria-pressed={gridDensity === "standard"} onClick={() => setGridDensity("standard")}>▦</button><button type="button" aria-label="Compact grid" aria-pressed={gridDensity === "compact"} onClick={() => setGridDensity("compact")}>▦▦</button></div></div></div></div>
-          {selectedNodes.length > 0 && <div className="filter-chips" aria-label="Selected subcategories"><span>{selectedNodes.length} {selectedNodes.length === 1 ? "subcategory" : "subcategories"} selected</span>{selectedNodes.map((item) => <button type="button" key={item.subSubcategoryId || item.subcategoryId} onClick={() => item.subSubcategoryId ? toggleSubSubcategory(item) : toggleSubcategory(item)} aria-label={`Remove ${item.name} filter`}>{item.name} ×</button>)}<button type="button" onClick={() => { setSelectedSubcategories([]); setSelectedSubSubcategories([]); }}>Clear</button></div>}
+          {(selectedNodes.length>0||category!=="All categories"||priceMin!==""||priceMax!==""||availability!=="all"||offer!=="all"||collection||Object.keys(attributeSelection).length>0)&&<div className="filter-chips all-filter-chips" aria-label="Active product filters"><span>Active filters</span>{category!=="All categories"&&<button type="button" onClick={()=>selectCategory("All categories")} aria-label={`Remove ${category} category filter`}>{category} ×</button>}{selectedNodes.map(item=><button type="button" key={item.subSubcategoryId||item.subcategoryId} onClick={()=>item.subSubcategoryId?toggleSubSubcategory(item):toggleSubcategory(item)} aria-label={`Remove ${item.name} filter`}>{item.name} ×</button>)}{(priceMin!==""||priceMax!=="")&&<button type="button" aria-label="Remove price filter" onClick={()=>{setPriceMin("");setPriceMax("");}}>{priceMin!==""&&priceMax!==""?`${money.format(Number(priceMin))}–${money.format(Number(priceMax))}`:priceMin!==""?`From ${money.format(Number(priceMin))}`:`Up to ${money.format(Number(priceMax))}`} ×</button>}{availability!=="all"&&<button type="button" aria-label="Remove availability filter" onClick={()=>setAvailability("all")}>{availability==="in"?"In stock":"Out of stock"} ×</button>}{offer!=="all"&&<button type="button" aria-label="Remove offer filter" onClick={()=>setOffer("all")}>{offer==="sale"?"On sale":"Promotions"} ×</button>}{collection&&<button type="button" aria-label="Remove collection filter" onClick={()=>setCollection("")}>{collection} ×</button>}{Object.entries(attributeSelection).flatMap(([key,values])=>values.map(value=><button type="button" key={`${key}:${value}`} aria-label={`Remove ${facets.find(f=>f.key===key)?.label||key}: ${value} filter`} onClick={()=>toggleAttribute(key,value)}>{value} ×</button>))}<button type="button" onClick={clearFilters}>Clear all</button></div>}
           {loading && <div className="empty-state"><div className="spinner" /><p>Loading the catalogue…</p></div>}
           {error && !products.length && <div className="empty-state error-panel"><h3>Catalogue unavailable</h3><p>{error}</p></div>}
           {!loading && !error && !visible.length && !(dealsActive && browseMode === "deals" && dealBundles.length) && <div className="empty-state"><h3>No matching products</h3><p>Try another search, category or collection.</p><RequestProductLink className="button primary" /></div>}
@@ -784,7 +796,7 @@ export default function Storefront() {
           <div className="cart-content-scroll">          {discountRules.some((rule) => rule.scopeType === "GLOBAL" && rule.discountType === "PERCENT" && Number(rule.value) === 5 && Number(rule.minQty) === 3) && <div className="cart-rule-summary" role="status"><strong>Buy 3 or more of the same product to get 5% off that product.</strong>{pricing.lines.some((line) => line.rule?.discountType === "PERCENT" && Number(line.rule.value) === 5 && line.ruleDiscountCents > 0) && <p>5% quantity discount applied to eligible products</p>}</div>}
           <div className="cart-lines">{cart.map((item) => { const line = pricing.lines.find((entry) => entry.id === item.id); return <div className="cart-line" key={item.id}><ProductImage product={item} width={180} className="cart-product-photo" /><div><h3>{item.name}</h3><p>{[variantDetail(item), `SKU: ${item.sku || item.id}`].filter(Boolean).join(" · ")}</p>{randomSelectionNote(item, order.notes) && <p className="colour-note">{randomSelectionNote(item, order.notes)}</p>}<p>{money.format(item.price)}</p><div className="stepper"><button aria-label={`Decrease ${item.name} quantity`} onClick={() => updateQuantity(item.id, item.quantity - 1)}>−</button><input type="number" min="1" max={item.stock} aria-label={`Quantity of ${item.name}`} value={item.quantity} onChange={(event) => updateQuantity(item.id, Math.max(1, Number(event.target.value) || 1))} /><button aria-label={`Increase ${item.name} quantity`} onClick={() => updateQuantity(item.id, item.quantity + 1)} disabled={item.quantity >= item.stock}>+</button></div><button type="button" className="cart-remove-line" onClick={() => updateQuantity(item.id, 0)} aria-label={`Remove ${item.name} from cart`}>Remove item</button></div><div className="cart-line-total">{line?.rule && line.ruleDiscountCents > 0 && <span className="cart-line-discount">−{line.rule.discountType === "PERCENT" ? `${line.rule.value}%` : money.format(line.ruleDiscountCents / 100)}</span>}<b>{money.format(line?.lineTotal || 0)}</b></div></div>; })}</div>
 {checkout && <form id="store-checkout-form" className="checkout-form" onSubmit={placeOrder}><FulfilmentEstimate method={order.deliveryMethod} /><label>Full name<input required value={order.customer} onChange={(e) => setOrder({ ...order, customer: e.target.value })} /></label><label>Mobile number<input required type="tel" value={order.phone} onChange={(e) => setOrder({ ...order, phone: e.target.value })} /></label><label>Fulfilment<select value={order.deliveryMethod} onChange={(e) => setOrder({ ...order, deliveryMethod: e.target.value })}><option value="pickup">Pickup</option><option value="delivery-self">Delivery – self initiated</option><option value="delivery-shop">Delivery – arranged by shop</option></select></label>{order.deliveryMethod === "delivery-self" && <p className="pickup-address">Your courier collects from: <b>{storeLocation}</b>. Keep your order reference handy for confirmation.</p>}{order.deliveryMethod !== "pickup" && <label>Delivery destination or landmark<input required={order.deliveryMethod === "delivery-shop"} value={order.deliveryAddress} onChange={(e) => setOrder({ ...order, deliveryAddress: e.target.value })} /></label>}<label>Order notes (optional)<textarea rows={3} maxLength={1000} placeholder="type specific details or requests here" value={order.notes} onChange={(e) => setOrder({ ...order, notes: e.target.value })} /></label></form>}</div>
-          <div className="cart-checkout-summary">          <div className="cart-total"><span>Subtotal</span><strong>{money.format(subtotal)}</strong></div>{discount > 0 && <div className="cart-total discount-total"><span>Discount</span><strong>−{money.format(discount)}</strong></div>}<div className="cart-total grand-total"><span>PAM product total</span><strong>{money.format(total)}</strong></div>
+          <div className="cart-checkout-summary">          <div className="cart-total"><span>Subtotal</span><strong>{money.format(subtotal)}</strong></div>{discount > 0 && <div className="cart-total discount-total"><span>Discount</span><strong>−{money.format(discount)}</strong></div>}<div className="cart-total grand-total"><span>Total</span><strong>{money.format(total)}</strong></div>
 <p className="cart-fee-note">Shop-arranged delivery: {courierFeeLabel({ feeMode: shopPreferences.feeMode, feeAmount: shopPreferences.feeAmount })}. Courier charges are separate from the product total.</p><div className="cart-footer-actions"><button type="button" className="button secondary full" onClick={closeCart}>Continue browsing</button>{!checkout ? <button className="button accent full" onClick={() => setCheckout(true)}>Proceed to checkout</button> : <div className="cart-payment-actions"><button className="button secondary full" type="button" disabled title="Payment provider has not been selected yet">Pay now · coming soon</button><button className="button accent full" type="submit" form="store-checkout-form" disabled={placingOrder}>{placingOrder ? "Creating order…" : `Pay on pickup/delivery · ${money.format(total)}`}</button><button className="button whatsapp full" type="button" disabled={placingOrder} onClick={orderOnWhatsApp}>Order on WhatsApp</button></div>}</div></div>
         </>}
       </aside></div>}
