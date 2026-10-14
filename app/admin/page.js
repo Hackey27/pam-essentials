@@ -4,6 +4,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import RequireRole from "@/components/RequireRole";
 import { signOut, useAuth } from "@/components/AuthProvider";
 import AdminReceipts from "@/components/AdminReceipts";
+import AdminMetricDetails from "@/components/AdminMetricDetails";
+import AdminAnalyticsCharts from "@/components/AdminAnalyticsCharts";
+import ReceiptPanel from "@/components/ReceiptPanel";
+import { receiptSnapshot } from "@/lib/receiptData.mjs";
+import { selectReportingPeriod } from "@/lib/adminReporting.mjs";
 import AdminProductImages from "@/components/AdminProductImages";
 import AdminProductVariants from "@/components/AdminProductVariants";
 import { editorVariantState } from "@/lib/adminVariants.mjs";
@@ -83,41 +88,6 @@ function RuleSummaryCard({ rule, onOpen }) {
   return <button type="button" className="summary-card" onClick={onOpen} aria-label={`Edit ${rule.name}`}><strong>{rule.name}</strong><span>Discount: {rule.discountType === "PERCENT" ? `${rule.value}%` : money.format(rule.value)}</span><span>Minimum per product: {rule.minQty || 1}</span><span className={status === "Active now" ? "badge success" : "badge danger"}>{status}</span></button>;
 }
 
-function inputDate(value) {
-  const [year, month, day] = String(value || "").split("-").map(Number);
-  return year && month && day ? new Date(year, month - 1, day) : null;
-}
-
-function periodBounds(period, customRange) {
-  const now = new Date();
-  if (period === "today") {
-    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    return { start, end: now, previousStart: new Date(start.getTime() - 86400000), previousEnd: new Date(now.getTime() - 86400000) };
-  }
-  if (period === "week") {
-    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
-    return { start, end: now, previousStart: new Date(start.getTime() - 7 * 86400000), previousEnd: new Date(now.getTime() - 7 * 86400000) };
-  }
-  if (period === "month") {
-    const start = new Date(now.getFullYear(), now.getMonth(), 1);
-    const previousStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const previousMonthLastDay = new Date(now.getFullYear(), now.getMonth(), 0).getDate();
-    const previousEnd = new Date(previousStart.getFullYear(), previousStart.getMonth(), Math.min(now.getDate(), previousMonthLastDay), now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
-    return { start, end: now, previousStart, previousEnd };
-  }
-  if (period === "custom") {
-    const start = inputDate(customRange.start);
-    const endDate = inputDate(customRange.end);
-    if (!start || !endDate || endDate < start) return null;
-    const end = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate(), 23, 59, 59, 999);
-    const duration = end.getTime() - start.getTime();
-    const previousEnd = new Date(start.getTime() - 1);
-    return { start, end, previousStart: new Date(previousEnd.getTime() - duration), previousEnd };
-  }
-  return null;
-}
-
 function AdminPortal() {
   const { user, role } = useAuth();
   const [requestedSection, setSection] = useState("Overview");
@@ -131,6 +101,7 @@ function AdminPortal() {
   const [orderQuery, setOrderQuery] = useState("");
   const [orderStatus, setOrderStatus] = useState("all");
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const [selectedMetric, setSelectedMetric] = useState(null), [metricReceipt, setMetricReceipt] = useState(null), [reportUpdatedAt, setReportUpdatedAt] = useState(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [movementQuery, setMovementQuery] = useState("");
   const [movementType, setMovementType] = useState("all");
@@ -183,7 +154,7 @@ function AdminPortal() {
       const response = await authorizedFetch("/api/admin/catalog");
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error);
-      if (generation === loadGeneration.current && scope === authScope.current) setData({ ...emptyData, ...payload });
+      if (generation === loadGeneration.current && scope === authScope.current) { setData({ ...emptyData, ...payload }); setReportUpdatedAt(new Date().toISOString()); }
     } catch (err) { if (generation === loadGeneration.current && scope === authScope.current) setError(err.message || "Admin data could not be loaded."); }
     finally { if (generation === loadGeneration.current && scope === authScope.current) setLoading(false); }
   }
@@ -290,15 +261,13 @@ function AdminPortal() {
     return matchesQuery && (movementType === "all" || movement.type === movementType);
   }), [data.movements, movementQuery, movementType]);
 
+  const periodReport = useMemo(() => selectReportingPeriod(data.sales, data.expenses, period, customRange), [data.sales, data.expenses, period, customRange]);
+
   const performance = useMemo(() => {
-    const bounds = periodBounds(period, customRange);
     const productMap = new Map();
     const categoryMap = new Map();
     const channelMap = new Map();
-    const sales = period === "custom" && !bounds ? [] : bounds ? data.sales.filter((sale) => {
-      const createdAt = new Date(sale.createdAt);
-      return !Number.isNaN(createdAt.getTime()) && createdAt >= bounds.start && createdAt <= bounds.end;
-    }) : data.sales;
+    const sales = periodReport.sales;
     for (const sale of sales) {
       const channel = sale.salesChannel || "walk-in";
       channelMap.set(channel, (channelMap.get(channel) || 0) + Number(sale.total || 0));
@@ -319,29 +288,10 @@ function AdminPortal() {
       channels: [...channelMap].sort((a, b) => b[1] - a[1]),
       noSales,
     };
-  }, [data.sales, data.products, period, customRange, rankBy]);
-
-  const periodReport = useMemo(() => {
-    const bounds = periodBounds(period, customRange);
-    const include = (item, start, end) => {
-      const value = new Date(item.createdAt);
-      return !Number.isNaN(value.getTime()) && value >= start && value <= end;
-    };
-    const summarize = (sales, expenses) => ({
-      sales: sales.reduce((sum, sale) => sum + Number(sale.total || 0), 0),
-      profit: sales.reduce((sum, sale) => sum + Number(sale.profit || 0), 0),
-      expenses: expenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0),
-      transactions: sales.length,
-      unitsSold: sales.reduce((sum, sale) => sum + (sale.items || []).reduce((qty, item) => qty + Number(item.quantity || 0), 0), 0),
-    });
-    const current = period === "custom" && !bounds ? summarize([], []) : bounds ? summarize(data.sales.filter((item) => include(item, bounds.start, bounds.end)), data.expenses.filter((item) => include(item, bounds.start, bounds.end))) : summarize(data.sales, data.expenses);
-    const previous = bounds ? summarize(data.sales.filter((item) => include(item, bounds.previousStart, bounds.previousEnd)), data.expenses.filter((item) => include(item, bounds.previousStart, bounds.previousEnd))) : null;
-    current.netProfit = current.profit - current.expenses;
-    return { current, previous };
-  }, [data.sales, data.expenses, period, customRange]);
+  }, [periodReport, data.products, rankBy]);
 
   function comparison(key) {
-    if (!periodReport.previous) return "All recorded activity";
+    if (!periodReport.previous) return "Loaded recorded activity";
     const previous = Number(periodReport.previous[key] || 0);
     const current = Number(periodReport.current[key] || 0);
     if (!previous) return current ? "No activity in previous period" : "No change";
@@ -393,9 +343,10 @@ function AdminPortal() {
       <header className="admin-topbar"><div className="admin-topbar-identity"><span className="admin-mobile-brand"><BrandLogo symbol /></span><div><p>PAM Essentials & More Admin</p><span>{user?.email}</span></div></div><div><button className="icon-button" onClick={() => protection.request(() => { setEditor(null); load(); loadAttention(); })} aria-label="Refresh">↻</button><button className="icon-button" onClick={() => protection.request(signOut)} aria-label="Sign out">↪</button></div></header>
       <section className="admin-content">
         <div className="page-title"><div><p className="eyebrow">Admin Portal</p><h1>{section}</h1><p>{section === "Overview" ? "Current sales, stock and order health." : `Manage ${section.toLowerCase()} across the store and till.`}</p></div><div className="page-actions">{isAdmin && ["Overview", "Analytics"].includes(section) && <><select aria-label="Reporting period" value={period} onChange={(event) => setPeriod(event.target.value)}><option value="today">Today</option><option value="week">This week</option><option value="month">This month</option><option value="custom">Custom</option><option value="all">All time</option></select>{period === "custom" && <div className="period-custom"><input aria-label="Custom period start" type="date" value={customRange.start} onChange={(event) => setCustomRange((current) => ({ ...current, start: event.target.value }))} /><span>to</span><input aria-label="Custom period end" type="date" min={customRange.start} value={customRange.end} onChange={(event) => setCustomRange((current) => ({ ...current, end: event.target.value }))} /></div>}</>}{primaryAction}</div></div>
+        {isAdmin && ["Overview", "Analytics"].includes(section) && <p className="admin-report-period">Selected period: <strong>{periodReport.label}</strong> · Ghana time · sales and expenses by recorded date/time</p>}
         {notice && <p className="notice success-notice">{notice}</p>}{error && <p className="notice error-notice">{error}</p>}
         {loading ? <div className="empty-state"><div className="spinner" /><p>Loading admin data…</p></div> : <>
-          {section === "Overview" && <><AdminAttention attention={visibleAttention} loading={attentionLoading} error={attentionError} onRefresh={loadAttention} onNavigate={navigate} />{isAdmin && <AdminReadiness readiness={readiness} onView={viewReadiness} />}<div className="metric-grid">{metricCards.map(([label, value, note]) => <article className="metric-card" key={label}><p>{label}</p><strong>{value}</strong><span>{note}</span></article>)}</div>{isAdmin && <div className="metric-grid compact current-state">{stateCards.map(([label, value, note]) => <article className="metric-card" key={label}><p>{label}</p><strong>{value}</strong><span>{note} · current state</span></article>)}</div>}<div className="admin-panels"><article className="panel"><div className="panel-title"><h2>Stock attention</h2><button type="button" onClick={() => navigate("Inventory")}>View inventory</button></div><div className="attention-row"><span className="status-icon danger">↓</span><div><b>{data.metrics.lowStock || 0} products are low in stock</b><p>Review quantities before the next trading period.</p></div></div></article><article className="panel"><div className="panel-title"><h2>Open orders</h2><button onClick={() => setSection("Orders")}>View queue</button></div><div className="status-strip">{openOrderStatuses.map(([value, count]) => <button key={value} onClick={() => { setOrderStatus(value); setSection("Orders"); }}><span>{value.replace("-", " ")}</span><b>{count}</b></button>)}</div>{!data.orders.length ? <p className="muted">No orders yet.</p> : data.orders.filter((order) => !["completed", "cancelled"].includes(order.status)).slice(0, 4).map((order) => <div className="order-row" key={order.orderId}><div><b>{order.customer}</b><span>{order.orderId}</span></div><strong>{money.format(order.total || 0)}</strong><span className="badge warning">{order.status}</span></div>)}</article></div></>}
+          {section === "Overview" && <><AdminAttention attention={visibleAttention} loading={attentionLoading} error={attentionError} onRefresh={loadAttention} onNavigate={navigate} />{isAdmin && <AdminReadiness readiness={readiness} onView={viewReadiness} />}<div className="metric-grid">{metricCards.map(([label, value, note]) => <button type="button" className="metric-card metric-card-active" key={label} onClick={() => setSelectedMetric({ label, report: periodReport })} aria-label={`View ${label.toLowerCase()} details`}><p>{label}</p><strong>{value}</strong><span>{note}</span><b className="metric-view-details">View details →</b></button>)}</div>{isAdmin && <div className="metric-grid compact current-state">{stateCards.map(([label, value, note]) => <button type="button" className="metric-card metric-card-active" key={label} onClick={() => setSelectedMetric({ label, report: periodReport })} aria-label={`View ${label.toLowerCase()} details`}><p>{label}</p><strong>{value}</strong><span>{note} · current state</span><b className="metric-view-details">View details →</b></button>)}</div>}<div className="admin-panels"><article className="panel"><div className="panel-title"><h2>Stock attention</h2><button type="button" onClick={() => navigate("Inventory")}>View inventory</button></div><div className="attention-row"><span className="status-icon danger">↓</span><div><b>{data.metrics.lowStock || 0} products are low in stock</b><p>Review quantities before the next trading period.</p></div></div></article><article className="panel"><div className="panel-title"><h2>Open orders</h2><button onClick={() => setSection("Orders")}>View queue</button></div><div className="status-strip">{openOrderStatuses.map(([value, count]) => <button key={value} onClick={() => { setOrderStatus(value); setSection("Orders"); }}><span>{value.replace("-", " ")}</span><b>{count}</b></button>)}</div>{!data.orders.length ? <p className="muted">No orders yet.</p> : data.orders.filter((order) => !["completed", "cancelled"].includes(order.status)).slice(0, 4).map((order) => <div className="order-row" key={order.orderId}><div><b>{order.customer}</b><span>{order.orderId}</span></div><strong>{money.format(order.total || 0)}</strong><span className="badge warning">{order.status}</span></div>)}</article></div></>}
 
           {section === "Products" && <><AdminProductSearch query={query} setQuery={setQuery} category={productCategory} setCategory={setProductCategory} status={status} setStatus={setStatus} categories={data.categories} products={products} onSelect={(product) => openEditor("product", product)} /><AdminProductWorkspace products={products} data={data} readiness={readiness} filters={{ query, category: productCategory, status, readiness: readinessFilter }} onFilters={setProductFilters} onEdit={(product) => openEditor("product", product)} authorizedFetch={authorizedFetch} onApplied={(result) => { setNotice(`${result.changedCount} product updates saved together and recorded in Audit.`); load(); }} /></>}
 
@@ -416,7 +367,7 @@ function AdminPortal() {
           {section === "Product Requests" && <AdminProductRequests initialRecord={sectionRecord} authorizedFetch={authorizedFetch} onChanged={loadAttention} />}
           {section === "Restock Alerts" && <AdminRestockAlerts authorizedFetch={authorizedFetch} />}
           {section === "Reviews" && <AdminReviews initialRecord={sectionRecord} authorizedFetch={authorizedFetch} onChanged={loadAttention} />}
-          {section === "Analytics" && <><AdminWishlistAnalytics authorizedFetch={authorizedFetch} products={data.products} /><div className="metric-grid">{metricCards.map(([label, value, note]) => <article className="metric-card" key={label}><p>{label}</p><strong>{value}</strong><span>{note}</span></article>)}</div><div className="table-tools analytics-tools"><span>Rank performance by</span><select value={rankBy} onChange={(event) => setRankBy(event.target.value)}><option value="revenue">Revenue</option><option value="quantity">Quantity</option><option value="profit">Profit</option></select></div><div className="admin-panels"><article className="panel"><div className="panel-title"><h2>Top products</h2></div>{performance.products.length ? performance.products.map(([id, value]) => <div className="order-row" key={id}><div><b>{value.name}</b><span>{value.quantity} units · {money.format(value.revenue)} revenue</span></div><strong>{rankBy === "quantity" ? whole.format(value.quantity) : money.format(value[rankBy])}</strong></div>) : <p className="muted">Sales will appear here after checkout.</p>}</article><article className="panel"><div className="panel-title"><h2>Category performance</h2></div>{performance.categories.length ? performance.categories.map(([name, value]) => <div className="order-row" key={name}><div><b>{name}</b><span>{value.quantity} units · {money.format(value.revenue)} revenue</span></div><strong>{rankBy === "quantity" ? whole.format(value.quantity) : money.format(value[rankBy])}</strong></div>) : <p className="muted">No category sales yet.</p>}</article><article className="panel"><div className="panel-title"><h2>Channel split</h2></div>{performance.channels.length ? performance.channels.map(([name, revenue]) => <div className="order-row" key={name}><div><b>{name}</b><span>Sales channel</span></div><strong>{money.format(revenue)}</strong></div>) : <p className="muted">No channel sales yet.</p>}</article><article className="panel"><div className="panel-title"><h2>No-sale products</h2></div>{performance.noSales.length ? performance.noSales.map((product) => <div className="order-row" key={product.id}><div><b>{product.name}</b><span>{product.category} · {product.stock} in stock</span></div><span className="badge warning">No sales</span></div>) : <p className="muted">Every active product sold in this period.</p>}</article><article className="panel"><div className="panel-title"><h2>Recent expenses</h2></div>{data.expenses.length ? data.expenses.slice(0, 10).map((expense) => <div className="order-row" key={expense.id}><div><b>{expense.description}</b><span>{expense.category} · {dateTime(expense.createdAt)}</span></div><strong>{money.format(expense.amount)}</strong></div>) : <p className="muted">No expenses recorded.</p>}</article></div></>}
+          {section === "Analytics" && <><AdminAnalyticsCharts report={periodReport} onDetails={(label, report) => setSelectedMetric({ label, report })} /><AdminWishlistAnalytics authorizedFetch={authorizedFetch} products={data.products} /><div className="metric-grid">{metricCards.map(([label, value, note]) => <button type="button" className="metric-card metric-card-active" key={label} onClick={() => setSelectedMetric({ label, report: periodReport })} aria-label={`View ${label.toLowerCase()} details`}><p>{label}</p><strong>{value}</strong><span>{note}</span><b className="metric-view-details">View details →</b></button>)}</div><div className="table-tools analytics-tools"><span>Rank performance by</span><select value={rankBy} onChange={(event) => setRankBy(event.target.value)}><option value="revenue">Revenue</option><option value="quantity">Quantity</option><option value="profit">Profit</option></select></div><div className="admin-panels"><article className="panel"><div className="panel-title"><h2>Top products</h2></div>{performance.products.length ? performance.products.map(([id, value]) => <div className="order-row" key={id}><div><b>{value.name}</b><span>{value.quantity} units · {money.format(value.revenue)} revenue</span></div><strong>{rankBy === "quantity" ? whole.format(value.quantity) : money.format(value[rankBy])}</strong></div>) : <p className="muted">Sales will appear here after checkout.</p>}</article><article className="panel"><div className="panel-title"><h2>Category performance</h2></div>{performance.categories.length ? performance.categories.map(([name, value]) => <div className="order-row" key={name}><div><b>{name}</b><span>{value.quantity} units · {money.format(value.revenue)} revenue</span></div><strong>{rankBy === "quantity" ? whole.format(value.quantity) : money.format(value[rankBy])}</strong></div>) : <p className="muted">No category sales yet.</p>}</article><article className="panel"><div className="panel-title"><h2>Channel split</h2></div>{performance.channels.length ? performance.channels.map(([name, revenue]) => <div className="order-row" key={name}><div><b>{name}</b><span>Sales channel</span></div><strong>{money.format(revenue)}</strong></div>) : <p className="muted">No channel sales yet.</p>}</article><article className="panel"><div className="panel-title"><h2>No-sale products</h2></div>{performance.noSales.length ? performance.noSales.map((product) => <div className="order-row" key={product.id}><div><b>{product.name}</b><span>{product.category} · {product.stock} in stock</span></div><span className="badge warning">No sales</span></div>) : <p className="muted">Every active product sold in this period.</p>}</article><article className="panel"><div className="panel-title"><h2>Recent expenses</h2></div>{periodReport.expenses.length ? periodReport.expenses.slice(0, 10).map((expense) => <div className="order-row" key={expense.id}><div><b>{expense.description}</b><span>{expense.category} · {dateTime(expense.createdAt)}</span></div><strong>{money.format(expense.amount)}</strong></div>) : <p className="muted">No expenses recorded.</p>}</article></div></>}
 
           {section === "Transactions" && <AdminReceipts sales={data.sales} />}
 
@@ -434,6 +385,8 @@ function AdminPortal() {
       </section>
     </main>
     <div className="admin-mobile-nav"><button type="button" className="admin-mobile-nav-toggle" aria-expanded={mobileNavOpen} onClick={() => setMobileNavOpen((open) => !open)}>Admin: {section} <span>{mobileNavOpen ? "Close" : "Sections"} ▴</span></button>{mobileNavOpen && <div className="admin-mobile-nav-panel" role="navigation" aria-label="Admin sections"><AdminGroupedNavigation allowed={nav} current={section} counts={navCounts} onNavigate={navigate} mobile /><a href="/pos">Open Till</a><a href="/">Open Store</a></div>}</div>
+    {selectedMetric && (isAdmin || ["Products", "Low stock", "Out of stock", "Open orders"].includes(selectedMetric.label)) && !metricReceipt && <AdminMetricDetails key={selectedMetric.label} label={selectedMetric.label} data={data} report={selectedMetric.report} isAdmin={isAdmin} updatedAt={reportUpdatedAt} onClose={() => setSelectedMetric(null)} onNavigate={(tab) => { setSelectedMetric(null); navigate(tab); }} onOrder={(order) => { setSelectedMetric(null); setSelectedOrder(order); }} onReceipt={(sale) => { if (isAdmin) { setMetricReceipt({ sale, metric: selectedMetric }); setSelectedMetric(null); } }} />}
+    {isAdmin && metricReceipt && <ReceiptPanel sale={receiptSnapshot(metricReceipt.sale)} onClose={() => { setSelectedMetric(metricReceipt.metric); setMetricReceipt(null); }} />}
     {isAdmin && editor && <div className="modal-backdrop"><form className="modal editor-modal admin-form" role="dialog" aria-modal="true" aria-labelledby="admin-editor-title" onSubmit={saveEditor}>
       <div className="drawer-title"><div><p className="eyebrow">{editor.data.create ? "Create" : "Edit"}</p><h2 id="admin-editor-title">{editor.type}</h2></div><button type="button" className="icon-button" disabled={saving || uploadingImages} onClick={protection.close}>×</button></div>
       {editor.type === "product" && <AdminDraftRecovery key={editor.data.id || "new"} protection={protection} saveState={saveState} error={error} />}
