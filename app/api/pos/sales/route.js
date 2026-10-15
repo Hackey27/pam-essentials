@@ -7,6 +7,8 @@ import { receiptSnapshot } from "@/lib/receiptData.mjs";
 import { offlineReceiptId } from "@/lib/offlineSale.mjs";
 import { managerRoles, capturedPricing, posRoles } from "@/lib/posOperations.mjs";
 import { auditPayload, text } from "@/lib/serverData";
+import { accountingContext, postSource } from "@/lib/accountingServer";
+import { saleJournal, saleTax, productBook, today } from "@/lib/accounting.mjs";
 
 export async function GET(request) {
   const access = await requireRole(request, posRoles);
@@ -95,6 +97,12 @@ export async function POST(request) {
       const currentPricing = priceCart(productSnaps.map((snap, index) => ({ id: normalizedItems[index].id, categoryId: snap.data().categoryId, price: Number(snap.data().price), quantity: normalizedItems[index].quantity })), context.rules, context.deals);
       const pricing = reconciliation ? capturedPricing(reconciliation.receipt, normalizedItems) : currentPricing;
       if (offlineFinal && Math.abs(pricing.total - Number(body.offlineTotal)) > 0.005) throw new Error("Offline total differs from current pricing. Keep the local receipt and ask a manager to reconcile this sale.");
+      const accounting = await accountingContext(tx, store, today(), { type: "sale", id: transactionId });
+      const taxSnapshot = reconciliation ? reconciliation.receipt.taxSnapshot || { enabled: false } : saleTax(pricing, productSnaps.map(s => s.data()), accounting.settings.tax, today());
+      if (offlineFinal && !reconciliation) {
+        const captured = body.offlineTaxSnapshot || { enabled: false };
+        if (captured.enabled !== taxSnapshot.enabled || Boolean(captured.registered ?? captured.enabled) !== Boolean(taxSnapshot.registered) || captured.enabled && (Math.abs(Number(captured.tax) - taxSnapshot.tax) > 0.005 || JSON.stringify(captured.lines) !== JSON.stringify(taxSnapshot.lines))) throw new Error("Tax settings changed since this offline receipt was captured. Keep it queued and ask a manager to reconcile it.");
+      }
       const lines = [];
       let cost = 0;
 
@@ -106,7 +114,9 @@ export async function POST(request) {
         const quantity = item.quantity;
         const priced = pricing.lines[index];
         const netLineTotal = priced.lineTotal;
-        const lineCost = Math.round(Number(product.costPrice || 0) * quantity * 100) / 100;
+        const inventoryBook = productBook(product, accounting.settings);
+        const trackedCost = accounting.settings.active && accounting.settings.costing === "weighted-average" && Number.isSafeInteger(inventoryBook.value) && Number.isInteger(inventoryBook.quantity) && inventoryBook.quantity >= quantity;
+        const lineCost = trackedCost ? Math.round(inventoryBook.value * quantity / inventoryBook.quantity) / 100 : Math.round(Number(product.costPrice || 0) * quantity * 100) / 100;
         cost += lineCost;
         lines.push({
           productId: product.id,
@@ -121,13 +131,14 @@ export async function POST(request) {
           unitPrice: reconciliation ? priced.unitPrice : Number(product.price),
           lineTotal: netLineTotal,
           unitCost: Number(product.costPrice || 0),
+          costRecorded: product.costPrice != null && (!accounting.settings.active || !Number.isInteger(inventoryBook.quantity) || inventoryBook.quantity >= quantity),
           lineCost,
-          lineProfit: Math.round((netLineTotal - lineCost) * 100) / 100,
+          lineProfit: Math.round((netLineTotal - Number(taxSnapshot.productLines?.[index]?.tax || 0) - lineCost) * 100) / 100,
           categorySnapshot: { id: product.categoryId, name: product.category },
           discountRuleSnapshot: priced.rule ? { ruleId: priced.rule.ruleId, name: priced.rule.name, discountType: priced.rule.discountType, value: priced.rule.value, minQty: priced.rule.minQty, amount: priced.ruleDiscountCents / 100 } : null,
           dealBundleSnapshot: priced.dealIds.length ? { dealIds: priced.dealIds, amount: priced.dealDiscountCents / 100 } : null,
         });
-        tx.update(productRef, { stock: Number(product.stock) - quantity, ...(salesChannel === "walk-in" ? { purchaseCount: FieldValue.increment(quantity) } : {}), updatedAt: FieldValue.serverTimestamp() });
+        tx.update(productRef, { ...(accounting.settings.active && Number.isInteger(inventoryBook.quantity) ? { accountingStockQuantity: inventoryBook.quantity - quantity, accountingStockValueCents: Number.isSafeInteger(inventoryBook.value) ? inventoryBook.value - Math.round(lineCost * 100) : null } : {}), stock: Number(product.stock) - quantity, ...(salesChannel === "walk-in" ? { purchaseCount: FieldValue.increment(quantity) } : {}), updatedAt: FieldValue.serverTimestamp() });
         tx.create(store.collection("stock_movements").doc(), {
           type: "sale",
           productId: product.id,
@@ -162,7 +173,7 @@ export async function POST(request) {
         discount: pricing.discount,
         total,
         cost,
-        profit: total - cost,
+        profit: Math.round((total - Number(taxSnapshot.tax || 0) - cost) * 100) / 100,
         paymentMethod,
         amountPaid: tendered,
         change,
@@ -173,7 +184,7 @@ export async function POST(request) {
         customerName,
         customerPhone,
         fulfilmentSnapshot: { deliveryMethod: linkedOrder?.deliveryMethod || "pickup", originAddress: linkedOrder?.originAddress || CURRENT_SHOP_ADDRESS, deliveryAddress: linkedOrder?.deliveryAddress || linkedOrder?.landmark || "" },
-        taxSnapshot: { enabled: false },
+        taxSnapshot,
         staffId: reconciliation ? shiftSnap.data().staffId : access.user.uid,
         staffName: reconciliation ? shiftSnap.data().staffName || "Staff" : access.user.displayName,
         staffEmail: reconciliation ? shiftSnap.data().staffEmail || "" : access.user.email,
@@ -184,6 +195,7 @@ export async function POST(request) {
         createdAt: FieldValue.serverTimestamp(),
       };
       tx.create(saleRef, saleData);
+      postSource(tx, accounting, saleJournal({ ...saleData, id: transactionId }, today()), access.user);
       if (reconciliation) tx.create(store.collection("admin_audit").doc(), auditPayload(access.user, "RECONCILE_OFFLINE_SALE", "sale", transactionId, text(reconciliation.reason, 500), { currentTotal: currentPricing.total }, { capturedTotal: pricing.total, receiptId, shiftId }));
       if (shiftSnap.data().aggregationVersion === 1) tx.update(shiftRef, { transactionCount: FieldValue.increment(1), salesTotal: FieldValue.increment(total), [`paymentMix.${paymentMethod}`]: FieldValue.increment(total) });
       else tx.update(shiftRef, { lastSaleAt: FieldValue.serverTimestamp() });

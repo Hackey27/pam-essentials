@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { adminDb, requireRole } from "@/lib/admin";
 import { auditPayload, nullableNumber, text } from "@/lib/serverData";
 import { serializeDoc } from "@/lib/productData";
+import { accountingContext, postSource } from "@/lib/accountingServer";
+import { expenseJournal } from "@/lib/accounting.mjs";
 import { cashCents } from "@/lib/posOperations.mjs";
 
 export const dynamic = "force-dynamic";
@@ -67,10 +69,13 @@ export async function POST(request) {
       const [shift, existing] = await tx.getAll(store.collection("shifts").doc(shiftId), target);
       if (!shift.exists || shift.data().status !== "open" || shift.data().staffId !== access.user.uid) throw new Error("Your shift has ended. Expense was not saved.");
       if (existing.exists) { const old=existing.data(); if (old.staffId !== access.user.uid || old.shiftId !== shiftId || old.amount!==amount || old.description!==description || old.paymentMethod!==paymentMethod || old.category!==category || old.expenseDate!==expenseDate || (old.paymentMethod === "cash" && old.fromTill !== false) !== value.fromTill) throw new Error("Expense reference is already in use for different details."); return; }
+      const accounting = await accountingContext(tx, store, expenseDate, { type: "expense", id: target.id });
       tx.create(target, value);
+      postSource(tx, accounting, expenseJournal({ ...value, id: target.id }, expenseDate), access.user);
       if (value.fromTill && shift.data().cashLedgerVersion === 1) tx.update(shift.ref, { cashExpenses: Math.round((Number(shift.data().cashExpenses || 0) + amount) * 100) / 100 });
       tx.create(store.collection("admin_audit").doc(), auditPayload(access.user, "RECORD_EXPENSE", "expense", target.id, `Recorded ${amount.toFixed(2)} expense for ${description}.`, null, value));
     });
   } catch (e) { return NextResponse.json({ error: e.message }, { status: 409 }); }
   return NextResponse.json({ ok: true, expenseId: target.id });
 }
+

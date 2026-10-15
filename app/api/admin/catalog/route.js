@@ -29,7 +29,7 @@ export async function GET(request) {
   ]);
 
   const fullProducts = productsSnap.docs.map((doc) => ({ ...serializeDoc(doc), editVersion: documentVersion(doc) })).map((product) => ({ ...product, ...categoryLabels(product, hierarchy) })).sort((a, b) => a.name.localeCompare(b.name));
-  const products = isAdmin ? fullProducts : fullProducts.map(({ costPrice, wholesalePackPrice, ...product }) => product);
+  const products = isAdmin ? fullProducts : fullProducts.map(({ costPrice, wholesalePackPrice, accountingStockValueCents, accountingStockQuantity, ...product }) => product);
   const orders = ordersSnap.docs.map(serializeDoc).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
   const movements = movementsSnap.docs.map(serializeDoc);
   const { categories, subcategories, subSubcategories } = hierarchy;
@@ -57,10 +57,11 @@ export async function GET(request) {
     metrics.transactions = sales.filter(sale => sale.saleType !== "reversal").length;
     metrics.reversals = sales.filter(sale => sale.saleType === "reversal").length;
     metrics.unitsSold = sales.reduce((sum, sale) => sum + (sale.items || []).reduce((qty, item) => qty + Number(item.quantity || 0), 0), 0);
-    metrics.stockValuation = fullProducts.reduce((sum, product) => sum + Number(product.stock || 0) * Number(product.costPrice || 0), 0);
+    metrics.stockValuation = fullProducts.reduce((sum, product) => sum + (Number.isSafeInteger(product.accountingStockValueCents) && product.accountingStockQuantity === Number(product.stock || 0) ? product.accountingStockValueCents / 100 : Number(product.stock || 0) * Number(product.costPrice || 0)), 0);
     metrics.expenses = expenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
     metrics.netProfit = metrics.profit - metrics.expenses;
   }
 
   return NextResponse.json({ products, orders, movements, categories, subcategories, subSubcategories, discounts, dealBundles, settings, users, audit, sales, expenses, metrics, permissions: { isAdmin } });
 }
+

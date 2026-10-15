@@ -15,6 +15,7 @@ import PosBasketTools from "@/components/PosBasketTools";
 import usePosBaskets from "@/components/usePosBaskets";
 import { planPosScan, planScannedProduct } from "@/lib/scannerWorkflow.mjs";
 import ReceiptPanel from "@/components/ReceiptPanel";
+import { saleTax } from "@/lib/accounting.mjs";
 import { priceCart } from "@/lib/commerce";
 import BrandLogo from "@/components/BrandLogo";
 import { offlineSaleReceipt } from "@/lib/offlineSale.mjs";
@@ -27,6 +28,7 @@ function Till() {
   const { user, role } = useAuth();
   const [products, setProducts] = useState([]);
   const [categoryList, setCategoryList] = useState([]);
+  const [taxPolicy, setTaxPolicy] = useState({ enabled: false });
   const [discountRules, setDiscountRules] = useState([]);
   const [dealBundles, setDealBundles] = useState([]);
   const [orders, setOrders] = useState([]);
@@ -90,7 +92,7 @@ function Till() {
 
   function clearBasketFields() { setCart([]); setOrderReference(""); setOrderChannel("walk-in"); setCustomerName(""); setCustomerPhone(""); setAmountPaid(""); setTransactionVerified(false); setCashChangeSource("cash"); saleAttempt.current = null; }
   const baskets = usePosBaskets({ user, shift, cart, orderChannel, orderReference, customerName, customerPhone, request, attempt: saleAttempt,
-    onRestore: (draft, restored, fresh) => { setProducts(fresh.products || []); setDiscountRules(fresh.discountRules || []); setDealBundles(fresh.dealBundles || []); setCart(restored); setOrderChannel(draft.orderChannel || "walk-in"); setOrderReference(draft.orderReference || ""); setCustomerName(draft.customerName || ""); setCustomerPhone(draft.customerPhone || ""); setAmountPaid(""); setTransactionVerified(false); setCashChangeSource("cash"); setPaymentMethod("cash"); saleAttempt.current = draft.attemptId ? { transactionId: draft.attemptId, fingerprint: null, uncertain: false } : null; setView("sale"); setCartNotice("Restored with current stock, prices and promotions. Review the total and enter payment again."); },
+    onRestore: (draft, restored, fresh) => { setProducts(fresh.products || []); setDiscountRules(fresh.discountRules || []); setTaxPolicy(fresh.taxPolicy || { enabled: false }); setDealBundles(fresh.dealBundles || []); setCart(restored); setOrderChannel(draft.orderChannel || "walk-in"); setOrderReference(draft.orderReference || ""); setCustomerName(draft.customerName || ""); setCustomerPhone(draft.customerPhone || ""); setAmountPaid(""); setTransactionVerified(false); setCashChangeSource("cash"); setPaymentMethod("cash"); saleAttempt.current = draft.attemptId ? { transactionId: draft.attemptId, fingerprint: null, uncertain: false } : null; setView("sale"); setCartNotice("Restored with current stock, prices and promotions. Review the total and enter payment again."); },
     onFoundSale: (saved) => { clearBasketFields(); setReceipt(saved); }
   });
   function holdSale(name) { if (!baskets.hold(name)) return false; clearBasketFields(); return true; }
@@ -120,14 +122,14 @@ function Till() {
       if (!response.ok) throw new Error(data.error);
       setProducts(data.products || []);
       setCategoryList(data.categories || []);
-      setDiscountRules(data.discountRules || []);
+      setDiscountRules(data.discountRules || []); setTaxPolicy(data.taxPolicy || { enabled: false });
       setDealBundles(data.dealBundles || []);
-      localStorage.setItem("pam-pos-catalogue", JSON.stringify({ products: data.products || [], categories: data.categories || [], discountRules: data.discountRules || [], dealBundles: data.dealBundles || [] }));
+      localStorage.setItem("pam-pos-catalogue", JSON.stringify({ products: data.products || [], categories: data.categories || [], discountRules: data.discountRules || [], dealBundles: data.dealBundles || [], taxPolicy: data.taxPolicy || { enabled: false } }));
     } catch (err) {
       const cached = JSON.parse(localStorage.getItem("pam-pos-catalogue") || "{}");
       setProducts(cached.products || []);
       setCategoryList(cached.categories || []);
-      setDiscountRules(cached.discountRules || []);
+      setDiscountRules(cached.discountRules || []); setTaxPolicy(cached.taxPolicy || { enabled: false });
       setDealBundles(cached.dealBundles || []);
       if (!cached.products?.length) setError(err.message || "Products could not be loaded.");
     }
@@ -406,8 +408,9 @@ function Till() {
 
   function finalizeOfflineSale() {
     const transactionId = crypto.randomUUID();
-    const localReceipt = offlineSaleReceipt({ transactionId, cart, pricing, shift, staffEmail: user?.email || "", staffName: shift?.staffName || user?.displayName || "", paymentMethod, cashChangeSource, amountPaid: tendered, salesChannel: orderChannel, orderReference, customerName, customerPhone });
-    const payload = { transactionId, offlineFinal: true, offlineTotal: total, paymentMethod, cashChangeSource, transactionVerified, salesChannel: orderChannel, orderReference: orderReference || null, customerName, customerPhone, amountPaid: tendered, shiftId: shift.shiftId, deviceId, items: cart.map(({ id, quantity }) => ({ id, quantity })) };
+    const capturedTax = saleTax(pricing, cart, taxPolicy, new Date().toISOString().slice(0,10));
+    const localReceipt = offlineSaleReceipt({ taxSnapshot: capturedTax, transactionId, cart, pricing, shift, staffEmail: user?.email || "", staffName: shift?.staffName || user?.displayName || "", paymentMethod, cashChangeSource, amountPaid: tendered, salesChannel: orderChannel, orderReference, customerName, customerPhone });
+    const payload = { transactionId, offlineFinal: true, offlineTotal: total, offlineTaxSnapshot: capturedTax, paymentMethod, cashChangeSource, transactionVerified, salesChannel: orderChannel, orderReference: orderReference || null, customerName, customerPhone, amountPaid: tendered, shiftId: shift.shiftId, deviceId, items: cart.map(({ id, quantity }) => ({ id, quantity })) };
     const queued = JSON.parse(localStorage.getItem("pam-pos-queue") || "[]");
     const next = [...queued, { payload, receipt: localReceipt, createdAt: localReceipt.createdAt, staffId: user.uid }];
     localStorage.setItem("pam-pos-queue", JSON.stringify(next));
@@ -418,7 +421,7 @@ function Till() {
     setProducts(adjustedProducts);
     let catalogueCacheWarning = false;
     try {
-      localStorage.setItem("pam-pos-catalogue", JSON.stringify({ products: adjustedProducts, categories: categoryList, discountRules, dealBundles }));
+      localStorage.setItem("pam-pos-catalogue", JSON.stringify({ products: adjustedProducts, categories: categoryList, discountRules, dealBundles, taxPolicy }));
     } catch { catalogueCacheWarning = true; }
     setQueuedCount(next.length);
     baskets.finish();
@@ -475,7 +478,7 @@ function Till() {
       const freshMap = new Map((fresh.products || []).map((product) => [product.id, product]));
       const changed = cart.find((item) => { const latest = freshMap.get(item.id); return !latest || latest.stock < item.quantity || latest.price !== item.price; });
       const freshPricing = changed ? null : priceCart(cart.map((item) => ({ ...freshMap.get(item.id), quantity: item.quantity })), fresh.discountRules || [], fresh.dealBundles || []);
-      setProducts(fresh.products || []); setDiscountRules(fresh.discountRules || []); setDealBundles(fresh.dealBundles || []);
+      setProducts(fresh.products || []); setDiscountRules(fresh.discountRules || []); setTaxPolicy(fresh.taxPolicy || { enabled: false }); setDealBundles(fresh.dealBundles || []);
       if (changed || freshPricing.total !== total) {
         setCart(cart.map((item) => freshMap.has(item.id) ? { ...freshMap.get(item.id), quantity: Math.min(item.quantity, freshMap.get(item.id).stock) } : { ...item, stock: 0 }).filter((item) => item.quantity > 0 && item.stock > 0));
         setConfirmSale(false);

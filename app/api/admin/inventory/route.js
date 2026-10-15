@@ -1,6 +1,8 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { NextResponse } from "next/server";
 import { adminDb, requireRole } from "@/lib/admin";
+import { accountingContext } from "@/lib/accountingServer";
+import { today } from "@/lib/accounting.mjs";
 import { auditPayload, text } from "@/lib/serverData";
 
 export async function POST(request) {
@@ -24,6 +26,7 @@ export async function POST(request) {
       const productRef = store.collection("products").doc(encodeURIComponent(productId));
       const productSnap = await tx.get(productRef);
       if (!productSnap.exists) throw new Error("Product not found.");
+      const accounting = await accountingContext(tx, store, today());
       const oldStock = Number(productSnap.data().stock || 0);
       const change = type === "receive" ? Math.abs(quantity) : quantity;
       const newStock = oldStock + change;
@@ -46,6 +49,7 @@ export async function POST(request) {
         createdAt: FieldValue.serverTimestamp(),
       });
       tx.create(store.collection("admin_audit").doc(), auditPayload(access.user, type === "receive" ? "RECEIVE_STOCK" : "ADJUST_STOCK", "product", productId, `${type === "receive" ? "Received" : "Adjusted"} ${change} units; stock ${oldStock} → ${newStock}.`, { stock: oldStock }, { stock: newStock }));
+      if (accounting.settings.active) tx.update(accounting.ref, { version: Number(accounting.settings.version || 0) + 1 });
       return { oldStock, newStock, change };
     });
     return NextResponse.json(result);

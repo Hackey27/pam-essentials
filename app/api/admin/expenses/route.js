@@ -2,6 +2,8 @@ import { FieldValue } from "firebase-admin/firestore";
 import { NextResponse } from "next/server";
 import { adminDb, requireRole } from "@/lib/admin";
 import { auditPayload, nullableNumber, text } from "@/lib/serverData";
+import { accountingContext, postSource } from "@/lib/accountingServer";
+import { expenseJournal, today } from "@/lib/accounting.mjs";
 
 export async function POST(request) {
   const access = await requireRole(request, ["owner", "admin"]);
@@ -22,9 +24,11 @@ export async function POST(request) {
     staffEmail: access.user.email,
     createdAt: FieldValue.serverTimestamp(),
   };
-  const batch = store.batch();
+  await store.runTransaction(async batch => {
+  const accounting = await accountingContext(batch, store, today(), { type: "expense", id: ref.id });
   batch.create(ref, value);
   batch.create(store.collection("admin_audit").doc(), auditPayload(access.user, "RECORD_EXPENSE", "expense", ref.id, `Recorded ${amount.toFixed(2)} expense for ${description}.`, null, value));
-  await batch.commit();
+  postSource(batch, accounting, expenseJournal({ ...value, id: ref.id }, today()), access.user);
+  });
   return NextResponse.json({ ok: true, expenseId: ref.id });
 }

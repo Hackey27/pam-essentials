@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { adminDb, requireRole } from "@/lib/admin";
 import { auditPayload, text } from "@/lib/serverData";
 import { serializeDoc } from "@/lib/productData";
+import { accountingContext, postSource } from "@/lib/accountingServer";
+import { cashJournal, today } from "@/lib/accounting.mjs";
 import { cashCents, cashPosition, posRoles } from "@/lib/posOperations.mjs";
 export const dynamic = "force-dynamic";
 export async function GET(request) {
@@ -31,7 +33,9 @@ export async function POST(request) {
       if(b.type==="opening"&&shift.data().openingCash!=null)throw new Error("Opening cash has already been recorded.");
       const net=cents*(b.type==="out"?-1:1)/100;
       const value={movementId,shiftId:id,type:b.type,amount:cents/100,reason,staffId:access.user.uid,staffName:access.user.displayName,createdAt:FieldValue.serverTimestamp()};
+      const accounting=await accountingContext(tx,store,today(),{type:"cash",id:movementId});
       tx.create(ref,value);
+      postSource(tx,accounting,cashJournal({...value,id:movementId},today()),access.user);
       tx.update(shiftRef,b.type==="opening"?{openingCash:cents/100}:{cashMovementNet:Math.round((Number(shift.data().cashMovementNet||0)+net)*100)/100});
       tx.create(store.collection("admin_audit").doc(),auditPayload(access.user,"POS_CASH_MOVEMENT","shift",id,reason,null,value));return {ok:true};
     });return NextResponse.json(result);

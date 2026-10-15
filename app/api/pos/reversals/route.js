@@ -4,6 +4,8 @@ import { adminDb, requireRole } from "@/lib/admin";
 import { auditPayload, text } from "@/lib/serverData";
 import { receiptSnapshot } from "@/lib/receiptData.mjs";
 import { managerRoles, correctionCashImpact } from "@/lib/posOperations.mjs";
+import { accountingContext, postSource } from "@/lib/accountingServer";
+import { saleJournal, productBook, today } from "@/lib/accounting.mjs";
 export async function POST(request){
   const access=await requireRole(request,managerRoles);
   if(access.error)return NextResponse.json({error:access.error},{status:access.status});
@@ -33,12 +35,15 @@ export async function POST(request){
       value.cashChangePaid=0;
       value.cashChangeSource="";
       if(b.paymentResolution==="not-collected")value.amountPaid=0;
+      const accounting=await accountingContext(tx,store,today(),{type:"sale",id:reversalRef.id});
+      value.originalCashChangePaid=Number(sale.cashChangePaid||0);
       tx.create(reversalRef,value);
+      postSource(tx,accounting,saleJournal({...value,id:reversalRef.id},today()),access.user);
       tx.update(originalRef,{reversalId:reversalRef.id,reversedAt:FieldValue.serverTimestamp(),reversedBy:access.user.uid});
       const s=shift.data(),mix={...(s.paymentMix||{})};mix[sale.paymentMethod||"cash"]=Math.round((Number(mix[sale.paymentMethod||"cash"]||0)-Number(sale.total))*100)/100;
       tx.update(shiftRef,{salesTotal:Math.round((Number(s.salesTotal||0)-Number(sale.total))*100)/100,paymentMix:mix,reversalCount:Number(s.reversalCount||0)+1,reversalTotal:Math.round((Number(s.reversalTotal||0)+Number(sale.total))*100)/100,cashCorrectionNet:Math.round((Number(s.cashCorrectionNet||0)+cashImpact.currentDelta)*100)/100});
       if(sourceRef)tx.update(sourceRef,{cashCorrectionNet:Math.round((Number(sourceShift.data().cashCorrectionNet||0)+cashImpact.sourceDelta)*100)/100});
-      if(b.restoreStock)for(let i=0;i<refs.length;i++){const p=products[i].data(),id=[...quantities.keys()][i],q=quantities.get(id),old=Number(p.stock);tx.update(refs[i],{stock:old+q,updatedAt:FieldValue.serverTimestamp()});tx.create(store.collection("stock_movements").doc(),{type:"adjust",productId:id,productName:p.name,quantity:q,qtyChange:q,oldStock:old,newStock:old+q,saleId,reversalId:reversalRef.id,reason:`Sale correction: ${reason}`,staff:access.user.uid,staffEmail:access.user.email,createdAt:FieldValue.serverTimestamp()});}
+      if(b.restoreStock)for(let i=0;i<refs.length;i++){const p=products[i].data(),id=[...quantities.keys()][i],q=quantities.get(id),old=Number(p.stock);const inventoryBook=productBook(p,accounting.settings);const originalCost=Math.round((sale.items||[]).filter(item=>(item.productId||item.id)===id).reduce((n,item)=>n+Number(item.lineCost||0),0)*100);tx.update(refs[i],{...(accounting.settings.active&&Number.isInteger(inventoryBook.quantity)?{accountingStockQuantity:inventoryBook.quantity+q,accountingStockValueCents:Number.isSafeInteger(inventoryBook.value)?inventoryBook.value+originalCost:null}:{}),stock:old+q,updatedAt:FieldValue.serverTimestamp()});tx.create(store.collection("stock_movements").doc(),{type:"adjust",productId:id,productName:p.name,quantity:q,qtyChange:q,oldStock:old,newStock:old+q,saleId,reversalId:reversalRef.id,reason:`Sale correction: ${reason}`,staff:access.user.uid,staffEmail:access.user.email,createdAt:FieldValue.serverTimestamp()});}
       tx.create(store.collection("admin_audit").doc(),auditPayload(access.user,"REVERSE_POS_SALE","sale",saleId,reason,{receiptId:sale.receiptId,total:sale.total},{reversalId:reversalRef.id,total:value.total,restoreStock:b.restoreStock,paymentResolved:true,paymentResolution:b.paymentResolution,cashHandling:value.cashHandling,linkedOrder:sale.orderReference||null}));
       return receiptSnapshot({...value,id:reversalRef.id,createdAt:new Date().toISOString()});
     });return NextResponse.json(receipt);

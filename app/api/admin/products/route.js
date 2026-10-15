@@ -103,6 +103,7 @@ export async function POST(request) {
     subSubcategoryId,
     subSubcategory: subSubcategoryName,
     price,
+    ...(typeof body.taxExempt === "boolean" ? { taxExempt: body.taxExempt } : {}),
     ...(typeof body.contactForPrice === "boolean" ? { contactForPrice: body.contactForPrice } : {}),
     costPrice,
     pinned: Boolean(body.pinned),
@@ -179,3 +180,4 @@ export async function POST(request) {
   }
   return NextResponse.json({ ok: true, id });
 }
+
