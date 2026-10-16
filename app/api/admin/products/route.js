@@ -168,7 +168,7 @@ export async function POST(request) {
     });
   }
   const auditRef = store.collection("admin_audit").doc();
-  batch.create(auditRef, auditPayload(access.user, existing.exists ? "UPDATE_PRODUCT" : "CREATE_PRODUCT", "product", id, `${existing.exists ? "Updated" : "Created"} ${name}.`, oldValue, product));
+  batch.create(auditRef, auditPayload(access.user, existing.exists ? "UPDATE_PRODUCT" : "CREATE_PRODUCT", "product", id, `${existing.exists ? "Updated" : "Created"} ${name}.${body.priceChangeReason ? ` Price/cost reason: ${text(body.priceChangeReason, 500)}` : ""}`, oldValue, product));
   for (const entry of barcodes.deleted) {
     const { reason, ...record } = entry;
     batch.create(store.collection("admin_audit").doc(), auditPayload(access.user, "DELETE_BARCODE", "product", id, `Deleted barcode ${entry.code} from SKU ${entry.sku || oldValue?.sku || id}. Reason: ${reason}`, record, { code: entry.code, unlinked: true, reason }));

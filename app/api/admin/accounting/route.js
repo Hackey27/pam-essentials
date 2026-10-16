@@ -4,6 +4,7 @@ import { adminDb, requireRole } from "@/lib/admin";
 import { auditPayload, text } from "@/lib/serverData";
 import { defaultAccounts, accountTypes, defaultAccountingSettings, validateJournal, day, today, cents, line, normaliseTax, normaliseIncomeTax, incomeTaxEstimate, productBook, taxForDate, accountingReadiness, splitTax, moneyAccounts, paymentAccount, depreciation, reportLedger, ageDocuments, saleJournal, expenseJournal, cashJournal, sourceDay } from "@/lib/accounting.mjs";
 import { configRef, accountingContext, assertOpen, writeJournal, loadAccounting, payloadHash, sourceKey } from "@/lib/accountingServer";
+import { priceChange } from "@/lib/priceHistory.mjs";
 export const dynamic="force-dynamic";
 const headers={"Cache-Control":"private, no-store"};
 const error=(message,status=400)=>NextResponse.json({error:message},{status,headers});
@@ -30,7 +31,8 @@ export async function POST(request){
       const oldRequest=await tx.get(requestRef);
       if(oldRequest.exists){if(oldRequest.data().fingerprint!==fingerprint)throw new Error("This request reference was used for different details.");return {...oldRequest.data().result,duplicate:true};}
       const context=await accountingContext(tx,store,date),s=context.settings;
-      const plan={action:b.action,date,description:reason,journals:[],document:null,changes:[],warnings:[]},writes=[];
+      const plan={action:b.action,date,description:reason,journals:[],document:null,changes:[],warnings:[],priceChanges:[]},writes=[];
+      const updateProductPrice=(ref,previous,patch)=>{const change=priceChange(previous,{...previous,...patch});if(change)plan.priceChanges.push(change);writes.push(()=>tx.update(ref,patch));};
       let settings=null,original=null;
       const journalRef=store.collection("accounting_journals").doc(`manual-${requestId}`);
       const accounts=s.accounts||defaultAccounts;
@@ -91,7 +93,7 @@ export async function POST(request){
           if(difference)plan.journals.push(entry([line("1200",difference/100),line(b.offsetAccount,-difference/100)],{cashFlow:"operating",productId:p.id}));
           const allocation={id:requestId,date,settingsVersion:s.version+0.5,productId:p.id,sku:p.sku||p.id,name:p.name,quantity:book.quantity,previous,value,reason,postedBy:access.user.uid,postedAt:FieldValue.serverTimestamp()};
           writes.push(()=>tx.create(store.collection("accounting_stock_values").doc(requestId),allocation));
-          writes.push(()=>tx.update(productRef,{accountingStockQuantity:book.quantity,accountingStockValueCents:value,...(book.quantity>0?{costPrice:Math.round(value/book.quantity)/100}:{}),updatedAt:FieldValue.serverTimestamp()}));
+          updateProductPrice(productRef,p,{accountingStockQuantity:book.quantity,accountingStockValueCents:value,...(book.quantity>0?{costPrice:Math.round(value/book.quantity)/100}:{}),updatedAt:FieldValue.serverTimestamp()});
           plan.changes.push("Allocate reviewed cost to "+p.sku+"; stock quantity and images stay unchanged.");
         }else if(b.action==="reverse"){
           const ref=store.collection("accounting_journals").doc(identifier(b.journalId)),snap=await tx.get(ref);
@@ -141,7 +143,7 @@ export async function POST(request){
               const newStock=item.receiveStock?oldStock+quantity:oldStock,priorQuantity=item.receiveStock?oldStock:Math.max(0,oldStock-quantity),newCost=s.costing==="weighted-average"&&priorQuantity>0?Math.round((priorQuantity*oldCost+(recover?split.net:split.total))/(priorQuantity+quantity)):receiptCost;
               const initialBook=productBook(p,s),priorBook=Number.isSafeInteger(initialBook.value)?initialBook.value:priorQuantity*(oldCost||0),priorValued=initialBook.quantity,bookValue=priorBook+(recover?split.net:split.total),valuedQuantity=priorValued+quantity,average=s.costing==="weighted-average"&&valuedQuantity>0?Math.round(bookValue/valuedQuantity):newCost;
               inventoryChanges.push({productId:item.productId,sku:p.sku||p.id,name:p.name,quantity,cost:recover?split.net:split.total,unitCost:average,physicalReceipt:item.receiveStock===true,stockMovementId:item.stockMovementId||""});
-              writes.push(()=>tx.update(snap.ref,{...(item.receiveStock?{stock:newStock}:{}),costPrice:average/100,accountingStockQuantity:valuedQuantity,accountingStockValueCents:bookValue,updatedAt:FieldValue.serverTimestamp()}));
+              updateProductPrice(snap.ref,p,{...(item.receiveStock?{stock:newStock}:{}),costPrice:average/100,accountingStockQuantity:valuedQuantity,accountingStockValueCents:bookValue,updatedAt:FieldValue.serverTimestamp()});
               const receiptIndex=inventoryChanges.length;
               if(item.receiveStock)writes.push(()=>tx.create(store.collection("stock_movements").doc(`ACCT-${requestId}-${receiptIndex}`),{type:"receive",productId:item.productId,productName:p.name,quantity,qtyChange:quantity,oldStock,newStock,supplier:party,reason,accountingDocumentId:id,staff:access.user.uid,staffEmail:access.user.email||"",createdAt:FieldValue.serverTimestamp()}));
             }
@@ -197,7 +199,7 @@ export async function POST(request){
             const nextStock=Number(p.stock||0)+delta,nextQuantity=book.quantity+delta,nextValue=Number.isSafeInteger(book.value)?book.value+costChange:null;
             if(nextQuantity<0||nextValue!=null&&nextValue<0)throw new Error("Resolve the inventory book balance before posting this return.");
             const nextCost=s.costing==="weighted-average"&&nextQuantity>0&&nextValue!=null?Math.round(nextValue/nextQuantity):null;
-            writes.push(()=>tx.update(snap.ref,{stock:nextStock,accountingStockQuantity:nextQuantity,accountingStockValueCents:nextValue,...(nextCost!=null?{costPrice:nextCost/100}:{}),updatedAt:FieldValue.serverTimestamp()}));
+            updateProductPrice(snap.ref,p,{stock:nextStock,accountingStockQuantity:nextQuantity,accountingStockValueCents:nextValue,...(nextCost!=null?{costPrice:nextCost/100}:{}),updatedAt:FieldValue.serverTimestamp()});
             const movementRef=store.collection("stock_movements").doc("CREDIT-"+requestId+"-"+i);
             writes.push(()=>tx.create(movementRef,{type:"adjust",productId:item.productId,productName:item.description,quantity:delta,qtyChange:delta,oldStock:Number(p.stock||0),newStock:nextStock,accountingDocumentId:d.id,reason,staff:access.user.uid,createdAt:FieldValue.serverTimestamp()}));
           }
@@ -269,7 +271,7 @@ export async function POST(request){
             const productRef=store.collection("products").doc(encodeURIComponent(source.productId)),productSnap=await tx.get(productRef),quantity=Number(source.quantity??source.qtyChange),cost=journal.lines.filter(l=>l.account==="1200").reduce((n,l)=>n+l.debit-l.credit,0);
             if(!productSnap.exists||!Number.isInteger(quantity)||!quantity||!cost||Math.sign(cost)!==Math.sign(quantity))throw new Error("Inventory debit/credit must match the direction of this stock adjustment.");
             const p=productSnap.data(),book=productBook(p,s);journal.inventoryChanges=[{productId:p.id,sku:p.sku||p.id,name:p.name,quantity,cost}];
-            if(Number.isInteger(book.quantity)){const nextQuantity=book.quantity+quantity,nextValue=Number.isSafeInteger(book.value)?book.value+cost:null;if(nextQuantity<0||nextValue!=null&&(nextValue<0||nextQuantity===0&&nextValue!==0))throw new Error("This adjustment exceeds the remaining inventory book balance.");writes.push(()=>tx.update(productRef,{accountingStockQuantity:nextQuantity,accountingStockValueCents:nextValue,...(s.costing==="weighted-average"&&nextQuantity>0&&nextValue!=null?{costPrice:Math.round(nextValue/nextQuantity)/100}:{})}));}
+            if(Number.isInteger(book.quantity)){const nextQuantity=book.quantity+quantity,nextValue=Number.isSafeInteger(book.value)?book.value+cost:null;if(nextQuantity<0||nextValue!=null&&(nextValue<0||nextQuantity===0&&nextValue!==0))throw new Error("This adjustment exceeds the remaining inventory book balance.");updateProductPrice(productRef,p,{accountingStockQuantity:nextQuantity,accountingStockValueCents:nextValue,...(s.costing==="weighted-average"&&nextQuantity>0&&nextValue!=null?{costPrice:Math.round(nextValue/nextQuantity)/100}:{})});}
           }else journal=({sale:saleJournal,expense:expenseJournal,cash:cashJournal})[b.sourceType](source,sourceDate);
           if(!journal||!journal.lines.length&&!journal.nonfinancial)throw new Error("This source does not require a financial entry.");
           if(journal.issues?.length&&b.reviewConfirmed!==true)throw new Error("Confirm that you have reviewed the flagged source details.");
@@ -296,7 +298,7 @@ export async function POST(request){
       tx.create(requestRef,{fingerprint,result:response,createdAt:FieldValue.serverTimestamp(),userId:access.user.uid});
       const compactTax=t=>t?{enabled:t.enabled,effectiveDate:t.effectiveDate,registrationNumber:t.registrationNumber,pricingMode:t.pricingMode,rates:t.rates}:null;
       const before=settings?{tax:compactTax(s.tax),incomeTax:s.incomeTax||null,closedThrough:s.closedThrough,account:b.action==="account"?accounts.find(a=>a.code===b.code)||null:null}:null;
-      const after={...response,date,changes:plan.changes,settingsVersion:s.version,...(settings?{tax:compactTax(settings.tax),incomeTax:settings.incomeTax||null,closedThrough:settings.closedThrough,account:b.action==="account"?settings.accounts.find(a=>a.code===b.code)||null:null}:{})};
+      const after={...response,date,changes:plan.changes,priceChanges:plan.priceChanges,settingsVersion:s.version,...(settings?{tax:compactTax(settings.tax),incomeTax:settings.incomeTax||null,closedThrough:settings.closedThrough,account:b.action==="account"?settings.accounts.find(a=>a.code===b.code)||null:null}:{})};
       tx.create(store.collection("admin_audit").doc(),auditPayload(access.user,`ACCOUNTING_${b.action.toUpperCase()}`,"accounting",requestId,reason,before,after));
       return response;
     });return NextResponse.json(result,{headers});

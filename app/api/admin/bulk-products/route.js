@@ -37,7 +37,7 @@ export async function POST(request) {
     for (const row of plan.rows.filter((row) => row.changes.length)) {
       const snap = snapshots.get(row.id);
       batch.update(snap.ref, { ...row.patch, updatedAt: FieldValue.serverTimestamp() }, snap.updateTime ? { lastUpdateTime: snap.updateTime } : {});
-      batch.create(store.collection("admin_audit").doc(), auditPayload(access.user, "BULK_UPDATE_PRODUCT", "product", row.id, `Bulk update ${row.name}. Reason: ${values.reason}. Operation: ${body.requestId}`, Object.fromEntries(row.changes.map((v) => [v.field, v.before])), row.patch));
+      batch.create(store.collection("admin_audit").doc(), auditPayload(access.user, "BULK_UPDATE_PRODUCT", "product", row.id, `Bulk update ${row.name}. Reason: ${values.reason}. Operation: ${body.requestId}`, { ...Object.fromEntries(row.changes.map((v) => [v.field, v.before])), price: snap.data().price ?? null, costPrice: snap.data().costPrice ?? null }, { ...row.patch, price: Object.hasOwn(row.patch, "price") ? row.patch.price : snap.data().price ?? null, costPrice: snap.data().costPrice ?? null }));
     }
     batch.create(operation, { staffId: access.user.uid, requestHash, changedCount: plan.changedCount, reason: values.reason, createdAt: FieldValue.serverTimestamp() });
     await batch.commit();
