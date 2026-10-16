@@ -40,31 +40,8 @@ export function ProductImage({ product, className = "", source, width = 350, eag
 }
 
 function ProductPreview({ product, source, onOpenGallery }) {
-  const [highResolution, setHighResolution] = useState("");
-  const [hovering, setHovering] = useState(false);
-  const hoverTimer = useRef(null);
-  const generation = useRef(0);
-  useEffect(() => {
-    generation.current++;
-    setHighResolution(""); setHovering(false);
-    return () => clearTimeout(hoverTimer.current);
-  }, [source.path, source.url]);
-  function enter() {
-    if (!window.matchMedia("(hover: hover) and (pointer: fine)").matches || window.matchMedia("(prefers-reduced-motion: reduce)").matches || !source.url) return;
-    clearTimeout(hoverTimer.current);
-    const current = generation.current;
-    hoverTimer.current = setTimeout(() => {
-      setHovering(true);
-      if (source.path && !highResolution) {
-        const url = getProductImageUrl(source.path, 1600);
-        const preload = new window.Image();
-        preload.onload = () => { if (generation.current === current) setHighResolution(url); };
-        preload.src = url;
-      }
-    }, 450);
-  }
-  return <button type="button" className={`product-preview product-detail-image${hovering ? " is-zooming" : ""}`} onPointerEnter={enter} onPointerLeave={() => { clearTimeout(hoverTimer.current); setHovering(false); }} onClick={source.url ? onOpenGallery : undefined} aria-label={source.url ? `View ${product.name} image full screen` : `${product.name} image placeholder`}>
-    <ProductImage product={product} source={highResolution && hovering ? { path: "", url: highResolution } : source} className="product-preview-image" width={1000} eager />
+  return <button type="button" className="product-preview product-detail-image" onClick={source.url ? onOpenGallery : undefined} aria-label={source.url ? `View ${product.name} image full screen` : `${product.name} image placeholder`}>
+    <ProductImage product={product} source={source} className="product-preview-image" width={1000} eager />
   </button>;
 }
 

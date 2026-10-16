@@ -1,9 +1,11 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import ProductOptions, { ProductImage, ProductImageLightbox, productVariants } from "@/components/ProductOptions";
+import ProductOptions, { ProductImageLightbox, productVariants } from "@/components/ProductOptions";
 import { addToCart, readCart, saveCart } from "@/lib/storeCart";
 import { detailImageSource, productGallery } from "@/lib/productImages.mjs";
+import RelatedProductsCarousel from "@/components/RelatedProductsCarousel";
+import { relatedCategoryProducts } from "@/lib/relatedProducts.mjs";
 import ProductReviews from "@/components/ProductReviews";
 import BrandLogo from "@/components/BrandLogo";
 import CustomerFooter from "@/components/CustomerFooter";
@@ -109,7 +111,7 @@ export default function ProductDetailView({ id, initialCatalogue, embedded = fal
   const variants = useMemo(() => productVariants(product, products), [product, products]);
   const selected = selectedVariant && variants.find((item) => item.id === selectedVariant.id) || product;
   const gallery = useMemo(() => product ? productGallery(product, selected, variants) : [], [product, selected, variants]);
-  const related = useMemo(() => products.filter((item) => item.id !== product?.id && (!product?.productGroupId || item.productGroupId !== product.productGroupId) && item.categoryId === product?.categoryId).sort((a, b) => Number(b.subcategoryId === product?.subcategoryId) - Number(a.subcategoryId === product?.subcategoryId)).slice(0, 4), [product, products]);
+  const related = useMemo(() => relatedCategoryProducts(product, products), [product, products]);
   function add(selected, quantity) {
     saveCart(addToCart(readCart(), selected, quantity));
     setAdded({ ...selected, quantity });
@@ -162,7 +164,7 @@ export default function ProductDetailView({ id, initialCatalogue, embedded = fal
         </div>
         <div className="product-detail-lower">
           <ProductReviews key={selected.id} product={selected} />
-          {related.length > 0 && <section className="related-products"><h2>You may also like</h2><div className="related-grid">{related.map((item) => <a href={`/products/${encodeURIComponent(item.id)}`} key={item.id}><ProductImage product={item} /><b>{item.name}</b></a>)}</div></section>}
+          {related.length > 0 && <RelatedProductsCarousel key={`related:${product.id}`} products={related} />}
         </div>
       </>}
     </main>
