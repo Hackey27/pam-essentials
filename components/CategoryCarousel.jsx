@@ -22,13 +22,12 @@ export default function CategoryCarousel({ categories, products, onSelect }) {
   const [photoIndex, setPhotoIndex] = useState(0);
   const [photoMoving, setPhotoMoving] = useState(false);
   const [paused, setPaused] = useState(false);
-  const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
   const [onScreen, setOnScreen] = useState(false);
   const [pageVisible, setPageVisible] = useState(true);
   const [reducedMotion, setReducedMotion] = useState(true);
   const canMove = items.length > layout.count;
-  const auto = !paused && !dragging && !hovered && !focused && onScreen && pageVisible && !reducedMotion;
+  const auto = !paused && !dragging && !focused && onScreen && pageVisible && !reducedMotion;
   const photoAuto = !paused && !dragging && onScreen && pageVisible && !reducedMotion;
   const hasPhotoSeries = items.some((category) => category.photos.length > 1);
 
@@ -99,7 +98,7 @@ export default function CategoryCarousel({ categories, products, onSelect }) {
   }, [canMove, step]);
   if (!items.length) return null;
   const slots = canMove ? Array.from({ length: layout.count + 3 }, (_, slot) => ({ category: items[wrap(start + slot - 1, items.length)], slot })) : items.map((category, slot) => ({ category, slot }));
-  return <section className="category-carousel" ref={sectionRef} aria-label="Browse categories" onMouseEnter={() => { if (matchMedia("(hover: hover)").matches) setHovered(true); }} onMouseLeave={() => setHovered(false)} onFocusCapture={() => setFocused(true)} onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false); }}>
+  return <section className="category-carousel" ref={sectionRef} aria-label="Browse categories" onPointerDownCapture={() => setFocused(false)} onKeyDownCapture={() => setFocused(true)} onFocusCapture={(event) => setFocused(event.target.matches(":focus-visible"))} onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false); }}>
     <div className="category-carousel-heading"><div><p className="eyebrow">Find your everyday favourites</p><h2>Shop by category</h2></div><div className="category-carousel-controls"><button type="button" className="category-pause" onClick={() => setPaused((current) => !current)} aria-pressed={paused} aria-label={paused ? "Play category carousel" : "Pause category carousel"}><span aria-hidden="true">{paused ? "▶" : "Ⅱ"}</span></button></div></div>
     <div className="category-carousel-stage">
     <div className={`category-carousel-viewport${dragging ? " dragging" : ""}`} ref={viewportRef}
