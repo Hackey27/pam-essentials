@@ -2,18 +2,18 @@
 
 import { useEffect, useRef, useState } from "react";
 
-export default function MobileBrowseMenu({ open, search, filters, navigation, resultCount, onClear, onClose }) {
+export default function MobileBrowseMenu({ open, revealKey, search, filters, navigation, resultCount, onClear, onClose }) {
   const panelRef = useRef(null);
   const [expanded, setExpanded] = useState(true);
+  useEffect(() => { if (open) setExpanded(true); }, [open, revealKey]);
   useEffect(() => {
     if (!open) return;
-    setExpanded(true);
     const previousFocus = document.activeElement;
     const panel = panelRef.current;
     panel?.focus({ preventScroll: true });
     const handleKey = (event) => { if (event.key === "Escape") { event.preventDefault(); onClose(); } };
     const handleOutsideClick = (event) => {
-      if (!panel?.contains(event.target) && !event.target.closest(".mobile-browse-toggle, .mobile-filter-inline, .mobile-filter-toggle")) onClose();
+      if (!panel?.contains(event.target) && !event.target.closest(".mobile-browse-toggle, .mobile-filter-inline, .mobile-filter-toggle, .category-carousel")) onClose();
     };
     const handleResize = () => { if (!window.matchMedia("(width < 1180px)").matches) onClose(); };
     document.addEventListener("click", handleOutsideClick);

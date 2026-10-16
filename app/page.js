@@ -62,6 +62,7 @@ export default function Storefront() {
   const [subcategoryList, setSubcategoryList] = useState([]);
   const [subSubcategoryList, setSubSubcategoryList] = useState([]);
   const [expandedCategories, setExpandedCategories] = useState([]);
+  const [carouselSelection, setCarouselSelection] = useState(null);
   const [expandedSubcategories, setExpandedSubcategories] = useState([]);
   const [selectedSubcategories, setSelectedSubcategories] = useState([]);
   const [selectedSubSubcategories, setSelectedSubSubcategories] = useState([]);
@@ -486,6 +487,31 @@ export default function Storefront() {
     setBrowseMode("products");
   }
 
+  function selectCarouselCategory(item) {
+    clearFilters(); setQuery(""); setSearchOpen(false); setBrowseMode("products"); setCategory(item.name); setPage(1);
+    setExpandedCategories([item.id]);
+    setExpandedSubcategories([]);
+    setCarouselSelection((current) => ({ id: item.id, sequence: (current?.sequence || 0) + 1 }));
+    if (window.matchMedia("(width < 1180px)").matches) setMobileMenuOpen(true);
+    requestAnimationFrame(() => document.getElementById("catalogue")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  }
+
+  useEffect(() => {
+    if (!carouselSelection) return;
+    let revealFrame;
+    const frame = requestAnimationFrame(() => {
+      // Wait for the mobile panel and its category section to reopen before measuring.
+      revealFrame = requestAnimationFrame(() => {
+        const panel = document.querySelector(window.matchMedia("(width < 1180px)").matches ? "#mobile-browse-menu .filter-panel-scroll" : "#store-filters");
+        const target = [...(panel?.querySelectorAll("[data-filter-category]") || [])].find((node) => node.dataset.filterCategory === carouselSelection.id);
+        if (!target) return;
+        const top = panel.scrollTop + target.getBoundingClientRect().top - panel.getBoundingClientRect().top - 8;
+        panel.scrollTo({ top: Math.max(0, top), behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+      });
+    });
+    return () => { cancelAnimationFrame(frame); cancelAnimationFrame(revealFrame); };
+  }, [carouselSelection]);
+
   function toggleSubcategory(item) {
     const id = item.subcategoryId || item.id;
     const parent = categoryList.find((entry) => (entry.categoryId || entry.id) === item.categoryId);
@@ -636,7 +662,7 @@ export default function Storefront() {
             const children = subcategoryList.filter((child) => child.categoryId === id);
             const expanded = expandedCategories.includes(id);
             return <div className="category-tree" key={id}>
-              <button type="button" className={category === item.name ? "filter category-toggle active" : "filter category-toggle"} aria-expanded={expanded} onClick={() => selectCategory(item.name, id)}>
+              <button type="button" className={category === item.name ? "filter category-toggle active" : "filter category-toggle"} aria-expanded={expanded} data-filter-category={id} onClick={() => selectCategory(item.name, id)}>
                 <span><span aria-hidden="true">{expanded ? "▾" : "▸"}</span> {item.name}</span>
                 <small>{products.filter((product) => product.categoryId === id).length}</small>
               </button>
@@ -741,20 +767,16 @@ export default function Storefront() {
         <button type="button" onClick={() => { closeMobileMenu(); browse("new"); }}>New arrivals</button><button type="button" onClick={() => { closeMobileMenu(); browse("promotions"); }}>Promotions</button>
         {dealsActive && <button type="button" onClick={() => { closeMobileMenu(); browse("deals"); }}>PAM Deals</button>}
         <a href="/info/delivery">Payment &amp; delivery</a><a href="/info/contact#location">Pickup location</a><a href="/info/contact">Contact us</a><a href="/account#orders">Track order</a><a href="/account#wishlist">Wishlist</a><a href="/compare">Compare products</a><a href="/account?mode=signin">{user && !role ? "My account" : "Sign in"}</a>{(!user || role) && <a href="/account?mode=register">Create account</a>}
-      </nav></details>} open={mobileMenuOpen} onClose={closeMobileMenu} onClear={clearFilters} resultCount={visible.length} search={renderSearch(false, true)} filters={<>
+      </nav></details>} open={mobileMenuOpen} revealKey={carouselSelection} onClose={closeMobileMenu} onClear={clearFilters} resultCount={visible.length} search={renderSearch(false, true)} filters={<>
         <MobilePriceRange minimum={priceMin} maximum={priceMax} upperLimit={Math.max(1, ...products.map((item) => Math.ceil(Number(item.price) || 0)), Number(priceMin) || 0, Number(priceMax) || 0)} onChange={(minimum, maximum) => { setPriceMin(minimum); setPriceMax(maximum); }} />
         <FilterSection title="Availability" collapsible><div className="facet-group" role="group" aria-label="Mobile availability">{[["all","All"],["in","In Stock"],["out","Out of Stock"]].map(([value,label])=><label key={value}><input type="radio" name="panel-availability" checked={availability===value} onChange={()=>setAvailability(value)}/>{label}</label>)}</div></FilterSection>
         {renderFilters(true, "offers")}
-        <FilterSection title="Categories" collapsible defaultOpen resetKey={mobileMenuOpen}>{renderCategoryChoices()}</FilterSection>
+        <FilterSection title="Categories" collapsible defaultOpen resetKey={`${mobileMenuOpen}:${carouselSelection?.sequence || 0}`}>{renderCategoryChoices()}</FilterSection>
         <ProductAttributeFilters facets={facets} onToggle={toggleAttribute} collapsible />
       </>} />
 
       <StorefrontHero webUrl={webHeroUrl} mobileUrl={mobileHeroUrl} background={heroBackground} />
-      <CategoryCarousel categories={categoryList} products={products} onSelect={(item) => {
-        clearFilters(); setQuery(""); setSearchOpen(false); setBrowseMode("products"); setCategory(item.name); setPage(1);
-        setExpandedCategories((current) => [...new Set([...current, item.id])]);
-        requestAnimationFrame(() => document.getElementById("catalogue")?.scrollIntoView({ behavior: "smooth", block: "start" }));
-      }} />
+      <CategoryCarousel categories={categoryList} products={products} onSelect={selectCarouselCategory} />
       <section className="product-request-banner" aria-label="Product sourcing"><div><span className="request-banner-icon" aria-hidden="true">↗</span><p><strong>Can’t find what you need?</strong><span>Send us a photo—we’ll help source it.</span></p></div><RequestProductLink className="button primary" /></section>
       {dealsActive && (dealProducts.length > 0 || dealBundles.length > 0) && <section className="deals-feature"><div><p className="eyebrow">Selected for you</p><h2>PAM Deals</h2><p>{dealPercent > 0 ? `Up to ${dealPercent}% off selected products` : "Selected everyday offers"}</p></div><a className="button accent" href="/?browse=deals#catalogue">Shop deals</a></section>}
 
