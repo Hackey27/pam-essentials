@@ -1,0 +1,25 @@
+# Inventory classification and business-use issues
+
+Admin > Products > Classification supports Resale inventory, Fixed asset and Consumables. The additive inventoryCategory field is separate from storefront category IDs and legacy inventoryType. Missing classifications display as Resale inventory without rewriting existing data. Classification alone never changes selling eligibility, quotation settings, SKU, image ownership or stock, and never moves existing accounting balances.
+
+## Admin-controlled quantities
+Each exact SKU has businessUse.enabled and businessUse.maxPerIssue. Defaults are disabled and no maximum. Owner/Admin must enable issues and set a positive whole-number maximum per issue, measured in individual pieces. This is independent of wholesale pack sizes and the retail reserve. Only Owner/Admin can edit these controls or issue/return stock. No limit is guessed or configured in production.
+
+## Issue workflow
+Admin > Inventory > Issue stock for business use. Find inventory by classification/name/SKU, select an exact product, quantity, purpose, date and detailed notes. Purposes: Promotional giveaway, Internal business use, Packaging consumed, Equipment / fixture for business use, Other business purpose. Preview shows authoritative cost, stock before/after and accounting treatment. Confirmation revalidates the preview against current stock, costs, policy and accounting settings. Nothing is saved if validation fails. Duplicate confirmation with the same reference cannot deduct twice.
+
+Ordinary issues reduce stock and create one linked non-cash expense. Cash, bank, Mobile Money, receipts, sales revenue and sales COGS are not changed. Promotional/internal use debits Operating expenses; packaging consumed debits Packaging consumed. The matching credit is the existing physical stock control account, Retail inventory (1200). New classifications do not retrospectively move existing stock balances to a different control account. Reclassification of existing opening balances remains an explicit reviewed Accounting action.
+
+Costs are immutable snapshots. With active weighted-average accounting, issue value uses the reconciled book-value share in exact pesewas; final units consume the remaining book cents. Recorded-cost mode uses the recorded product cost. Missing/zero costs, book/physical discrepancies, excess quantities and unsupported rounding balances require review before proceeding. No retail or wholesale selling prices are used. Closed accounting periods block the issue; the user can choose an open date. Before accounting activation, issue/expense history is retained without inventing opening balances or financial journals.
+
+## Equipment taken into use
+Choose Equipment / fixture for business use, quantity 1, useful life in months, residual value and in-service date. Accounting must be active. The transaction credits stock and debits Equipment & fixtures in use (1500), registering an individual asset at cost. It does not create an immediate operating expense. Existing Accounting depreciation controls apply. Multiple identical equipment items are registered separately.
+
+## Corrections
+Use Reverse in the business-use register with a reason and an open date. Reversal restores the full original quantity and original total cost, offsets the linked expense/journal and links the immutable original to the reversal. Changes to current costs or issue limits do not reprice a return. Already reversed issues cannot reverse again. Depreciated/disposed assets require reviewed Accounting treatment instead. Changing Accounting activation since the original also requires review rather than an automatic reversal. Journal/expense/stock review routes reject duplicate posting of the linked issue.
+
+## Analytics and exports
+Analytics > Business use provides date-range totals, purpose breakdowns, asset transfers separately, full issue/reversal history and CSV export. Ordinary non-cash expenses feed the existing Admin and POS expense/net-profit reporting once; gross sales profit remains unchanged. Cashiers retain no cost/profit access. The register loads the complete retained dataset with an explicit 50,000-record limit, not a latest-record slice. The Admin expense dataset similarly fails explicitly beyond its limit. Asset transfers are excluded from operating expenses. Source costs and records remain private.
+
+## Future catalogue file
+CSV UTF-8 supports INVENTORY_CATEGORY with values Resale inventory, Fixed asset or Consumables. INVENTORY_CLASSIFICATION is accepted as a heading alias. Blank/omitted cells preserve saved classifications. Match unchanged SKU and review the import preview before applying. Export includes the field (blank for unclassified legacy products). No new file was supplied for this release; no classifications, stock, issue limits or financial records were written in production. The existing file upload accepts CSV; an Excel workbook can be saved as CSV UTF-8 or converted when supplied.

@@ -1,3 +1,4 @@
+import { parseInventoryCategory, businessUsePolicy } from '@/lib/businessUse.mjs';
 import { validateWholesale } from "@/lib/wholesale.mjs";
 import { FieldValue } from "firebase-admin/firestore";
 import { NextResponse } from "next/server";
@@ -86,6 +87,9 @@ export async function POST(request) {
   const price = nullableNumber(body.price);
   const costPrice = nullableNumber(body.costPrice);
   if ((price != null && price < 0) || (costPrice != null && costPrice < 0)) return NextResponse.json({ error: "Prices cannot be negative." }, { status: 400 });
+  let inventoryFields={};
+  try { if(body.inventoryCategory!==undefined)inventoryFields.inventoryCategory=parseInventoryCategory(body.inventoryCategory); if(body.businessUse!==undefined)inventoryFields.businessUse=businessUsePolicy(body.businessUse); }
+  catch(error){return NextResponse.json({error:error.message},{status:400});}
   let wholesale;
   try { wholesale = body.wholesale === undefined ? oldValue?.wholesale : validateWholesale(body.wholesale); }
   catch (error) { return NextResponse.json({ error: error.message }, { status: 400 }); }
@@ -95,6 +99,7 @@ export async function POST(request) {
   const product = {
     id,
     sku,
+    ...inventoryFields,
     barcode: barcodes.barcode,
     barcodeEntries: barcodes.entries,
     multipleBarcodes: barcodes.multipleBarcodes,

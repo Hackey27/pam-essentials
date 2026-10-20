@@ -24,10 +24,11 @@ export async function GET(request) {
     isAdmin ? store.collection("users").get() : Promise.resolve({ docs: [] }),
     isAdmin ? store.collection("admin_audit").orderBy("timestamp", "desc").limit(100).get() : Promise.resolve({ docs: [] }),
     isAdmin ? store.collection("sales").orderBy("createdAt", "desc").limit(500).get() : Promise.resolve({ docs: [] }),
-    isAdmin ? store.collection("expenses").orderBy("createdAt", "desc").limit(500).get() : Promise.resolve({ docs: [] }),
+    isAdmin ? store.collection("expenses").orderBy("createdAt", "desc").get() : Promise.resolve({ docs: [] }),
     isAdmin ? store.collection("deal_bundles").get() : Promise.resolve({ docs: [] }),
   ]);
 
+  if(expensesSnap.docs.length>50000)return NextResponse.json({error:"Expense dataset exceeds the reporting limit; no partial expense total was generated."},{status:409});
   const fullProducts = productsSnap.docs.map((doc) => ({ ...serializeDoc(doc), editVersion: documentVersion(doc) })).map((product) => ({ ...product, ...categoryLabels(product, hierarchy) })).sort((a, b) => a.name.localeCompare(b.name));
   const products = isAdmin ? fullProducts : fullProducts.map(({ costPrice, wholesalePackPrice, accountingStockValueCents, accountingStockQuantity, ...product }) => product);
   const orders = ordersSnap.docs.map(serializeDoc).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));

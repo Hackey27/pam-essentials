@@ -17,6 +17,7 @@ export async function POST(request) {
   }
   const reason = text(body.reason, 160);
   const supplier = text(body.supplier, 160);
+  if(type==="adjust"&&/^(business-use|promotional\/business purpose)/i.test(reason))return NextResponse.json({error:"Use Issue stock for business use so stock, cost, expense and audit are recorded together."},{status:400});
   if (type === "adjust" && !reason) return NextResponse.json({ error: "A reason is required for stock adjustments." }, { status: 400 });
   if (type === "receive" && !supplier) return NextResponse.json({ error: "Supplier is required when receiving stock." }, { status: 400 });
 
