@@ -1,3 +1,4 @@
+import { validateWholesale } from "@/lib/wholesale.mjs";
 import { FieldValue } from "firebase-admin/firestore";
 import { NextResponse } from "next/server";
 import { adminDb, requireRole } from "@/lib/admin";
@@ -85,6 +86,9 @@ export async function POST(request) {
   const price = nullableNumber(body.price);
   const costPrice = nullableNumber(body.costPrice);
   if ((price != null && price < 0) || (costPrice != null && costPrice < 0)) return NextResponse.json({ error: "Prices cannot be negative." }, { status: 400 });
+  let wholesale;
+  try { wholesale = body.wholesale === undefined ? oldValue?.wholesale : validateWholesale(body.wholesale); }
+  catch (error) { return NextResponse.json({ error: error.message }, { status: 400 }); }
   const openingStock = body.create ? Math.floor(Number(body.openingStock || 0)) : 0;
   if (openingStock < 0 || !Number.isFinite(openingStock)) return NextResponse.json({ error: "Opening stock must be zero or greater." }, { status: 400 });
   const collections = Array.isArray(body.collections) ? body.collections : oldValue?.collections || [];
@@ -106,6 +110,7 @@ export async function POST(request) {
     ...(typeof body.taxExempt === "boolean" ? { taxExempt: body.taxExempt } : {}),
     ...(typeof body.contactForPrice === "boolean" ? { contactForPrice: body.contactForPrice } : {}),
     costPrice,
+    ...(wholesale !== undefined ? { wholesale } : {}),
     pinned: Boolean(body.pinned),
     randomColours: Boolean(body.randomColours),
     ...(typeof body.randomShapes === "boolean" ? { randomShapes: body.randomShapes } : {}),

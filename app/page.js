@@ -644,7 +644,7 @@ export default function Storefront() {
   }
 
   const navigationItems = (compact = false, section = "all") => <>
-            {!compact && <Dropdown label="Products" active={browseMode === "products"}><button type="button" onClick={() => browse("products")}>All products</button><button type="button" onClick={() => { browse("products"); document.getElementById("catalogue")?.scrollIntoView(); }}>Categories and filters</button></Dropdown>}
+            {!compact && <Dropdown label="Products" active={browseMode === "products"}><button type="button" onClick={() => browse("products")}>All products</button><button type="button" onClick={() => { browse("products"); document.getElementById("catalogue")?.scrollIntoView(); }}>Categories and filters</button><a href="/wholesale">Wholesale shopping</a></Dropdown>}
             {section !== "secondary" && <Dropdown label="Services"><RequestProductLink /><button type="button" onClick={() => setServicesOpen(true)}>All services and contact</button><a href="/services/secretarial">Secretarial services</a><a href="/services/printing">Printing</a><a href="/services/communication">Communication consultancy</a><a href="/services/laptop-repairs">Laptop repairs and purchases</a></Dropdown>}
             {!compact && <Dropdown label={<><span className="nav-full">New Arrivals</span><span className="nav-short">New</span></>} active={browseMode === "new"}><button type="button" onClick={() => browse("new")}>Shop new arrivals</button></Dropdown>}
             {!compact && <Dropdown label={<><span className="nav-full">Promotions</span><span className="nav-short">Promos</span></>} active={browseMode === "promotions"}><button type="button" onClick={() => browse("promotions")}>Shop promotions</button></Dropdown>}
@@ -752,7 +752,7 @@ export default function Storefront() {
         <div className="desktop-thin-row">
           <a className="desktop-thin-brand" href="/" aria-label="PAM Essentials home"><BrandLogo background="navy" /></a>
           <nav className="desktop-thin-nav" aria-label="Compact desktop navigation">
-            <Dropdown label="Products" active={browseMode === "products"}><button type="button" onClick={() => browse("products")}>All products</button><button type="button" onClick={() => { browse("products"); document.getElementById("catalogue")?.scrollIntoView({ behavior: "smooth" }); }}>Categories and filters</button></Dropdown>
+            <Dropdown label="Products" active={browseMode === "products"}><button type="button" onClick={() => browse("products")}>All products</button><button type="button" onClick={() => { browse("products"); document.getElementById("catalogue")?.scrollIntoView({ behavior: "smooth" }); }}>Categories and filters</button><a href="/wholesale">Wholesale shopping</a></Dropdown>
             {navigationItems(true, "services")}
             <Dropdown label="Menu"><button type="button" onClick={() => browse("new")}>New arrivals</button><button type="button" onClick={() => browse("promotions")}>Promotions</button>{dealsActive && <button type="button" onClick={() => browse("deals")}>PAM Deals</button>}<a href="/info/delivery">Payment &amp; delivery</a><a href="/info/contact#location">Pickup location</a><a href="/info/contact">Contact us</a><a href="/account#orders">Track order</a><a href="/account#wishlist">Wishlist</a><a href="/compare">Compare products</a><a href="/account?mode=signin">{user && !role ? "My account" : "Sign in"}</a>{(!user || role) && <a href="/account?mode=register">Create account</a>}</Dropdown>
           </nav>
@@ -776,7 +776,7 @@ export default function Storefront() {
       </>} />
 
       <StorefrontHero webUrl={webHeroUrl} mobileUrl={mobileHeroUrl} background={heroBackground} />
-      <CategoryCarousel categories={categoryList} products={products} onSelect={selectCarouselCategory} />
+      <section className="wholesale-callout"><div><strong>Buying in quantity?</strong><span>Explore wholesale prices on selected everyday essentials.</span></div><a className="button secondary" href="/wholesale">Shop wholesale →</a></section><CategoryCarousel categories={categoryList} products={products} onSelect={selectCarouselCategory} />
       <section className="product-request-banner" aria-label="Product sourcing"><div><span className="request-banner-icon" aria-hidden="true">↗</span><p><strong>Can’t find what you need?</strong><span>Send us a photo—we’ll help source it.</span></p></div><RequestProductLink className="button primary" /></section>
       {dealsActive && (dealProducts.length > 0 || dealBundles.length > 0) && <section className="deals-feature"><div><p className="eyebrow">Selected for you</p><h2>PAM Deals</h2><p>{dealPercent > 0 ? `Up to ${dealPercent}% off selected products` : "Selected everyday offers"}</p></div><a className="button accent" href="/?browse=deals#catalogue">Shop deals</a></section>}
 

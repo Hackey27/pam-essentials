@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import TradePerformancePanel from "@/components/TradePerformancePanel";
 import ReceiptPanel from "@/components/ReceiptPanel";
 
 const money = new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS" });
@@ -81,6 +82,7 @@ export default function PosDashboard({ user, role, onNewSale, onScan, onOrders, 
     {error && <p className="notice error-notice" role="alert">{error}</p>}
     {loading && <div className="pos-loading">Loading dashboard…</div>}
     {!loading && data && <>
+      {["owner", "admin"].includes(role) && data.tradeReport && <TradePerformancePanel report={data.tradeReport} label={`${data.start.slice(0,10)} to ${data.end.slice(0,10)}`} />}
       <div className="pos-dashboard-cards">{cards.map(([label, key, value, note, colour]) => <article className={`pos-summary-card ${colour}`} key={key}><span>{label}</span><strong>{value}</strong><p>{note}</p><small>{comparison(key)}</small><button type="button" onClick={() => setDetail(key)}>View details</button></article>)}</div>
       <p className="pos-updated">Last updated {dateLabel(data.lastUpdated)}</p>
       <div className="pos-dashboard-sections"><section className="panel"><h2>Quick start</h2><div className="pos-quick-actions"><button onClick={onNewSale}>Start a sale</button><button onClick={onScan}>Scan barcode</button><button onClick={onExpense}>Add expense</button><button onClick={() => setRefreshKey((key) => key + 1)}>Refresh dashboard</button></div></section><section className="panel"><h2>Fast-selling products</h2>{data.fastSelling.length ? data.fastSelling.map((item) => <div className="pos-stat-row" key={item.id}><span>{item.name}</span><b>{item.quantity} sold</b></div>) : <p>No sales data yet</p>}</section></div>
@@ -90,3 +92,4 @@ export default function PosDashboard({ user, role, onNewSale, onScan, onOrders, 
     {selectedReceipt && <ReceiptPanel sale={selectedReceipt} onClose={() => setSelectedReceipt(null)} onNewSale={() => { setSelectedReceipt(null); setDetail(""); onNewSale(); }} />}
   </main>;
 }
+

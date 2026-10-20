@@ -1,9 +1,11 @@
+import {packingIssue} from "@/lib/wholesaleUnits.mjs";
+import { pricePurchaseCart, purchaseType } from "@/lib/wholesale.mjs";
 import { FieldValue } from "firebase-admin/firestore";
 import { randomBytes } from "node:crypto";
 import { NextResponse } from "next/server";
 import { adminDb } from "@/lib/admin";
 import { customerIdentity, optionalCustomerIdentity } from "@/lib/customerAuth";
-import { availableForSale, catalogueContext, priceCart } from "@/lib/commerce";
+import { availableForSale, availableForWholesale, catalogueContext, priceCart } from "@/lib/commerce";
 import { deliveryMethods } from "@/lib/shop";
 import { CURRENT_SHOP_ADDRESS } from "@/lib/shopAddress.mjs";
 
@@ -30,6 +32,8 @@ export async function POST(request) {
   const account = await optionalCustomerIdentity(request);
   if (account.error) return NextResponse.json({ error: account.error }, { status: account.status });
   const body = await request.json().catch(() => ({}));
+  let mode;
+  try { mode = purchaseType(body.purchaseType); } catch (error) { return NextResponse.json({ error:error.message },{status:400}); }
   const requested = Array.isArray(body.items) ? body.items : [];
   const customer = String(body.customer || "").trim();
   const phone = String(body.phone || "").trim();
@@ -49,9 +53,9 @@ export async function POST(request) {
   const quantities = new Map();
   for (const item of requested) {
     const id = String(item.id || "").trim();
-    const quantity = Math.floor(Number(item.quantity));
+    const quantity = mode === "wholesale" ? Number(item.quantity) : Math.floor(Number(item.quantity));
     const combinedQuantity = (quantities.get(id) || 0) + quantity;
-    if (!id || id.length > 160 || !Number.isFinite(quantity) || quantity < 1 || combinedQuantity > 999) {
+    if (!id || id.length > 160 || !Number.isInteger(quantity) || quantity < 1 || combinedQuantity > 999) {
       return NextResponse.json({ error: "Each order item needs a valid product and quantity." }, { status: 400 });
     }
     quantities.set(id, combinedQuantity);
@@ -64,10 +68,14 @@ export async function POST(request) {
   for (let index = 0; index < normalizedItems.length; index += 1) {
     const snap = productSnaps[index];
     const quantity = normalizedItems[index].quantity;
-    if (!snap.exists || !availableForSale(snap.data(), context)) return NextResponse.json({ error: "A selected product is no longer available." }, { status: 409 });
+    if (!snap.exists || !(mode === "wholesale" ? availableForWholesale(snap.data(),context) : availableForSale(snap.data(), context))) return NextResponse.json({ error: "A selected product is no longer available." }, { status: 409 });
+    if(mode==="wholesale"){const issue=packingIssue(snap.data(),requested.find(item=>String(item.id||"").trim()===normalizedItems[index].id));if(issue)return NextResponse.json({error:issue},{status:409});}
     if (Number(snap.data().stock) < quantity) return NextResponse.json({ error: `Only ${snap.data().stock} × ${snap.data().name} remain.` }, { status: 409 });
   }
-  const pricing = priceCart(productSnaps.map((snap, index) => ({ id: normalizedItems[index].id, categoryId: snap.data().categoryId, price: Number(snap.data().price), quantity: normalizedItems[index].quantity })), context.rules, context.deals);
+  let pricing;
+  try { pricing = pricePurchaseCart(productSnaps.map((snap,index)=>({...snap.data(),id:normalizedItems[index].id,quantity:normalizedItems[index].quantity})),context.rules,context.deals,mode); }
+  catch(error) { return NextResponse.json({error:error.message},{status:409}); }
+  if(mode==="wholesale" && (!Number.isFinite(Number(body.expectedTotal)) || Math.abs(Number(body.expectedTotal)-pricing.total)>.005)) return NextResponse.json({error:"Wholesale prices changed. Refresh your basket and review the total before ordering."},{status:409});
   for (let index = 0; index < normalizedItems.length; index += 1) {
     const item = normalizedItems[index];
     const snap = productSnaps[index];
@@ -84,7 +92,9 @@ export async function POST(request) {
       variantOptions: product.variantOptions || {},
       name: product.name,
       quantity,
-      unitPrice: Number(product.price),
+      unitPrice: Number(priced.price),
+      purchaseType: mode,
+      ...(mode === "wholesale" ? { wholesaleSnapshot: priced.wholesaleSnapshot } : {}),
       lineTotal: priced.lineTotal,
       categorySnapshot: { id: product.categoryId, name: product.category },
       discountRuleSnapshot: priced.rule ? { ruleId: priced.rule.ruleId, name: priced.rule.name, discountType: priced.rule.discountType, value: priced.rule.value, minQty: priced.rule.minQty, amount: priced.ruleDiscountCents / 100 } : null,
@@ -102,6 +112,7 @@ export async function POST(request) {
     subtotal: pricing.subtotal,
     discount: pricing.discount,
     total,
+    purchaseType: mode,
     channel: body.channel === "whatsapp" ? "whatsapp" : "website",
     deliveryMethod,
     originAddress: CURRENT_SHOP_ADDRESS,
@@ -115,5 +126,6 @@ export async function POST(request) {
     createdAt: FieldValue.serverTimestamp(),
   };
   await store.collection("orders").doc(orderId).create(orderSnapshot);
-  return NextResponse.json({ orderId, subtotal: orderSnapshot.subtotal, discount: orderSnapshot.discount, total, items: items.map(({ name, sku, colour, size, variantOptions, quantity, unitPrice, lineTotal }) => ({ name, sku, colour, size, variantOptions, quantity, unitPrice, lineTotal })), deliveryMethod, originAddress: CURRENT_SHOP_ADDRESS, deliveryAddress: orderSnapshot.deliveryAddress, notes, fulfilmentDetails });
+  return NextResponse.json({ orderId, purchaseType: mode, subtotal: orderSnapshot.subtotal, discount: orderSnapshot.discount, total, items: items.map(({ name, sku, colour, size, variantOptions, quantity, unitPrice, lineTotal, purchaseType, wholesaleSnapshot }) => ({ name, sku, colour, size, variantOptions, quantity, unitPrice, lineTotal, ...(purchaseType==="wholesale"?{purchaseType,wholesaleSnapshot}:{}) })), deliveryMethod, originAddress: CURRENT_SHOP_ADDRESS, deliveryAddress: orderSnapshot.deliveryAddress, notes, fulfilmentDetails });
 }
+

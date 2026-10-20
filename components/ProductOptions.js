@@ -1,6 +1,8 @@
 "use client";
+import {wholesaleAvailableUnits,wholesaleSize,wholesaleUnitName,wholesaleMinimumUnits,wholesaleStepUnits,packDescription} from "@/lib/wholesaleUnits.mjs";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { wholesaleSettings, wholesaleUnitPrice, wholesaleSellingPrice, wholesaleQuantityIssue, pricePurchaseCart } from "@/lib/wholesale.mjs";
 import { createPortal } from "react-dom";
 import GalleryZoom from "@/components/GalleryZoom";
 import { ReviewRating } from "@/components/ProductReviews";
@@ -74,9 +76,9 @@ export function ProductImageLightbox({ product, images, index, onIndexChange, on
   return createPortal(<div ref={dialog} className="image-lightbox" role="dialog" aria-modal="true" aria-label="Product image gallery" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}><button ref={closeButton} type="button" className="image-lightbox-close" onClick={onClose} aria-label="Close gallery">×</button>{images.length > 1 && <button type="button" className="image-lightbox-nav" onClick={() => move(-1)} aria-label="Previous image">‹</button>}<div className="image-lightbox-frame" onClick={(event) => event.stopPropagation()}><GalleryZoom key={index} onSwipe={(direction) => { if (images.length > 1) move(direction); }}><ProductImage product={product} source={images[index]?.source} width={2200} eager /></GalleryZoom><span>{index + 1} / {images.length}</span></div>{images.length > 1 && <button type="button" className="image-lightbox-nav" onClick={() => move(1)} aria-label="Next image">›</button>}</div>, document.body);
 }
 
-export default function ProductOptions({ initialProduct, products, discountRules = [], onAdd, compact = false, onClose, onSelectionChange, previewSource, onPreviewChange, onOpenGallery, onImageOverlayChange, onNavigateDetail, footer }) {
+export default function ProductOptions({ initialProduct, products, discountRules = [], pricingMode = "retail", onAdd, compact = false, onClose, onSelectionChange, previewSource, onPreviewChange, onOpenGallery, onImageOverlayChange, onNavigateDetail, footer }) {
   const [selectedId, setSelectedId] = useState(initialProduct.id);
-  const [quantity, setQuantity] = useState(1);
+  const [quantity, setQuantity] = useState(() => pricingMode === "wholesale" ? wholesaleMinimumUnits(initialProduct) : 1);
   const selected = products.find((item) => item.id === selectedId) || initialProduct;
   const defaultSource = detailImageSource(initialProduct, selected);
   const [imageIndex, setImageIndex] = useState(0);
@@ -103,11 +105,17 @@ export default function ProductOptions({ initialProduct, products, discountRules
   const titles = useMemo(() => variantTitles(variants), [variants]);
   const chooseOption = (key, value) => {
     const next = selectVariant(variants, selected, key, value, key === "colour" && Boolean(productOptions(selected).size));
-    if (next) { setSelectedId(next.id); setQuantity(1); setImageIndex(0); onPreviewChange?.(null); }
+    if (next) { setSelectedId(next.id); setQuantity(pricingMode === "wholesale" ? wholesaleMinimumUnits(next) : 1); setImageIndex(0); onPreviewChange?.(null); }
   };
-  const quoteOnly = requiresPricingInquiry(selected);
-  const optionPricing = priceCart([{ ...selected, quantity }], discountRules);
-  const whatsappText = `Hello PAM Essentials & More 👋\n\nI'd like to order:\n1. ${selected.name}\n${titles.map(({ title, key }) => productOptions(selected)[key] && `${title}: ${productOptions(selected)[key]}`).filter(Boolean).join("\n")}\nSKU: ${selected.sku || selected.id}\nQty: ${quantity}\nPrice: ${money.format(selected.price)}\nSubtotal: ${money.format(optionPricing.subtotal)}\n${optionPricing.discount > 0 ? `Discount: ${money.format(optionPricing.discount)}\n` : ""}Total: ${money.format(optionPricing.total)}\n\nName:\nPhone:\nDelivery/Pickup:\n${selected.randomColours || selected.randomShapes || selected.randomSizes ? "Preferred colour, size or shape/notes:" : "Notes:"}`;
+  const isWholesale = pricingMode === "wholesale", minimum = isWholesale ? wholesaleMinimumUnits(selected) : 1, quantityStep = isWholesale ? wholesaleStepUnits(selected) : 1;
+  const wholesaleIssue = isWholesale ? wholesaleQuantityIssue(selected, quantity) : "";
+  const sellingPrice = isWholesale ? wholesaleSellingPrice(selected, quantity) : selected.price;
+  const packSize=isWholesale?wholesaleSize(selected):1, packUnit=wholesaleUnitName(selected);
+  const availableStock=isWholesale?wholesaleAvailableUnits(selected):selected.stock;
+  const saleStockAvailable=availableStock>=minimum;
+  const quoteOnly = !isWholesale && requiresPricingInquiry(selected);
+  const optionPricing = pricePurchaseCart([{ ...selected, quantity }], discountRules, [], pricingMode, false);
+  const whatsappText = `Hello PAM Essentials & More 👋\n\nI'd like to ${isWholesale ? "place a wholesale order" : "order"}:\n1. ${selected.name}\n${titles.map(({ title, key }) => productOptions(selected)[key] && `${title}: ${productOptions(selected)[key]}`).filter(Boolean).join("\n")}\nSKU: ${selected.sku || selected.id}\nQty: ${isWholesale?(packDescription({...selected,purchaseType:"wholesale",quantity})||quantity):quantity}\nPrice: ${money.format(sellingPrice)}\nSubtotal: ${money.format(optionPricing.subtotal)}\n${optionPricing.discount > 0 ? `Discount: ${money.format(optionPricing.discount)}\n` : ""}Total: ${money.format(optionPricing.total)}\n\nName:\nPhone:\nDelivery/Pickup:\n${selected.randomColours || selected.randomShapes || selected.randomSizes ? "Preferred colour, size or shape/notes:" : "Notes:"}`;
   return <div className={`product-options ${compact ? "compact" : ""}`}>
     <section className="product-carousel" aria-label="Product images" tabIndex={images.length > 1 ? 0 : undefined} onKeyDown={(event) => { if (images.length > 1 && ["ArrowLeft", "ArrowRight"].includes(event.key)) { event.preventDefault(); showImage(currentIndex + (event.key === "ArrowRight" ? 1 : -1)); } }} onPointerDown={(event) => { swipe.current = { x: event.clientX, y: event.clientY, moved: false }; }} onPointerUp={(event) => { const dx = event.clientX - swipe.current.x, dy = event.clientY - swipe.current.y; if (images.length > 1 && Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy)) { swipe.current.moved = true; showImage(currentIndex + (dx < 0 ? 1 : -1)); } }} onClickCapture={(event) => { if (swipe.current.moved) { event.preventDefault(); event.stopPropagation(); swipe.current.moved = false; } }}>
       <div className="product-carousel-viewport">
@@ -121,20 +129,21 @@ export default function ProductOptions({ initialProduct, products, discountRules
     </section>
     <div className="product-option-body">
       <div className="product-option-top">{compact && <button type="button" className="icon-button" onClick={onClose} aria-label="Close Quick View">×</button>}</div>
-      <h2>{selected.name}</h2><ReviewRating product={selected} /><div className="detail-price">{quoteOnly ? <PricingInquiryButton product={selected} /> : promotionPrice(selected, discountRules) != null ? <><del>{money.format(selected.price)}</del> <strong>{money.format(promotionPrice(selected, discountRules))}</strong></> : money.format(selected.price)}</div>
-      <p className={quoteOnly ? "stock-label" : selected.stock <= 0 ? "stock-label out" : selected.stock < Number(selected.lowStockLevel ?? 8) ? "stock-label low" : "stock-label"}>{quoteOnly ? "Price confirmed after reviewing your measurements" : selected.stock > 0 ? `✓ In stock${selected.stock < Number(selected.lowStockLevel ?? 8) ? " · Low stock" : ""}` : "Out of Stock"}</p>
+      <h2>{selected.name}</h2><ReviewRating product={selected} /><div className="detail-price">{quoteOnly ? <PricingInquiryButton product={selected} /> : !isWholesale && promotionPrice(selected, discountRules) != null ? <><del>{money.format(selected.price)}</del> <strong>{money.format(promotionPrice(selected, discountRules))}</strong></> : <>{money.format(sellingPrice)}{isWholesale&&<small> / {packUnit}{packSize>1?` (${packSize} pcs)`:""}</small>}</>}</div>
+      <p className={quoteOnly ? "stock-label" : !saleStockAvailable ? "stock-label out" : selected.stock < Number(selected.lowStockLevel ?? 8) ? "stock-label low" : "stock-label"}>{quoteOnly ? "Price confirmed after reviewing your measurements" : saleStockAvailable ? `✓ In stock${selected.stock < Number(selected.lowStockLevel ?? 8) ? " · Low stock" : ""}` : "Out of Stock"}</p>
       <p className="sku">SKU: {selected.sku || selected.id}</p>
       {randomSelectionNote(selected) && <p className="colour-note">{randomSelectionNote(selected)}</p>}
       {hasVariants && <div className="variant-controls">
-        <div className="selection-summary"><b>Your selection</b><span>{variantDetail(selected, titles) || selected.name}</span>{selected.id !== initialProduct.id && <button type="button" onClick={() => { setSelectedId(initialProduct.id); setQuantity(1); }}>Back to original selection</button>}</div>
+        <div className="selection-summary"><b>Your selection</b><span>{variantDetail(selected, titles) || selected.name}</span>{selected.id !== initialProduct.id && <button type="button" onClick={() => { setSelectedId(initialProduct.id); setQuantity(pricingMode === "wholesale" ? wholesaleMinimumUnits(initialProduct) : 1); }}>Back to original selection</button>}</div>
         {titles.map(({ title, key }) => { const values = [...new Set(variants.map((item) => productOptions(item)[key]).filter(Boolean))]; const otherTitles = key === "colour" && titles.some((item) => item.key === "size") ? "size" : ""; const strict = key === "colour" && Boolean(productOptions(selected).size); const plural = /s$/i.test(title) ? title.toLowerCase() : `${title.toLowerCase()}s`; return <fieldset key={key}><legend>{`Other ${plural}${otherTitles ? ` for this ${otherTitles}` : " available for this product"}`}</legend><div className="variant-choice-list">{values.map((value) => { const next = selectVariant(variants, selected, key, value, strict); const active = productOptions(selected)[key] === value; return <button type="button" key={value} className={active ? "variant-choice selected" : "variant-choice"} disabled={!next && !active} title={next || active ? "" : "Out of Stock"} onClick={() => chooseOption(key, value)}>{value}{!next && !active && <small>Out of Stock</small>}</button>; })}</div>{key === "size" && titles.some((item) => item.key === "colour") && <small>Choose a size to see available colours for this size.</small>}</fieldset>; })}
       </div>}
-      {!quoteOnly && <><label className="quantity-control">Quantity <span className="stepper"><button type="button" onClick={() => setQuantity(Math.max(1, quantity - 1))} aria-label="Decrease quantity">−</button><input type="number" min="1" max={selected.stock} value={quantity} onChange={(event) => setQuantity(Math.max(1, Math.min(selected.stock, Number(event.target.value) || 1)))} aria-label={`Quantity of ${selected.name}`} /><button type="button" onClick={() => setQuantity(Math.min(selected.stock, quantity + 1))} aria-label="Increase quantity" disabled={quantity >= selected.stock}>+</button></span></label>
-      {quantityOfferMessage(selected, quantity, discountRules) && <p className="quantity-offer-note">{quantityOfferMessage(selected, quantity, discountRules)}</p>}
-      <button type="button" className="button primary full" disabled={selected.stock <= 0} onClick={() => onAdd(selected, quantity)}>{selected.stock > 0 ? "Add to cart" : "Out of Stock"}</button>
-      {selected.stock <= 0 ? <RestockRequest key={selected.id} product={selected} /> : <a className="button whatsapp full" target="_blank" rel="noreferrer" href={`https://wa.me/${PRIMARY_WHATSAPP}?text=${encodeURIComponent(whatsappText)}`}><WhatsAppIcon size={18} /> Order via WhatsApp</a>}</>}
+      {isWholesale && <p className="wholesale-minimum-note">Wholesale · Minimum {minimum/packSize} {wholesaleUnitName(selected,minimum/packSize!==1)}{packSize>1?` (${minimum} pcs)`:""} of this exact SKU · Increments of {quantityStep/packSize} {wholesaleUnitName(selected,quantityStep/packSize!==1)}. Retail offers do not apply.</p>}{wholesaleIssue && saleStockAvailable && <p className="notice warning">{wholesaleIssue}</p>}{!quoteOnly && <><label className="quantity-control">{packSize>1?wholesaleUnitName(selected,true):"Quantity"} <span className="stepper"><button type="button" onClick={() => setQuantity(Math.max(minimum, quantity - quantityStep))} aria-label="Decrease quantity">−</button><input type="number" min={minimum/packSize} step={quantityStep/packSize} max={Math.floor(availableStock/packSize)} value={quantity/packSize} onChange={(event) => setQuantity(Math.max(minimum, Math.min(Math.floor(availableStock/packSize)*packSize, Number(event.target.value)*packSize || minimum)))} aria-label={`Quantity of ${selected.name}`} /><button type="button" onClick={() => setQuantity(Math.min(availableStock, quantity + quantityStep))} aria-label="Increase quantity" disabled={quantity + quantityStep > availableStock}>+</button></span></label>
+      {isWholesale&&packSize>1&&<p className="wholesale-pack-summary">{packDescription({...selected,purchaseType:"wholesale",quantity})}</p>}
+      {!isWholesale && quantityOfferMessage(selected, quantity, discountRules) && <p className="quantity-offer-note">{quantityOfferMessage(selected, quantity, discountRules)}</p>}
+      <button type="button" className="button primary full" disabled={!saleStockAvailable || Boolean(wholesaleIssue)} onClick={() => onAdd(selected, quantity)}>{saleStockAvailable ? "Add to cart" : "Out of Stock"}</button>
+      {isWholesale && wholesaleIssue ? saleStockAvailable ? <p className="muted">Adjust the quantity to meet wholesale requirements.</p> : null : selected.stock <= 0 ? <RestockRequest key={selected.id} product={selected} /> : <a className="button whatsapp full" target="_blank" rel="noreferrer" href={`https://wa.me/${PRIMARY_WHATSAPP}?text=${encodeURIComponent(whatsappText)}`}><WhatsAppIcon size={18} /> Order via WhatsApp</a>}</>}
       {compact && <a href={`/products/${encodeURIComponent(selected.id)}?quick=${encodeURIComponent(initialProduct.id)}`} className="detail-link" onClick={(event) => onNavigateDetail?.(event, selected)}>View full product details →</a>}
-      {footer}
+      {typeof footer === "function" ? footer(selected) : footer}
     </div>
   </div>;
 }

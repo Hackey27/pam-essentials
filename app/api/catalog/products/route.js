@@ -3,7 +3,7 @@ import { reviewSummary } from "@/lib/productReviews.mjs";
 import { NextResponse } from "next/server";
 import { hasSellingPrice } from "@/lib/productPricing.mjs";
 import { adminDb } from "@/lib/admin";
-import { availableOnStorefront, catalogueContext, publicDiscountRule } from "@/lib/commerce";
+import { availableOnStorefront, availableForWholesale, catalogueContext, publicDiscountRule } from "@/lib/commerce";
 import { publicProduct, serializeDoc } from "@/lib/productData";
 import { categoryLabels, effectiveCollections } from "@/lib/categoryHierarchy";
 import { popularityScore } from "@/lib/catalogueBrowse.mjs";
@@ -37,6 +37,7 @@ export async function GET() {
       .slice(0, 3)
       .map(({ id, name }) => ({ id, name })) : [];
     const products = ranked.map(({ _score, _popular, ...product }) => { const summary = ratings.get(reviewKey(product)); return { ...product, rating: summary?.average || 0, reviewCount: summary?.count || 0 }; });
+    const wholesaleProducts = snapshot.docs.map(serializeDoc).filter(p=>availableForWholesale(p,context)).map(p=>({...publicProduct(p),...categoryLabels(p,context.hierarchy)}));
     const productMap = new Map(products.map((product) => [product.id, product]));
     const dealBundles = context.deals.filter((deal) => (deal.productIds || []).length >= 2 && deal.productIds.every((id) => productMap.has(id) && hasSellingPrice(productMap.get(id)))).map((deal) => ({ dealId: deal.dealId, name: deal.name, productIds: deal.productIds, finalPrice: Number(deal.finalPrice), aggregatePrice: Math.round(deal.productIds.reduce((sum, id) => sum + productMap.get(id).price, 0) * 100) / 100, available: deal.productIds.every((id) => productMap.get(id).stock > 0) }));
 
@@ -44,9 +45,10 @@ export async function GET() {
     const mapsUrl = isGoogleMapsUrl(mapsSetting.data()?.value) ? String(mapsSetting.data()?.value || "") : "";
     const openingHours = String(hoursSetting.data()?.value || OPENING_HOURS);
     const heroSettings = { HERO_WEB_IMAGE_PATH: { value: webHeroPath }, HERO_MOBILE_IMAGE_PATH: { value: mobileHeroPath }, ...(webGallerySetting.exists ? { HERO_WEB_IMAGES: webGallerySetting.data() } : {}), ...(mobileGallerySetting.exists ? { HERO_MOBILE_IMAGES: mobileGallerySetting.data() } : {}) };
-    return NextResponse.json({ products, ...context.activeHierarchy, discountRules: context.rules.map(publicDiscountRule), dealBundles, popularProducts, publicLaunch, dealsActive, flyerUrl, webHeroPath, mobileHeroPath, heroWebImages: heroImageList(heroSettings, "web").filter((image) => image.active), heroMobileImages: heroImageList(heroSettings, "mobile").filter((image) => image.active), storeLocation, mapsUrl, openingHours, announcements: activeAnnouncements(announcementSnap.docs.map((doc) => ({ announcementId: doc.id, ...doc.data() }))) });
+    return NextResponse.json({ products, wholesaleProducts, ...context.activeHierarchy, discountRules: context.rules.map(publicDiscountRule), dealBundles, popularProducts, publicLaunch, dealsActive, flyerUrl, webHeroPath, mobileHeroPath, heroWebImages: heroImageList(heroSettings, "web").filter((image) => image.active), heroMobileImages: heroImageList(heroSettings, "mobile").filter((image) => image.active), storeLocation, mapsUrl, openingHours, announcements: activeAnnouncements(announcementSnap.docs.map((doc) => ({ announcementId: doc.id, ...doc.data() }))) });
   } catch (error) {
     console.error("catalog", error);
     return NextResponse.json({ products: [], error: "The catalogue is temporarily unavailable." }, { status: 503 });
   }
 }
+

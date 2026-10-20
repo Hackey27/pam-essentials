@@ -1,7 +1,9 @@
+import {wholesaleAvailableUnits,packingIssue} from "@/lib/wholesaleUnits.mjs";
+import { pricePurchaseCart, purchaseType } from "@/lib/wholesale.mjs";
 import { FieldValue } from "firebase-admin/firestore";
 import { NextResponse } from "next/server";
 import { adminDb, requireRole } from "@/lib/admin";
-import { availableForSale, catalogueContext, priceCart } from "@/lib/commerce";
+import { availableForSale, availableForWholesale, catalogueContext, priceCart } from "@/lib/commerce";
 import { CURRENT_SHOP_ADDRESS } from "@/lib/shopAddress.mjs";
 import { receiptSnapshot } from "@/lib/receiptData.mjs";
 import { offlineReceiptId } from "@/lib/offlineSale.mjs";
@@ -87,14 +89,19 @@ export async function POST(request) {
       const receiptId = offlineFinal ? offlineReceiptId(transactionId) : `PAM-${receiptDay}-${String(receiptNumber).padStart(4, "0")}`;
       if (salesChannel === "website" && orderReference && !linkedOrderSnap.exists) throw new Error("The linked website order no longer exists.");
       const linkedOrder = linkedOrderSnap?.data();
+      const mode = purchaseType(reconciliation?.receipt?.purchaseType ?? linkedOrder?.purchaseType ?? body.purchaseType);
+      if (mode === "wholesale" && requested.some(item=>!Number.isInteger(Number(item.quantity)))) throw new Error("Wholesale quantities must be whole individual units.");
       for (let index = 0; index < normalizedItems.length; index += 1) {
         const snap = productSnaps[index];
         const quantity = normalizedItems[index].quantity;
         if (!snap.exists) throw new Error("A selected product no longer exists.");
-        if (!availableForSale(snap.data(), context)) throw new Error(`${snap.data().name} is not available for sale.`);
+        if (!(mode === "wholesale" ? availableForWholesale(snap.data(),context) : availableForSale(snap.data(), context))) throw new Error(`${snap.data().name} is not available for sale.`);
+        if(mode==="wholesale"&&!reconciliation){const issue=packingIssue(snap.data(),requested.find(item=>String(item.id||"").trim()===normalizedItems[index].id));if(issue)throw new Error(issue);}
+        if(mode==="wholesale"&&quantity>wholesaleAvailableUnits(snap.data()))throw new Error("Wholesale quantity unavailable. Retail stock is protected.");
         if (Number(snap.data().stock) < quantity) throw new Error(`Only ${snap.data().stock} × ${snap.data().name} remain.`);
       }
-      const currentPricing = priceCart(productSnaps.map((snap, index) => ({ id: normalizedItems[index].id, categoryId: snap.data().categoryId, price: Number(snap.data().price), quantity: normalizedItems[index].quantity })), context.rules, context.deals);
+      const currentPricing = pricePurchaseCart(productSnaps.map((snap,index)=>({...snap.data(),id:normalizedItems[index].id,quantity:normalizedItems[index].quantity})),context.rules,context.deals,mode,!reconciliation);
+      if (mode === "wholesale" && !offlineFinal && (!Number.isFinite(Number(body.expectedTotal)) || Math.abs(Number(body.expectedTotal)-currentPricing.total)>.005)) throw new Error("Wholesale prices changed. Refresh the basket and confirm the new total.");
       const pricing = reconciliation ? capturedPricing(reconciliation.receipt, normalizedItems) : currentPricing;
       if (offlineFinal && Math.abs(pricing.total - Number(body.offlineTotal)) > 0.005) throw new Error("Offline total differs from current pricing. Keep the local receipt and ask a manager to reconcile this sale.");
       const accounting = await accountingContext(tx, store, today(), { type: "sale", id: transactionId });
@@ -128,7 +135,9 @@ export async function POST(request) {
           variantOptions: product.variantOptions || {},
           name: product.name,
           quantity,
-          unitPrice: reconciliation ? priced.unitPrice : Number(product.price),
+          unitPrice: reconciliation ? priced.unitPrice : Number(priced.price),
+          purchaseType: mode,
+          ...(mode === "wholesale" ? { wholesaleSnapshot: reconciliation ? priced.wholesaleSnapshot || reconciliation.receipt.items.find(line=>(line.productId||line.id)===item.id)?.wholesaleSnapshot || null : priced.wholesaleSnapshot } : {}),
           lineTotal: netLineTotal,
           unitCost: Number(product.costPrice || 0),
           costRecorded: product.costPrice != null && (!accounting.settings.active || !Number.isInteger(inventoryBook.quantity) || inventoryBook.quantity >= quantity),
@@ -180,6 +189,7 @@ export async function POST(request) {
         cashChangeSource,
         cashChangePaid,
         salesChannel,
+        purchaseType: mode,
         orderReference,
         customerName,
         customerPhone,

@@ -1,3 +1,4 @@
+import { tradePerformance } from "@/lib/tradePerformance.mjs";
 import { Timestamp } from "firebase-admin/firestore";
 import { NextResponse } from "next/server";
 import { adminDb, requireRole } from "@/lib/admin";
@@ -67,5 +68,6 @@ export async function GET(request) {
   const history = new Map();
   for (const sale of sales) { const date = iso(sale.createdAt)?.slice(0, 10); if (!date) continue; const row = history.get(date) || { date, transactions: 0, sales: 0, expenses: 0 }; if (sale.saleType !== "reversal") row.transactions += 1; row.sales += Number(sale.total || 0); history.set(date, row); }
   for (const expense of expenses) { const date = iso(expense.createdAt)?.slice(0, 10); if (!date) continue; const row = history.get(date) || { date, transactions: 0, sales: 0, expenses: 0 }; row.expenses += Number(expense.amount || 0); history.set(date, row); }
-  return NextResponse.json({ period: range.period, start: range.start.toISOString(), end: range.end.toISOString(), summary, previous, transactions, channels: [...channels].map(([name, total]) => ({ name, total })), fastSelling: [...quantities].map(([id, item]) => ({ id, ...item })).filter(item => item.quantity > 0).sort((a, b) => b.quantity - a.quantity).slice(0, 10), history: [...history.values()].sort((a, b) => b.date.localeCompare(a.date)), currentCatalogueProducts: priced.length, lastUpdated: new Date().toISOString() });
+  return NextResponse.json({ ...(isAdmin ? { tradeReport: tradePerformance(sales) } : {}), period: range.period, start: range.start.toISOString(), end: range.end.toISOString(), summary, previous, transactions, channels: [...channels].map(([name, total]) => ({ name, total })), fastSelling: [...quantities].map(([id, item]) => ({ id, ...item })).filter(item => item.quantity > 0).sort((a, b) => b.quantity - a.quantity).slice(0, 10), history: [...history.values()].sort((a, b) => b.date.localeCompare(a.date)), currentCatalogueProducts: priced.length, lastUpdated: new Date().toISOString() });
 }
+

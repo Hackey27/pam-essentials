@@ -5,6 +5,8 @@ import { EmailAuthProvider, reauthenticateWithCredential } from "firebase/auth";
 import RequireRole from "@/components/RequireRole";
 import { signOut, useAuth } from "@/components/AuthProvider";
 import PosDashboard from "@/components/PosDashboard";
+import {wholesaleAvailableUnits,wholesaleSize,wholesaleUnitName,wholesaleMinimumUnits,wholesaleStepUnits,packDescription} from "@/lib/wholesaleUnits.mjs";
+import { wholesaleEnabled, wholesaleSettings, wholesaleQuantityIssue, purchaseProduct, pricePurchaseCart } from "@/lib/wholesale.mjs";
 import PosTill from "@/components/PosTill";
 import PosReceipts from "@/components/PosReceipts";
 import PosExpenses from "@/components/PosExpenses";
@@ -61,6 +63,7 @@ function Till() {
   const [stockFilter, setStockFilter] = useState("all");
   const [category, setCategory] = useState("All");
   const [cart, setCart] = useState([]);
+  const [purchaseMode, setPurchaseMode] = useState("retail");
   const [cartNotice, setCartNotice] = useState("");
   const [online, setOnline] = useState(true);
   const [error, setError] = useState("");
@@ -90,9 +93,9 @@ function Till() {
     return fetch(url, { ...options, headers: { ...(options.headers || {}), authorization: `Bearer ${token}` } });
   }
 
-  function clearBasketFields() { setCart([]); setOrderReference(""); setOrderChannel("walk-in"); setCustomerName(""); setCustomerPhone(""); setAmountPaid(""); setTransactionVerified(false); setCashChangeSource("cash"); saleAttempt.current = null; }
-  const baskets = usePosBaskets({ user, shift, cart, orderChannel, orderReference, customerName, customerPhone, request, attempt: saleAttempt,
-    onRestore: (draft, restored, fresh) => { setProducts(fresh.products || []); setDiscountRules(fresh.discountRules || []); setTaxPolicy(fresh.taxPolicy || { enabled: false }); setDealBundles(fresh.dealBundles || []); setCart(restored); setOrderChannel(draft.orderChannel || "walk-in"); setOrderReference(draft.orderReference || ""); setCustomerName(draft.customerName || ""); setCustomerPhone(draft.customerPhone || ""); setAmountPaid(""); setTransactionVerified(false); setCashChangeSource("cash"); setPaymentMethod("cash"); saleAttempt.current = draft.attemptId ? { transactionId: draft.attemptId, fingerprint: null, uncertain: false } : null; setView("sale"); setCartNotice("Restored with current stock, prices and promotions. Review the total and enter payment again."); },
+  function clearBasketFields() { setCart([]); setPurchaseMode("retail"); setOrderReference(""); setOrderChannel("walk-in"); setCustomerName(""); setCustomerPhone(""); setAmountPaid(""); setTransactionVerified(false); setCashChangeSource("cash"); saleAttempt.current = null; }
+  const baskets = usePosBaskets({ user, shift, cart, purchaseMode, orderChannel, orderReference, customerName, customerPhone, request, attempt: saleAttempt,
+    onRestore: (draft, restored, fresh) => { setPurchaseMode(draft.purchaseType || "retail"); setProducts(fresh.products || []); setDiscountRules(fresh.discountRules || []); setTaxPolicy(fresh.taxPolicy || { enabled: false }); setDealBundles(fresh.dealBundles || []); setCart(restored); setOrderChannel(draft.orderChannel || "walk-in"); setOrderReference(draft.orderReference || ""); setCustomerName(draft.customerName || ""); setCustomerPhone(draft.customerPhone || ""); setAmountPaid(""); setTransactionVerified(false); setCashChangeSource("cash"); setPaymentMethod("cash"); saleAttempt.current = draft.attemptId ? { transactionId: draft.attemptId, fingerprint: null, uncertain: false } : null; setView("sale"); setCartNotice("Restored with current stock, prices and promotions. Review the total and enter payment again."); },
     onFoundSale: (saved) => { clearBasketFields(); setReceipt(saved); }
   });
   function holdSale(name) { if (!baskets.hold(name)) return false; clearBasketFields(); return true; }
@@ -301,7 +304,8 @@ function Till() {
     return () => clearInterval(timer);
   }, [user, shift?.shiftId, locked]);
 
-  const pricing = priceCart(cart, discountRules, dealBundles);
+  const pricing = pricePurchaseCart(cart, discountRules, dealBundles, purchaseMode, false);
+  const wholesaleError = purchaseMode === "wholesale" ? cart.map(p => wholesaleQuantityIssue(p,p.quantity)).find(Boolean) || "" : "";
   const { subtotal, discount, total } = pricing;
 
   useEffect(() => {
@@ -314,15 +318,15 @@ function Till() {
         if (!response.ok) throw new Error(fresh.error || "Stock check failed.");
         if (cancelled) return;
         const byId = new Map((fresh.products || []).map((product) => [product.id, product]));
-        const changed = cart.some((item) => !byId.has(item.id) || byId.get(item.id).stock < item.quantity || byId.get(item.id).price !== item.price);
-        const nextPrice = changed ? null : priceCart(cart.map((item) => ({ ...byId.get(item.id), quantity: item.quantity })), fresh.discountRules || [], fresh.dealBundles || []);
+        const changed = cart.some((item) => !byId.has(item.id) || (purchaseMode==="wholesale"&&(wholesaleSize(byId.get(item.id))!==wholesaleSize(item)||wholesaleUnitName(byId.get(item.id))!==wholesaleUnitName(item))) || byId.get(item.id).stock < item.quantity || purchaseProduct(byId.get(item.id),purchaseMode,item.quantity,false).price !== purchaseProduct(item,purchaseMode,item.quantity,false).price || (purchaseMode === "wholesale" && Boolean(wholesaleQuantityIssue(byId.get(item.id),item.quantity))));
+        const nextPrice = changed ? null : pricePurchaseCart(cart.map((item) => ({ ...byId.get(item.id), quantity: item.quantity })), fresh.discountRules || [], fresh.dealBundles || [], purchaseMode, false);
         setCartNotice((current) => changed || nextPrice.total !== total ? "Stock, price or promotion changed. Review the cart before checkout." : current.startsWith("Stock, price") ? current : "");
       } catch (err) { if (!cancelled) setCartNotice(`Live stock check failed: ${err.message}`); }
     };
     check();
     const timer = setInterval(check, 45000);
     return () => { cancelled = true; clearInterval(timer); };
-  }, [user, view, cart, online, total]);
+  }, [user, view, cart, online, total, purchaseMode]);
   useEffect(() => { if (!cart.length) setCartNotice(""); }, [cart.length]);
   useEffect(() => { if (!online) setCartNotice(""); }, [online]);
 
@@ -335,8 +339,8 @@ function Till() {
     const matchesQuery = `${product.name} ${product.id} ${product.sku || ""} ${Object.values(product.variantOptions || {}).join(" ")} ${(product.barcodeEntries || []).filter((entry) => !entry.archived).map((entry) => entry.code).join(" ")} ${product.barcode || ""}`.toLowerCase().includes(query.trim().toLowerCase());
     const threshold = Number(product.lowStockLevel ?? 8);
     const matchesStock = stockFilter === "all" || (stockFilter === "high" && (product.pinned || product.purchaseCount >= 3)) || (stockFilter === "low" && product.stock > 0 && product.stock < threshold) || (stockFilter === "out" && product.stock <= 0);
-    return matchesCategory && matchesQuery && matchesStock;
-  }), [products, query, category, stockFilter]);
+    return matchesCategory && matchesQuery && matchesStock && (purchaseMode === "wholesale" ? wholesaleEnabled(product) : Number(product.price)>0);
+  }).map(p=>purchaseMode === "wholesale" ? purchaseProduct(p,purchaseMode,wholesaleMinimumUnits(p),false) : p), [products, query, category, stockFilter, purchaseMode]);
   const visibleOrders = useMemo(() => orders.filter((order) => {
     const matches = `${order.customer} ${order.phone} ${order.orderId} ${order.createdAt}`.toLowerCase().includes(orderQuery.toLowerCase());
     const state = orderStatus === "all" || order.status === orderStatus || (orderStatus === "pending-payment" && order.paymentStatus !== "paid");
@@ -346,17 +350,17 @@ function Till() {
   const tendered = amountPaid.trim() === "" ? NaN : Number(amountPaid);
   const changeDue = Number.isFinite(tendered) ? Math.max(0, tendered - total) : 0;
   const referenceReady = !["website", "whatsapp"].includes(orderChannel) || Boolean(orderReference.trim() || (customerName.trim() && customerPhone.trim()));
-  const paymentReady = Number.isFinite(tendered) && tendered >= total && (paymentMethod === "cash" || transactionVerified);
+  const paymentReady = Number.isFinite(tendered) && tendered >= total && (paymentMethod === "cash" || transactionVerified) && !wholesaleError;
 
   function add(product) {
-    if (!basketEditable()) return;
-    if (product.stock <= 0) return;
+    if (!basketEditable() || product.stock <= 0 || (purchaseMode === "retail" && Number(product.price) <= 0)) return false;
+    const config=wholesaleSettings(product),found=cart.find(i=>i.id===product.id),amount=purchaseMode==="wholesale"?(found?wholesaleStepUnits(product):wholesaleMinimumUnits(product)):1;
+    const quantity=(found?.quantity||0)+amount;
+    if(purchaseMode==="wholesale"){const issue=wholesaleQuantityIssue(product,quantity);if(issue){setCartNotice(issue);return false;}}
+    if(quantity>product.stock)return false;
     setCartNotice("");
-    setCart((current) => {
-      const found = current.find((item) => item.id === product.id);
-      if (found && found.quantity < product.stock) return current.map((item) => item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item);
-      return found ? current : [...current, { ...product, quantity: 1 }];
-    });
+    setCart(current=>current.some(i=>i.id===product.id)?current.map(i=>i.id===product.id?{...i,quantity,purchaseType:purchaseMode}:i):[...current,{...product,quantity,purchaseType:purchaseMode}]);
+    return true;
   }
 
   function showScanPlan(plan) {
@@ -364,13 +368,13 @@ function Till() {
     setBarcode("");
     setScanMatches([]);
     if (plan.type === "choices") { setScanMatches(plan.products); setScanFeedback("Choose the scanned product below."); }
-    else if (plan.type === "add") { add(plan.product); setScanFeedback(`${plan.product.name} added. Quantity in basket: 1.`); }
+    else if (plan.type === "add") { if(add(plan.product)!==false)setScanFeedback(`${plan.product.name} added. Quantity: ${purchaseMode === "wholesale" ? wholesaleMinimumUnits(plan.product) : 1}.`); }
     else { scanPendingRef.current = plan; setScanPrompt(plan); if (plan.message) setScanFeedback(plan.message); }
   }
   function chooseScannedProduct(product) { showScanPlan(planScannedProduct(product, cart)); }
   function resolveScannedCode(value) {
     if (scanPendingRef.current || scanMatches.length) return;
-    showScanPlan(planPosScan(products, cart, value));
+    showScanPlan(planPosScan(purchaseMode === "wholesale" ? products.filter(wholesaleEnabled) : products.filter(p=>Number(p.price)>0), cart, value));
   }
   function dismissScanPrompt() { scanPendingRef.current = null; setScanPrompt(null); barcodeInput.current?.focus(); }
   function confirmScanIncrease() {
@@ -384,7 +388,7 @@ function Till() {
     const refreshed = planScannedProduct(product, cart);
     if (refreshed.type !== "increase") { showScanPlan(refreshed); return; }
     add(product);
-    setScanFeedback(`${product.name}: quantity in basket is now ${item.quantity + 1}.`);
+    setScanFeedback(`${product.name}: quantity in basket is now ${item.quantity + (purchaseMode === "wholesale" ? wholesaleStepUnits(product) : 1)}.`);
   }
 
   function scanBarcode(event) {
@@ -397,20 +401,20 @@ function Till() {
   function change(id, delta) {
     if (!basketEditable()) return;
     setCartNotice("");
-    setCart((current) => current.map((item) => item.id === id ? { ...item, quantity: Math.min(item.stock, Math.max(0, item.quantity + delta)) } : item).filter((item) => item.quantity));
+    setCart((current) => current.map((item) => item.id === id ? { ...item, quantity: Math.min(purchaseMode==="wholesale"?wholesaleAvailableUnits(item):item.stock, Math.max(0, item.quantity + delta * (purchaseMode === "wholesale" ? wholesaleStepUnits(item) : 1))) } : item).filter((item) => item.quantity));
   }
   function setQuantity(id, quantity) {
     if (!basketEditable()) return;
     if (!Number.isInteger(quantity) || quantity < 1) return;
     setCartNotice("");
-    setCart((current) => current.map((item) => item.id === id ? { ...item, quantity: Math.max(1, Math.min(Number(item.stock), quantity)) } : item));
+    setCart((current) => current.map((item) => item.id === id ? { ...item, quantity: Math.max(1, Math.min(purchaseMode==="wholesale"?wholesaleAvailableUnits(item):Number(item.stock), quantity)) } : item));
   }
 
   function finalizeOfflineSale() {
     const transactionId = crypto.randomUUID();
     const capturedTax = saleTax(pricing, cart, taxPolicy, new Date().toISOString().slice(0,10));
-    const localReceipt = offlineSaleReceipt({ taxSnapshot: capturedTax, transactionId, cart, pricing, shift, staffEmail: user?.email || "", staffName: shift?.staffName || user?.displayName || "", paymentMethod, cashChangeSource, amountPaid: tendered, salesChannel: orderChannel, orderReference, customerName, customerPhone });
-    const payload = { transactionId, offlineFinal: true, offlineTotal: total, offlineTaxSnapshot: capturedTax, paymentMethod, cashChangeSource, transactionVerified, salesChannel: orderChannel, orderReference: orderReference || null, customerName, customerPhone, amountPaid: tendered, shiftId: shift.shiftId, deviceId, items: cart.map(({ id, quantity }) => ({ id, quantity })) };
+    const localReceipt = offlineSaleReceipt({ purchaseType: purchaseMode, taxSnapshot: capturedTax, transactionId, cart, pricing, shift, staffEmail: user?.email || "", staffName: shift?.staffName || user?.displayName || "", paymentMethod, cashChangeSource, amountPaid: tendered, salesChannel: orderChannel, orderReference, customerName, customerPhone });
+    const payload = { purchaseType: purchaseMode, transactionId, offlineFinal: true, offlineTotal: total, offlineTaxSnapshot: capturedTax, paymentMethod, cashChangeSource, transactionVerified, salesChannel: orderChannel, orderReference: orderReference || null, customerName, customerPhone, amountPaid: tendered, shiftId: shift.shiftId, deviceId, items: cart.map(p => ({ id:p.id, quantity:p.quantity, ...(purchaseMode==="wholesale"?{expectedPackSize:wholesaleSize(p),expectedSellingUnit:wholesaleUnitName(p)}:{}) })) };
     const queued = JSON.parse(localStorage.getItem("pam-pos-queue") || "[]");
     const next = [...queued, { payload, receipt: localReceipt, createdAt: localReceipt.createdAt, staffId: user.uid }];
     localStorage.setItem("pam-pos-queue", JSON.stringify(next));
@@ -428,7 +432,7 @@ function Till() {
     setReceipt(localReceipt);
     saleAttempt.current = null;
     setConfirmSale(false);
-    setCart([]); setOrderReference(""); setOrderChannel("walk-in"); setCustomerName(""); setCustomerPhone(""); setAmountPaid(""); setTransactionVerified(false); setCashChangeSource("cash");
+    setCart([]); setPurchaseMode("retail"); setOrderReference(""); setOrderChannel("walk-in"); setCustomerName(""); setCustomerPhone(""); setAmountPaid(""); setTransactionVerified(false); setCashChangeSource("cash");
     setError("");
     setOfflineNotice(`Sale finalized on this till and queued for server sync. Keep this device and its browser data until synchronization succeeds.${catalogueCacheWarning ? " The cached catalogue could not be refreshed." : ""}`);
   }
@@ -442,6 +446,7 @@ function Till() {
       if (Number(product.stock) < Number(line.quantity)) { setError(`Only ${product.stock} × ${product.name} remain. Resolve stock before taking payment.`); return; }
       nextCart.push({ ...product, quantity: Number(line.quantity) });
     }
+    setPurchaseMode(order.purchaseType || "retail");
     setCart(nextCart);
     setOrderReference(order.orderId);
     setOrderChannel(order.channel || "website");
@@ -457,6 +462,7 @@ function Till() {
   async function checkout() {
     if (!cart.length || checkoutAction.current) return;
     if (!shift) { setError("Open a till shift before checkout."); return; }
+    if (wholesaleError) { setError(wholesaleError); return; }
     if (!referenceReady) { setError("Add an order reference or the customer name and phone for this sales channel."); return; }
     if (!paymentReady) { setError("Enter the amount paid and verify electronic payment before completing the sale."); return; }
     if (!online && saleAttempt.current) { setError("Reconnect to confirm the previous sale attempt before recording another payment."); return; }
@@ -470,14 +476,14 @@ function Till() {
         if (check.found) { baskets.finish(); clearBasketFields(); setConfirmSale(false); setReceipt(check.receipt); await loadProducts(); return; }
         saleAttempt.current.uncertain = false;
       }
-      const fingerprint = JSON.stringify({ cart: cart.map(({ id, quantity }) => [id, quantity]), paymentMethod, cashChangeSource, tendered, orderChannel, orderReference, customerName, customerPhone });
+      const fingerprint = JSON.stringify({ purchaseMode, cart: cart.map(({ id, quantity }) => [id, quantity]), paymentMethod, cashChangeSource, tendered, orderChannel, orderReference, customerName, customerPhone });
       if (saleAttempt.current?.fingerprint !== fingerprint) {
       const freshResponse = await request("/api/pos/products");
       const fresh = await freshResponse.json();
       if (!freshResponse.ok) throw new Error(fresh.error || "Current stock and prices could not be checked.");
       const freshMap = new Map((fresh.products || []).map((product) => [product.id, product]));
-      const changed = cart.find((item) => { const latest = freshMap.get(item.id); return !latest || latest.stock < item.quantity || latest.price !== item.price; });
-      const freshPricing = changed ? null : priceCart(cart.map((item) => ({ ...freshMap.get(item.id), quantity: item.quantity })), fresh.discountRules || [], fresh.dealBundles || []);
+      const changed = cart.find((item) => { const latest = freshMap.get(item.id); return !latest || (purchaseMode==="wholesale"&&(wholesaleSize(latest)!==wholesaleSize(item)||wholesaleUnitName(latest)!==wholesaleUnitName(item))) || latest.stock < item.quantity || purchaseProduct(latest,purchaseMode,item.quantity,false).price !== purchaseProduct(item,purchaseMode,item.quantity,false).price || (purchaseMode === "wholesale" && Boolean(wholesaleQuantityIssue(latest,item.quantity))); });
+      const freshPricing = changed ? null : pricePurchaseCart(cart.map((item) => ({ ...freshMap.get(item.id), quantity: item.quantity })), fresh.discountRules || [], fresh.dealBundles || [], purchaseMode, false);
       setProducts(fresh.products || []); setDiscountRules(fresh.discountRules || []); setTaxPolicy(fresh.taxPolicy || { enabled: false }); setDealBundles(fresh.dealBundles || []);
       if (changed || freshPricing.total !== total) {
         setCart(cart.map((item) => freshMap.has(item.id) ? { ...freshMap.get(item.id), quantity: Math.min(item.quantity, freshMap.get(item.id).stock) } : { ...item, stock: 0 }).filter((item) => item.quantity > 0 && item.stock > 0));
@@ -490,7 +496,7 @@ function Till() {
       const linkedOrder = orders.find((item) => item.orderId === orderReference);
       if (saleAttempt.current?.fingerprint !== fingerprint) saleAttempt.current = { fingerprint, transactionId: saleAttempt.current?.transactionId || crypto.randomUUID() };
       baskets.captureAttempt();
-      const payload = { transactionId: saleAttempt.current.transactionId, paymentMethod, cashChangeSource, transactionVerified, salesChannel: orderChannel, orderReference: orderReference || null, customerName, customerPhone, amountPaid: tendered, shiftId: shift.shiftId, deviceId, items: cart.map(({ id, quantity }) => ({ id, quantity })) };
+      const payload = { purchaseType: purchaseMode, expectedTotal: total, transactionId: saleAttempt.current.transactionId, paymentMethod, cashChangeSource, transactionVerified, salesChannel: orderChannel, orderReference: orderReference || null, customerName, customerPhone, amountPaid: tendered, shiftId: shift.shiftId, deviceId, items: cart.map(({ id, quantity }) => ({ id, quantity })) };
       saleAttempt.current.uncertain = true;
       const response = await request("/api/pos/sales", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
       const data = await response.json();
@@ -506,7 +512,7 @@ function Till() {
           if (!orderResponse.ok) throw new Error(orderResult.error);
         } catch (orderError) { setError(`Sale completed, but the linked order needs attention: ${orderError.message}`); }
       }
-      setCart([]); setOrderReference(""); setOrderChannel("walk-in"); setCustomerName(""); setCustomerPhone(""); setAmountPaid(""); setTransactionVerified(false); setCashChangeSource("cash"); await Promise.allSettled([loadProducts(), loadOrders()]);
+      setCart([]); setPurchaseMode("retail"); setOrderReference(""); setOrderChannel("walk-in"); setCustomerName(""); setCustomerPhone(""); setAmountPaid(""); setTransactionVerified(false); setCashChangeSource("cash"); await Promise.allSettled([loadProducts(), loadOrders()]);
     } catch (err) { setError(err.message || "Checkout failed."); }
     finally { checkoutAction.current = false; setBusy(false); }
   }
@@ -571,7 +577,7 @@ function Till() {
     <PosBasketTools pendingAttempt={Boolean(saleAttempt.current?.uncertain)} onCheckAttempt={checkAttempt} baskets={baskets} cart={cart} onHold={holdSale} busy={busy} />
     <div className="pos-shortcuts"><button type="button" className="text-button" onClick={() => setShortcutHelp(v => !v)} aria-expanded={shortcutHelp}>Keyboard shortcuts</button>{shortcutHelp && <span>F2 Search · F3 Barcode · F4 Basket · F8 Payment · F9 New sale. Payment still requires confirmation.</span>}</div>
     {view === "cash" ? <PosShiftCash request={request} shift={shift} /> : view === "sync" ? <PosSyncCentre request={request} role={role} online={online} syncing={syncing} onRetrySales={flushQueue} onRetryOrders={flushOrderQueue} onResolved={() => { setError(""); setOfflineNotice(""); setQueuedCount(JSON.parse(localStorage.getItem("pam-pos-queue") || "[]").length); loadProducts(); loadShift(); }} /> : view === "dashboard" ? <PosDashboard user={user} role={role} onNewSale={() => setView("sale")} onScan={() => { setView("sale"); setTimeout(() => barcodeInput.current?.focus(), 0); }} onOrders={() => setView("orders")} onInventory={() => setView("inventory")} onExpense={() => setView("expenses")} /> : view === "inventory" ? <main className="pos-simple-view"><h1>Inventory</h1><p>Current priced products and stock status.</p><div className="data-table-wrap"><table className="data-table"><thead><tr><th>Product</th><th>SKU</th><th>Stock</th><th>Status</th></tr></thead><tbody>{products.map((product) => <tr key={product.id}><td>{product.name}</td><td>{product.id}</td><td>{product.stock}</td><td><span className={product.stock <= 0 ? "badge danger" : product.stock < Number(product.lowStockLevel ?? 8) ? "badge warning" : "badge success"}>{product.stock <= 0 ? "Out of stock" : product.stock < Number(product.lowStockLevel ?? 8) ? "Low stock" : "In stock"}</span></td></tr>)}</tbody></table></div></main> : view === "expenses" ? <PosExpenses user={user} shift={shift} /> : view === "receipts" ? <PosReceipts user={user} role={role} shift={shift} request={request} deviceId={deviceId} onCorrected={() => { loadProducts(); loadShift(); }} onNewSale={() => setView("sale")} /> : view === "sale" ?
-      <PosTill cashChangeSource={cashChangeSource} setCashChangeSource={setCashChangeSource} shortcut={shortcut} products={products} scanPrompt={scanPrompt} scanFeedback={scanFeedback} dismissScanPrompt={dismissScanPrompt} confirmScanIncrease={confirmScanIncrease} onSelectScannedProduct={chooseScannedProduct} shift={shift} role={role} query={query} setQuery={setQuery} barcode={barcode} setBarcode={setBarcode} barcodeInput={barcodeInput} scanBarcode={scanBarcode} onScannedCode={resolveScannedCode} scanMatches={scanMatches} setScanMatches={setScanMatches} category={category} setCategory={setCategory} categories={categories} stockFilter={stockFilter} setStockFilter={setStockFilter} visible={visible} add={add} cart={cart} setCart={value => { if (basketEditable()) setCart(value); }} cartNotice={cartNotice} setCartNotice={setCartNotice} change={change} setQuantity={setQuantity} pricing={pricing} discountRules={discountRules} orderReference={orderReference} setOrderReference={setOrderReference} orderChannel={orderChannel} setOrderChannel={setOrderChannel} customerName={customerName} setCustomerName={setCustomerName} customerPhone={customerPhone} setCustomerPhone={setCustomerPhone} paymentMethod={paymentMethod} setPaymentMethod={setPaymentMethod} amountPaid={amountPaid} setAmountPaid={setAmountPaid} transactionVerified={transactionVerified} setTransactionVerified={setTransactionVerified} changeDue={changeDue} paymentReady={paymentReady} referenceReady={referenceReady} online={online} busy={busy} setConfirmSale={setConfirmSale} /> : <PosOrders role={role} orders={orders} products={products} visibleOrders={visibleOrders} orderQuery={orderQuery} setOrderQuery={setOrderQuery} orderStatus={orderStatus} setOrderStatus={setOrderStatus} busy={busy} error={error} openOrderAtTill={openOrderAtTill} updateOrder={updateOrder} confirmOrderItem={confirmOrderItem} newOrderNotice={orderNotice} clearNewOrderNotice={() => setOrderNotice("")} />}
+      <PosTill purchaseMode={purchaseMode} onPurchaseMode={(mode) => { if (cart.length || !basketEditable()) { setCartNotice("Finish, clear or hold this basket before changing pricing."); return; } setPurchaseMode(mode); }} wholesaleError={wholesaleError} cashChangeSource={cashChangeSource} setCashChangeSource={setCashChangeSource} shortcut={shortcut} products={purchaseMode === "wholesale" ? products.filter(wholesaleEnabled).map(p=>purchaseProduct(p,purchaseMode,wholesaleMinimumUnits(p),false)) : products.filter(p=>Number(p.price)>0)} scanPrompt={scanPrompt} scanFeedback={scanFeedback} dismissScanPrompt={dismissScanPrompt} confirmScanIncrease={confirmScanIncrease} onSelectScannedProduct={chooseScannedProduct} shift={shift} role={role} query={query} setQuery={setQuery} barcode={barcode} setBarcode={setBarcode} barcodeInput={barcodeInput} scanBarcode={scanBarcode} onScannedCode={resolveScannedCode} scanMatches={scanMatches} setScanMatches={setScanMatches} category={category} setCategory={setCategory} categories={categories} stockFilter={stockFilter} setStockFilter={setStockFilter} visible={visible} add={add} cart={pricing.lines} setCart={value => { if (basketEditable()) setCart(value); }} cartNotice={cartNotice} setCartNotice={setCartNotice} change={change} setQuantity={setQuantity} pricing={pricing} discountRules={discountRules} orderReference={orderReference} setOrderReference={setOrderReference} orderChannel={orderChannel} setOrderChannel={setOrderChannel} customerName={customerName} setCustomerName={setCustomerName} customerPhone={customerPhone} setCustomerPhone={setCustomerPhone} paymentMethod={paymentMethod} setPaymentMethod={setPaymentMethod} amountPaid={amountPaid} setAmountPaid={setAmountPaid} transactionVerified={transactionVerified} setTransactionVerified={setTransactionVerified} changeDue={changeDue} paymentReady={paymentReady} referenceReady={referenceReady} online={online} busy={busy} setConfirmSale={setConfirmSale} /> : <PosOrders role={role} orders={orders} products={products} visibleOrders={visibleOrders} orderQuery={orderQuery} setOrderQuery={setOrderQuery} orderStatus={orderStatus} setOrderStatus={setOrderStatus} busy={busy} error={error} openOrderAtTill={openOrderAtTill} updateOrder={updateOrder} confirmOrderItem={confirmOrderItem} newOrderNotice={orderNotice} clearNewOrderNotice={() => setOrderNotice("")} />}
     {receipt && !receipt.shiftSummary && <ReceiptPanel sale={receipt} onClose={() => setReceipt(null)} onNewSale={() => { setReceipt(null); setView("sale"); }} />}
     {confirmEndShift && <PosShiftCash request={request} shift={shift} closing onClosed={shiftClosed} onCancel={() => setConfirmEndShift(false)} />}
     {confirmSale && <div className="modal-backdrop"><div className="modal" role="dialog" aria-modal="true" aria-label="Confirm sale"><h2>Complete this sale?</h2><p>{cart.reduce((count, item) => count + item.quantity, 0)} items · {money.format(total)} · {paymentMethod.replaceAll("-", " ")}</p><p>{online ? "Check the amount paid and customer details before saving." : "This sale becomes final at this till now, using cached prices and stock. Server sync may require manager reconciliation if they changed elsewhere."}</p><div className="editor-actions"><button className="button secondary" onClick={() => setConfirmSale(false)} disabled={busy}>Review cart</button><button className="button primary" onClick={checkout} disabled={busy}>{busy ? "Saving sale…" : online ? "Confirm Complete Sale" : "Finalize Offline Sale"}</button></div></div></div>}

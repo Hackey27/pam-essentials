@@ -1,5 +1,6 @@
 "use client";
 
+import {wholesaleAvailableUnits,wholesaleSize,wholesaleUnitName,wholesaleStepUnits,wholesaleMinimumUnits,displayQuantity,displayUnitPrice,packDescription} from "@/lib/wholesaleUnits.mjs";
 import { useEffect, useRef, useState } from "react";
 import { ProductImage } from "@/components/ProductOptions";
 import { variantDetail } from "@/lib/variantDisplay.mjs";
@@ -13,7 +14,7 @@ import useAdminModal from "@/components/useAdminModal";
 const money = new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS" });
 const methods = { pickup: "Shop pickup", "delivery-self": "Your own courier", "delivery-shop": "Shop-arranged delivery" };
 
-export default function StoreCheckoutDialog({ products, cart, pricing, order, setOrder, storeLocation, preferences, busy, error, confirmation, signedIn, onClose, onCart, onSubmit, onWhatsApp, onQuantity, undoToast }) {
+export default function StoreCheckoutDialog({ products, cart, pricing, order, setOrder, storeLocation, preferences, busy, error, confirmation, signedIn, onClose, onCart, onSubmit, onWhatsApp, onQuantity, undoToast, purchaseMode = "retail", invalid = false }) {
   const panel = useAdminModal(onClose, busy);
   const form = useRef(null);
   const summary = useRef(null);
@@ -39,10 +40,13 @@ export default function StoreCheckoutDialog({ products, cart, pricing, order, se
   }, []);
   useEffect(() => { if (complete) panel.current?.querySelector(".checkout-complete-title")?.focus({ preventScroll: true }); }, [complete]);
   function whatsapp() { if (form.current?.reportValidity()) onWhatsApp(); }
+  const step = item => purchaseMode === "wholesale" ? wholesaleStepUnits(item) : 1;
+  const size=item=>purchaseMode==="wholesale"?wholesaleSize(item):1;
+  const available=item=>purchaseMode==="wholesale"?wholesaleAvailableUnits(item):item.stock;
   const actions = <div className="checkout-payment-actions">
     <button type="button" className="button secondary full" disabled title="Online payment will be available when a payment provider is configured">Pay now · coming soon</button>
-    <button type="submit" form="store-checkout-form" className="button accent full" disabled={busy || !cart.length}>{busy ? "Creating order…" : "Pay on pickup/delivery"}</button>
-    <button type="button" className="button whatsapp full" disabled={busy || !cart.length} onClick={whatsapp}><WhatsAppIcon size={17} /> Order on WhatsApp</button>
+    <button type="submit" form="store-checkout-form" className="button accent full" disabled={busy || !cart.length || invalid}>{busy ? "Creating order…" : "Pay on pickup/delivery"}</button>
+    <button type="button" className="button whatsapp full" disabled={busy || !cart.length || invalid} onClick={whatsapp}><WhatsAppIcon size={17} /> Order on WhatsApp</button>
     <button type="button" className="checkout-continue" disabled={busy} onClick={onClose}>Continue browsing</button>
   </div>;
   const detailsPane = <div key="details" className="checkout-details-pane">
@@ -65,14 +69,14 @@ export default function StoreCheckoutDialog({ products, cart, pricing, order, se
           </>}
         </div>;
   const orderPane = <aside key="order" ref={summary} className="checkout-order-pane" aria-labelledby="checkout-order-title">
-          <h3 id="checkout-order-title">Your order <span>{lines.reduce((sum, line) => sum + line.quantity, 0)} items</span></h3>
+          <h3 id="checkout-order-title">{purchaseMode === "wholesale" ? "Your wholesale order" : "Your order"} <span>{lines.reduce((sum, line) => sum + line.quantity, 0)} {purchaseMode==="wholesale"?"pieces":"items"}</span></h3>
           <div className="checkout-order-items">{!lines.length && <p className="checkout-empty">Your cart is empty. Go back to your cart or continue browsing.</p>}{lines.map((item, index) => {
             const line = complete ? item : pricing.lines.find(entry => entry.id === item.id);
             const imageProduct = complete ? { ...products.find(product => (product.sku || product.id) === item.sku), ...item } : item;
             return <article className="checkout-order-item" key={item.id || item.sku || index}>
               {!complete && <button type="button" className="checkout-item-remove" aria-label={`Remove ${item.name} from cart`} disabled={busy} onClick={() => onQuantity(item.id, 0)}>×</button>}
               <ProductImage product={imageProduct} width={100} className="cart-product-photo" />
-              <div className="checkout-item-info"><h4>{item.name}</h4>{variantDetail(item) && <p>{variantDetail(item)}</p>}{randomSelectionNote(item, complete ? confirmation.notes : order.notes) && <p className="checkout-random-note">{randomSelectionNote(item, complete ? confirmation.notes : order.notes)}</p>}<p>{money.format(complete ? item.unitPrice : item.price)} each</p>{complete ? <p>Quantity: {item.quantity}</p> : <div className="stepper"><button type="button" disabled={busy} aria-label={`Decrease ${item.name} quantity`} onClick={() => onQuantity(item.id, item.quantity - 1)}>−</button><input type="number" min="1" max={item.stock} disabled={busy} aria-label={`Quantity of ${item.name}`} value={item.quantity} onChange={event => onQuantity(item.id, Math.max(1, Number(event.target.value) || 1))} /><button type="button" disabled={busy || item.quantity >= item.stock} aria-label={`Increase ${item.name} quantity`} onClick={() => onQuantity(item.id, item.quantity + 1)}>+</button></div>}</div>
+              <div className="checkout-item-info"><h4>{item.name}</h4>{variantDetail(item) && <p>{variantDetail(item)}</p>}{randomSelectionNote(item, complete ? confirmation.notes : order.notes) && <p className="checkout-random-note">{randomSelectionNote(item, complete ? confirmation.notes : order.notes)}</p>}<p>{money.format(displayUnitPrice(item))} {size(item)>1?"per "+wholesaleUnitName(item):"each"}</p>{packDescription(item)&&<p className="wholesale-pack-summary">{packDescription(item)}</p>}{complete ? <p>Quantity: {displayQuantity(item)} {size(item)>1?wholesaleUnitName(item,true):""}</p> : <div className="stepper"><button type="button" disabled={busy} aria-label={`Decrease ${item.name} quantity`} onClick={() => onQuantity(item.id, item.quantity - step(item))}>−</button><input type="number" min={purchaseMode === "wholesale" ? item.wholesale?.minQty || 1 : 1} step={step(item)/size(item)} max={Math.floor(available(item)/size(item))} disabled={busy} aria-label={`Quantity of ${item.name}`} value={displayQuantity(item)} onChange={event => onQuantity(item.id, Math.max(1, Number(event.target.value) || 1)*size(item))} /><button type="button" disabled={busy || item.quantity + step(item) > available(item)} aria-label={`Increase ${item.name} quantity`} onClick={() => onQuantity(item.id, item.quantity + step(item))}>+</button></div>}</div>
               <strong className="checkout-item-total">{money.format(line?.lineTotal || 0)}</strong>
             </article>;
           })}</div>
