@@ -471,7 +471,14 @@ export default function Storefront() {
     setAvailability("all"); setOffer("all"); setCollection("");
   }
 
+  function clearCategorySearch() {
+    setQuery("");
+    setSearchOpen(false);
+    closeCompactSearch();
+  }
+
   function selectCategory(name, id = "") {
+    clearCategorySearch();
     setSelectedSubcategories([]);
     setSelectedSubSubcategories([]);
     if (name === "All categories") {
@@ -513,6 +520,7 @@ export default function Storefront() {
   }, [carouselSelection]);
 
   function toggleSubcategory(item) {
+    clearCategorySearch();
     const id = item.subcategoryId || item.id;
     const parent = categoryList.find((entry) => (entry.categoryId || entry.id) === item.categoryId);
     if (parent && category !== parent.name) {
@@ -528,6 +536,7 @@ export default function Storefront() {
   }
 
   function toggleSubSubcategory(item) {
+    clearCategorySearch();
     const id = item.subSubcategoryId || item.id;
     const parent = subcategoryList.find((entry) => (entry.subcategoryId || entry.id) === item.subcategoryId);
     const top = categoryList.find((entry) => (entry.categoryId || entry.id) === item.categoryId);
