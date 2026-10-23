@@ -1,3 +1,8 @@
+import {channelProduct} from "@/lib/channelPricing.mjs";
+import { marketContext } from "@/lib/marketplaceServer";
+import { marketplaceCart,marketplaceChannels,salesChannels } from "@/lib/marketplace.mjs";
+import { availableStock,assertAvailable,releaseHold,putHold,holdTime } from "@/lib/reservations.mjs";
+import { unitSnapshot,stockUnitIssue } from "@/lib/stockUnits.mjs";
 import {wholesaleAvailableUnits,packingIssue} from "@/lib/wholesaleUnits.mjs";
 import { pricePurchaseCart, purchaseType } from "@/lib/wholesale.mjs";
 import { FieldValue } from "firebase-admin/firestore";
@@ -10,7 +15,7 @@ import { offlineReceiptId } from "@/lib/offlineSale.mjs";
 import { managerRoles, capturedPricing, posRoles } from "@/lib/posOperations.mjs";
 import { auditPayload, text } from "@/lib/serverData";
 import { accountingContext, postSource } from "@/lib/accountingServer";
-import { saleJournal, saleTax, productBook, today } from "@/lib/accounting.mjs";
+import { saleJournal, saleTax, splitTax, productBook, today } from "@/lib/accounting.mjs";
 
 export async function GET(request) {
   const access = await requireRole(request, posRoles);
@@ -74,7 +79,7 @@ export async function POST(request) {
       if (!shiftSnap.exists || shiftSnap.data().status !== "open" || (!reconciliation && shiftSnap.data().staffId !== access.user.uid)) throw new Error("This till shift is no longer open.");
 
       const normalizedItems = [...quantities].map(([id, quantity]) => ({ id, quantity }));
-      const salesChannel = ["walk-in", "website", "whatsapp", "phone"].includes(body.salesChannel) ? body.salesChannel : "walk-in";
+      const salesChannel = salesChannels.includes(body.salesChannel) ? body.salesChannel : "walk-in";
       const orderReference = String(body.orderReference || "").trim().slice(0, 100) || null;
       const customerName = String(body.customerName || "").trim().slice(0, 120);
       const customerPhone = String(body.customerPhone || "").trim().slice(0, 40);
@@ -89,6 +94,12 @@ export async function POST(request) {
       const receiptId = offlineFinal ? offlineReceiptId(transactionId) : `PAM-${receiptDay}-${String(receiptNumber).padStart(4, "0")}`;
       if (salesChannel === "website" && orderReference && !linkedOrderSnap.exists) throw new Error("The linked website order no longer exists.");
       const linkedOrder = linkedOrderSnap?.data();
+      const isMarketplace=marketplaceChannels.includes(salesChannel);
+      if(linkedOrder?.marketplace&&!isMarketplace)throw new Error("Keep the linked marketplace sales channel; its approved prices and settlement rules cannot be bypassed.");
+      if(body.salesChannel&&!salesChannels.includes(body.salesChannel))throw new Error("Choose a valid sales channel.");
+      if(isMarketplace&&(offlineFinal||!linkedOrder?.marketplace||linkedOrder.channel!==salesChannel||linkedOrder.status!=="confirmed"||linkedOrder.reservationStatus!=="reserved"||holdTime(linkedOrder.reservationExpiresAt)<=Date.now()))throw new Error("Marketplace sales require an online, confirmed order with a valid reservation. Open Marketplace Orders first.");
+      if(linkedOrder&&["completed","cancelled"].includes(linkedOrder.status))throw new Error("This order is already closed.");
+      const market=await marketContext(tx,store);
       const mode = purchaseType(reconciliation?.receipt?.purchaseType ?? linkedOrder?.purchaseType ?? body.purchaseType);
       if (mode === "wholesale" && requested.some(item=>!Number.isInteger(Number(item.quantity)))) throw new Error("Wholesale quantities must be whole individual units.");
       for (let index = 0; index < normalizedItems.length; index += 1) {
@@ -97,10 +108,18 @@ export async function POST(request) {
         if (!snap.exists) throw new Error("A selected product no longer exists.");
         if (!(mode === "wholesale" ? availableForWholesale(snap.data(),context) : availableForSale(snap.data(), context))) throw new Error(`${snap.data().name} is not available for sale.`);
         if(mode==="wholesale"&&!reconciliation){const issue=packingIssue(snap.data(),requested.find(item=>String(item.id||"").trim()===normalizedItems[index].id));if(issue)throw new Error(issue);}
-        if(mode==="wholesale"&&quantity>wholesaleAvailableUnits(snap.data()))throw new Error("Wholesale quantity unavailable. Retail stock is protected.");
+        if(mode==="wholesale"&&quantity>wholesaleAvailableUnits({...snap.data(),stock:availableStock(snap.data(),Date.now(),orderReference||""),stockHolds:{}}))throw new Error("Wholesale quantity unavailable. Retail stock is protected.");
+        const unitIssue=stockUnitIssue(snap.data(),isMarketplace?linkedOrder.items.find(i=>i.productId===normalizedItems[index].id):requested.find(i=>i.id===normalizedItems[index].id));if(unitIssue)throw new Error(unitIssue);
+        assertAvailable(snap.data(),quantity,orderReference||"");
+        if(isMarketplace){const oi=linkedOrder.items.findIndex(i=>i.productId===normalizedItems[index].id);if(oi>=0&&mode==="wholesale"){const packIssue=packingIssue(snap.data(),{expectedPackSize:linkedOrder.items[oi].wholesaleSnapshot?.unitsPerPack,expectedSellingUnit:linkedOrder.items[oi].wholesaleSnapshot?.sellingUnit});if(packIssue)throw new Error(packIssue);}
+        if(oi<0||quantity>linkedOrder.items[oi].quantity-Number(linkedOrder.fulfilledQuantities?.[oi]||0)-Number(linkedOrder.cancelledQuantities?.[oi]||0))throw new Error("Quantity exceeds the remaining marketplace order.");const hold=snap.data().stockHolds?.[orderReference];if(!hold||holdTime(hold.expiresAt)<=Date.now()||hold.quantity<quantity)throw new Error("Reservation expired or changed. Confirm the order again.");}
         if (Number(snap.data().stock) < quantity) throw new Error(`Only ${snap.data().stock} × ${snap.data().name} remain.`);
       }
-      const currentPricing = pricePurchaseCart(productSnaps.map((snap,index)=>({...snap.data(),id:normalizedItems[index].id,quantity:normalizedItems[index].quantity})),context.rules,context.deals,mode,!reconciliation);
+      const currentProducts=productSnaps.map((snap,index)=>({...(isMarketplace?snap.data():channelProduct(snap.data(),market.settings,["website","walk-in"].includes(salesChannel)?salesChannel:"walk-in")),stock:availableStock(snap.data(),Date.now(),orderReference||""),stockHolds:{},id:normalizedItems[index].id,quantity:normalizedItems[index].quantity}));
+      let currentPricing = isMarketplace?null:pricePurchaseCart(currentProducts,context.rules,context.deals,mode,!reconciliation);
+      if(isMarketplace){currentPricing=marketplaceCart(currentProducts,market.listings,market.settings,salesChannel,mode,body.negotiatedPrices||{},access.user.role);for(const line of currentPricing.lines){const ordered=linkedOrder.items.find(i=>i.productId===line.id);if(ordered.marketplaceSnapshot?.negotiationReason){if(ordered.marketplaceSnapshot.listingVersion!==line.marketplaceSnapshot.listingVersion)throw new Error("Listing approval changed after negotiation. Review the marketplace order.");line.price=ordered.unitPrice;line.marketplaceSnapshot=ordered.marketplaceSnapshot;line.lineTotal=Math.round(ordered.marketplaceSnapshot.sellingUnitPrice*100*line.quantity/ordered.marketplaceSnapshot.sellingSize)/100;line.subtotalCents=Math.round(line.lineTotal*100);if(line.wholesaleSnapshot)line.wholesaleSnapshot={...line.wholesaleSnapshot,unitPrice:line.price,sellingUnitPrice:ordered.marketplaceSnapshot.sellingUnitPrice};}else if(Math.abs(ordered.unitPrice-line.price)>.0000001)throw new Error("The agreed marketplace order price differs from current approval. Review the order before fulfilment.");}}
+      if(isMarketplace){currentPricing.total=Math.round(currentPricing.lines.reduce((n,l)=>n+l.lineTotal,0)*100)/100;currentPricing.subtotal=currentPricing.total;}
+      if(isMarketplace&&(!Number.isFinite(Number(body.expectedTotal))||Math.abs(Number(body.expectedTotal)-currentPricing.total)>.005))throw new Error("Marketplace total changed. Reload the linked order.");
       if (mode === "wholesale" && !offlineFinal && (!Number.isFinite(Number(body.expectedTotal)) || Math.abs(Number(body.expectedTotal)-currentPricing.total)>.005)) throw new Error("Wholesale prices changed. Refresh the basket and confirm the new total.");
       const pricing = reconciliation ? capturedPricing(reconciliation.receipt, normalizedItems) : currentPricing;
       if (offlineFinal && Math.abs(pricing.total - Number(body.offlineTotal)) > 0.005) throw new Error("Offline total differs from current pricing. Keep the local receipt and ask a manager to reconcile this sale.");
@@ -134,6 +153,9 @@ export async function POST(request) {
           size: product.size || "",
           variantOptions: product.variantOptions || {},
           name: product.name,
+          ...unitSnapshot(product),
+          ...(priced.marketplaceSnapshot?{marketplaceSnapshot:{...priced.marketplaceSnapshot,standardNetLineTotal:splitTax(Math.round(priced.marketplaceSnapshot.standardSellingPrice*quantity/priced.marketplaceSnapshot.sellingSize*100)/100,accounting.settings.tax,today(),product.taxExempt===true,"inclusive").net/100}}:{}),
+          taxAmount:Number(taxSnapshot.productLines?.[index]?.tax||0),
           quantity,
           unitPrice: reconciliation ? priced.unitPrice : Number(priced.price),
           purchaseType: mode,
@@ -147,7 +169,7 @@ export async function POST(request) {
           discountRuleSnapshot: priced.rule ? { ruleId: priced.rule.ruleId, name: priced.rule.name, discountType: priced.rule.discountType, value: priced.rule.value, minQty: priced.rule.minQty, amount: priced.ruleDiscountCents / 100 } : null,
           dealBundleSnapshot: priced.dealIds.length ? { dealIds: priced.dealIds, amount: priced.dealDiscountCents / 100 } : null,
         });
-        tx.update(productRef, { ...(accounting.settings.active && Number.isInteger(inventoryBook.quantity) ? { accountingStockQuantity: inventoryBook.quantity - quantity, accountingStockValueCents: Number.isSafeInteger(inventoryBook.value) ? inventoryBook.value - Math.round(lineCost * 100) : null } : {}), stock: Number(product.stock) - quantity, ...(salesChannel === "walk-in" ? { purchaseCount: FieldValue.increment(quantity) } : {}), updatedAt: FieldValue.serverTimestamp() });
+        tx.update(productRef, { ...(accounting.settings.active && Number.isInteger(inventoryBook.quantity) ? { accountingStockQuantity: inventoryBook.quantity - quantity, accountingStockValueCents: Number.isSafeInteger(inventoryBook.value) ? inventoryBook.value - Math.round(lineCost * 100) : null } : {}), stock: Number(product.stock) - quantity, ...(orderReference?{stockHolds:putHold({...product,stock:Number(product.stock)-quantity,stockHolds:releaseHold(product,orderReference)},orderReference,Math.max(0,Number(product.stockHolds?.[orderReference]?.quantity||0)-quantity),product.stockHolds?.[orderReference]?.expiresAt||new Date().toISOString())}:{}), ...(salesChannel === "walk-in" ? { purchaseCount: FieldValue.increment(quantity) } : {}), updatedAt: FieldValue.serverTimestamp() });
         tx.create(store.collection("stock_movements").doc(), {
           type: "sale",
           productId: product.id,
@@ -165,11 +187,12 @@ export async function POST(request) {
       }
 
       const total = pricing.total;
-      const paymentMethod = ["cash", "mobile-money", "card", "bank-transfer"].includes(body.paymentMethod) ? body.paymentMethod : "cash";
-      if (paymentMethod !== "cash" && body.transactionVerified !== true) throw new Error("Confirm the payment provider notification before completing this sale.");
-      const tendered = Number(body.amountPaid);
-      if (!Number.isFinite(tendered) || tendered < total) throw new Error("Amount paid cannot be less than the sale total.");
-      const change = Math.round((tendered - total) * 100) / 100;
+      const pendingSettlement=isMarketplace&&salesChannel==="jumia";
+      const paymentMethod = pendingSettlement?"marketplace-settlement":["cash", "mobile-money", "card", "bank-transfer"].includes(body.paymentMethod) ? body.paymentMethod : "cash";
+      if (!pendingSettlement && paymentMethod !== "cash" && body.transactionVerified !== true) throw new Error("Confirm the payment provider notification before completing this sale.");
+      const tendered = pendingSettlement?0:Number(body.amountPaid);
+      if (!pendingSettlement && (!Number.isFinite(tendered) || tendered < total)) throw new Error("Amount paid cannot be less than the sale total.");
+      const change = pendingSettlement?0:Math.round((tendered - total) * 100) / 100;
       const cashChangeSource = body.cashChangeSource || "cash";
       if (!["cash","payment-method"].includes(cashChangeSource)) throw new Error("Choose how change was returned.");
       const cashChangePaid = paymentMethod !== "cash" && cashChangeSource === "cash" ? change : 0;
@@ -184,6 +207,8 @@ export async function POST(request) {
         cost,
         profit: Math.round((total - Number(taxSnapshot.tax || 0) - cost) * 100) / 100,
         paymentMethod,
+        paymentStatus:pendingSettlement?"pending-settlement":"paid",
+        ...(isMarketplace?{marketplace:true,campaignId:linkedOrder.campaignId||"",externalReference:linkedOrder.externalReference,sellerAccount:linkedOrder.sellerAccount,settledAmount:0,settlementFees:0,actualFeesKnown:false}:{}),
         amountPaid: tendered,
         change,
         cashChangeSource,
@@ -204,6 +229,7 @@ export async function POST(request) {
         ...(reconciliation ? { reconciliation: { reason: text(reconciliation.reason, 500), managerId: access.user.uid, managerName: access.user.displayName, currentTotal: currentPricing.total, capturedTotal: pricing.total, reconciledAt: FieldValue.serverTimestamp() } } : {}),
         createdAt: FieldValue.serverTimestamp(),
       };
+      if(linkedOrder){const fulfilled=(linkedOrder.fulfilledQuantities||linkedOrder.items.map(()=>0)).map((q,i)=>Number(q)+Number(quantities.get(linkedOrder.items[i].productId)||0));if(fulfilled.some((q,i)=>q+Number(linkedOrder.cancelledQuantities?.[i]||0)>linkedOrder.items[i].quantity))throw new Error("Order quantity already fulfilled.");const complete=fulfilled.every((q,i)=>q+Number(linkedOrder.cancelledQuantities?.[i]||0)===linkedOrder.items[i].quantity);tx.update(linkedOrderSnap.ref,{fulfilledQuantities:fulfilled,...(isMarketplace?{status:complete?"completed":"confirmed",reservationStatus:complete?"fulfilled":"reserved",paymentStatus:pendingSettlement?"pending-settlement":"paid"}:{}),saleIds:FieldValue.arrayUnion(transactionId),updatedAt:FieldValue.serverTimestamp()});}
       tx.create(saleRef, saleData);
       postSource(tx, accounting, saleJournal({ ...saleData, id: transactionId }, today()), access.user);
       if (reconciliation) tx.create(store.collection("admin_audit").doc(), auditPayload(access.user, "RECONCILE_OFFLINE_SALE", "sale", transactionId, text(reconciliation.reason, 500), { currentTotal: currentPricing.total }, { capturedTotal: pricing.total, receiptId, shiftId }));

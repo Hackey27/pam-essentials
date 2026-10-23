@@ -7,6 +7,8 @@ import { signOut, useAuth } from "@/components/AuthProvider";
 import PosDashboard from "@/components/PosDashboard";
 import {wholesaleAvailableUnits,wholesaleSize,wholesaleUnitName,wholesaleMinimumUnits,wholesaleStepUnits,packDescription} from "@/lib/wholesaleUnits.mjs";
 import { wholesaleEnabled, wholesaleSettings, wholesaleQuantityIssue, purchaseProduct, pricePurchaseCart } from "@/lib/wholesale.mjs";
+import {posChannelCart} from "@/lib/channelCart.mjs";
+import {retailEnabled,stockUnitIssue} from "@/lib/stockUnits.mjs";
 import PosTill from "@/components/PosTill";
 import PosReceipts from "@/components/PosReceipts";
 import PosExpenses from "@/components/PosExpenses";
@@ -304,7 +306,8 @@ function Till() {
     return () => clearInterval(timer);
   }, [user, shift?.shiftId, locked]);
 
-  const pricing = pricePurchaseCart(cart, discountRules, dealBundles, purchaseMode, false);
+  const isMarketplace=["jiji","jumia"].includes(orderChannel);
+  const pricing = posChannelCart(cart, discountRules, dealBundles, purchaseMode,orderChannel);
   const wholesaleError = purchaseMode === "wholesale" ? cart.map(p => wholesaleQuantityIssue(p,p.quantity)).find(Boolean) || "" : "";
   const { subtotal, discount, total } = pricing;
 
@@ -313,13 +316,13 @@ function Till() {
     let cancelled = false;
     const check = async () => {
       try {
-        const response = await request("/api/pos/products");
+        const response = await request(`/api/pos/products?orderReference=${encodeURIComponent(orderReference)}&channel=${encodeURIComponent(orderChannel)}`);
         const fresh = await response.json();
         if (!response.ok) throw new Error(fresh.error || "Stock check failed.");
         if (cancelled) return;
         const byId = new Map((fresh.products || []).map((product) => [product.id, product]));
-        const changed = cart.some((item) => !byId.has(item.id) || (purchaseMode==="wholesale"&&(wholesaleSize(byId.get(item.id))!==wholesaleSize(item)||wholesaleUnitName(byId.get(item.id))!==wholesaleUnitName(item))) || byId.get(item.id).stock < item.quantity || purchaseProduct(byId.get(item.id),purchaseMode,item.quantity,false).price !== purchaseProduct(item,purchaseMode,item.quantity,false).price || (purchaseMode === "wholesale" && Boolean(wholesaleQuantityIssue(byId.get(item.id),item.quantity))));
-        const nextPrice = changed ? null : pricePurchaseCart(cart.map((item) => ({ ...byId.get(item.id), quantity: item.quantity })), fresh.discountRules || [], fresh.dealBundles || [], purchaseMode, false);
+        const changed = cart.some((item) => !byId.has(item.id) || (purchaseMode==="wholesale"&&(wholesaleSize(byId.get(item.id))!==wholesaleSize(item)||wholesaleUnitName(byId.get(item.id))!==wholesaleUnitName(item))) || byId.get(item.id).stock < item.quantity || (!isMarketplace&&purchaseProduct(byId.get(item.id),purchaseMode,item.quantity,false).price !== purchaseProduct(item,purchaseMode,item.quantity,false).price)||Boolean(stockUnitIssue(byId.get(item.id),item)) || (purchaseMode === "wholesale" && Boolean(wholesaleQuantityIssue(byId.get(item.id),item.quantity))));
+        const nextPrice = changed ? null : posChannelCart(cart.map((item) => ({ ...byId.get(item.id),quantity:item.quantity,marketplaceSnapshot:item.marketplaceSnapshot,marketplaceOrderUnitPrice:item.marketplaceOrderUnitPrice })), fresh.discountRules || [], fresh.dealBundles || [], purchaseMode,orderChannel);
         setCartNotice((current) => changed || nextPrice.total !== total ? "Stock, price or promotion changed. Review the cart before checkout." : current.startsWith("Stock, price") ? current : "");
       } catch (err) { if (!cancelled) setCartNotice(`Live stock check failed: ${err.message}`); }
     };
@@ -339,20 +342,21 @@ function Till() {
     const matchesQuery = `${product.name} ${product.id} ${product.sku || ""} ${Object.values(product.variantOptions || {}).join(" ")} ${(product.barcodeEntries || []).filter((entry) => !entry.archived).map((entry) => entry.code).join(" ")} ${product.barcode || ""}`.toLowerCase().includes(query.trim().toLowerCase());
     const threshold = Number(product.lowStockLevel ?? 8);
     const matchesStock = stockFilter === "all" || (stockFilter === "high" && (product.pinned || product.purchaseCount >= 3)) || (stockFilter === "low" && product.stock > 0 && product.stock < threshold) || (stockFilter === "out" && product.stock <= 0);
-    return matchesCategory && matchesQuery && matchesStock && (purchaseMode === "wholesale" ? wholesaleEnabled(product) : Number(product.price)>0);
+    return matchesCategory && matchesQuery && matchesStock && (purchaseMode === "wholesale" ? wholesaleEnabled(product) : retailEnabled(product)&&Number(product.price)>0);
   }).map(p=>purchaseMode === "wholesale" ? purchaseProduct(p,purchaseMode,wholesaleMinimumUnits(p),false) : p), [products, query, category, stockFilter, purchaseMode]);
   const visibleOrders = useMemo(() => orders.filter((order) => {
     const matches = `${order.customer} ${order.phone} ${order.orderId} ${order.createdAt}`.toLowerCase().includes(orderQuery.toLowerCase());
     const state = orderStatus === "all" || order.status === orderStatus || (orderStatus === "pending-payment" && order.paymentStatus !== "paid");
     return matches && state;
   }), [orders, orderQuery, orderStatus]);
-  const openOrderCount = orders.filter((order) => !["completed", "cancelled"].includes(order.status) && ["website", "whatsapp"].includes(order.channel || "website")).length;
+  const openOrderCount = orders.filter((order) => !["completed", "cancelled"].includes(order.status)).length;
   const tendered = amountPaid.trim() === "" ? NaN : Number(amountPaid);
   const changeDue = Number.isFinite(tendered) ? Math.max(0, tendered - total) : 0;
   const referenceReady = !["website", "whatsapp"].includes(orderChannel) || Boolean(orderReference.trim() || (customerName.trim() && customerPhone.trim()));
-  const paymentReady = Number.isFinite(tendered) && tendered >= total && (paymentMethod === "cash" || transactionVerified) && !wholesaleError;
+  const paymentReady = (orderChannel==="jumia"?Boolean(orderReference)&&online:Number.isFinite(tendered) && tendered >= total && (paymentMethod === "cash" || transactionVerified)) && !wholesaleError;
 
   function add(product) {
+    if(isMarketplace){setCartNotice("Marketplace baskets must be opened from a confirmed order in Orders.");return false;}
     if (!basketEditable() || product.stock <= 0 || (purchaseMode === "retail" && Number(product.price) <= 0)) return false;
     const config=wholesaleSettings(product),found=cart.find(i=>i.id===product.id),amount=purchaseMode==="wholesale"?(found?wholesaleStepUnits(product):wholesaleMinimumUnits(product)):1;
     const quantity=(found?.quantity||0)+amount;
@@ -374,7 +378,7 @@ function Till() {
   function chooseScannedProduct(product) { showScanPlan(planScannedProduct(product, cart)); }
   function resolveScannedCode(value) {
     if (scanPendingRef.current || scanMatches.length) return;
-    showScanPlan(planPosScan(purchaseMode === "wholesale" ? products.filter(wholesaleEnabled) : products.filter(p=>Number(p.price)>0), cart, value));
+    showScanPlan(planPosScan(purchaseMode === "wholesale" ? products.filter(wholesaleEnabled) : products.filter(p=>retailEnabled(p)&&Number(p.price)>0), cart, value));
   }
   function dismissScanPrompt() { scanPendingRef.current = null; setScanPrompt(null); barcodeInput.current?.focus(); }
   function confirmScanIncrease() {
@@ -414,7 +418,7 @@ function Till() {
     const transactionId = crypto.randomUUID();
     const capturedTax = saleTax(pricing, cart, taxPolicy, new Date().toISOString().slice(0,10));
     const localReceipt = offlineSaleReceipt({ purchaseType: purchaseMode, taxSnapshot: capturedTax, transactionId, cart, pricing, shift, staffEmail: user?.email || "", staffName: shift?.staffName || user?.displayName || "", paymentMethod, cashChangeSource, amountPaid: tendered, salesChannel: orderChannel, orderReference, customerName, customerPhone });
-    const payload = { purchaseType: purchaseMode, transactionId, offlineFinal: true, offlineTotal: total, offlineTaxSnapshot: capturedTax, paymentMethod, cashChangeSource, transactionVerified, salesChannel: orderChannel, orderReference: orderReference || null, customerName, customerPhone, amountPaid: tendered, shiftId: shift.shiftId, deviceId, items: cart.map(p => ({ id:p.id, quantity:p.quantity, ...(purchaseMode==="wholesale"?{expectedPackSize:wholesaleSize(p),expectedSellingUnit:wholesaleUnitName(p)}:{}) })) };
+    const payload = { purchaseType: purchaseMode, transactionId, offlineFinal: true, offlineTotal: total, offlineTaxSnapshot: capturedTax, paymentMethod, cashChangeSource, transactionVerified, salesChannel: orderChannel, orderReference: orderReference || null, customerName, customerPhone, amountPaid: tendered, shiftId: shift.shiftId, deviceId, items: cart.map(p => ({ id:p.id, quantity:p.quantity, retailUnit:p.retailUnit, ...(purchaseMode==="wholesale"?{expectedPackSize:wholesaleSize(p),expectedSellingUnit:wholesaleUnitName(p)}:{}) })) };
     const queued = JSON.parse(localStorage.getItem("pam-pos-queue") || "[]");
     const next = [...queued, { payload, receipt: localReceipt, createdAt: localReceipt.createdAt, staffId: user.uid }];
     localStorage.setItem("pam-pos-queue", JSON.stringify(next));
@@ -437,14 +441,17 @@ function Till() {
     setOfflineNotice(`Sale finalized on this till and queued for server sync. Keep this device and its browser data until synchronization succeeds.${catalogueCacheWarning ? " The cached catalogue could not be refreshed." : ""}`);
   }
 
-  function openOrderAtTill(order) {
+  async function openOrderAtTill(order) {
     if (!basketEditable() || cart.length) { setError("Hold the current basket before opening an order at the till."); return; }
+    if(order.marketplace&&(order.status!=="confirmed"||!online)){setError("Ask Owner/Admin to confirm and reserve this marketplace order online first.");return;}
+    let orderProducts=products;try{const response=await request(`/api/pos/products?orderReference=${encodeURIComponent(order.orderId)}&channel=${encodeURIComponent(order.channel||"website")}`);const data=await response.json();if(!response.ok)throw new Error(data.error);orderProducts=data.products;setProducts(orderProducts);}catch(e){setError(e.message);return;}
     const nextCart = [];
-    for (const line of order.items || []) {
-      const product = products.find((item) => item.id === line.productId);
+    for (const [lineIndex,line] of (order.items || []).entries()) {
+      const product = orderProducts.find((item) => item.id === line.productId);
       if (!product) { setError(`${line.name} is not available in the current till catalogue.`); return; }
-      if (Number(product.stock) < Number(line.quantity)) { setError(`Only ${product.stock} × ${product.name} remain. Resolve stock before taking payment.`); return; }
-      nextCart.push({ ...product, quantity: Number(line.quantity) });
+      const remaining=Number(line.quantity)-Number(order.fulfilledQuantities?.[lineIndex]||0)-Number(order.cancelledQuantities?.[lineIndex]||0);if(remaining<=0)continue;
+      if (Number(product.stock) < remaining) { setError(`Only ${product.stock} × ${product.name} remain. Resolve stock before taking payment.`); return; }
+      nextCart.push({ ...product, quantity: remaining,...(order.marketplace?{marketplaceSnapshot:line.marketplaceSnapshot,marketplaceOrderUnitPrice:line.unitPrice}:{}) });
     }
     setPurchaseMode(order.purchaseType || "retail");
     setCart(nextCart);
@@ -466,6 +473,7 @@ function Till() {
     if (!referenceReady) { setError("Add an order reference or the customer name and phone for this sales channel."); return; }
     if (!paymentReady) { setError("Enter the amount paid and verify electronic payment before completing the sale."); return; }
     if (!online && saleAttempt.current) { setError("Reconnect to confirm the previous sale attempt before recording another payment."); return; }
+    if (!online&&isMarketplace){setError("Marketplace orders require an online reservation check.");return;}
     if (!online) { try { finalizeOfflineSale(); } catch (err) { setError(err.message || "Offline sale could not be stored."); } return; }
     checkoutAction.current = true;
     setBusy(true); setError("");
@@ -478,12 +486,12 @@ function Till() {
       }
       const fingerprint = JSON.stringify({ purchaseMode, cart: cart.map(({ id, quantity }) => [id, quantity]), paymentMethod, cashChangeSource, tendered, orderChannel, orderReference, customerName, customerPhone });
       if (saleAttempt.current?.fingerprint !== fingerprint) {
-      const freshResponse = await request("/api/pos/products");
+      const freshResponse = await request(`/api/pos/products?orderReference=${encodeURIComponent(orderReference)}`);
       const fresh = await freshResponse.json();
       if (!freshResponse.ok) throw new Error(fresh.error || "Current stock and prices could not be checked.");
       const freshMap = new Map((fresh.products || []).map((product) => [product.id, product]));
-      const changed = cart.find((item) => { const latest = freshMap.get(item.id); return !latest || (purchaseMode==="wholesale"&&(wholesaleSize(latest)!==wholesaleSize(item)||wholesaleUnitName(latest)!==wholesaleUnitName(item))) || latest.stock < item.quantity || purchaseProduct(latest,purchaseMode,item.quantity,false).price !== purchaseProduct(item,purchaseMode,item.quantity,false).price || (purchaseMode === "wholesale" && Boolean(wholesaleQuantityIssue(latest,item.quantity))); });
-      const freshPricing = changed ? null : pricePurchaseCart(cart.map((item) => ({ ...freshMap.get(item.id), quantity: item.quantity })), fresh.discountRules || [], fresh.dealBundles || [], purchaseMode, false);
+      const changed = cart.find((item) => { const latest = freshMap.get(item.id); return !latest || (purchaseMode==="wholesale"&&(wholesaleSize(latest)!==wholesaleSize(item)||wholesaleUnitName(latest)!==wholesaleUnitName(item))) || latest.stock < item.quantity || (!isMarketplace&&purchaseProduct(latest,purchaseMode,item.quantity,false).price !== purchaseProduct(item,purchaseMode,item.quantity,false).price)||Boolean(stockUnitIssue(latest,item)) || (purchaseMode === "wholesale" && Boolean(wholesaleQuantityIssue(latest,item.quantity))); });
+      const freshPricing = changed ? null : posChannelCart(cart.map((item) => ({ ...freshMap.get(item.id),quantity:item.quantity,marketplaceSnapshot:item.marketplaceSnapshot,marketplaceOrderUnitPrice:item.marketplaceOrderUnitPrice })), fresh.discountRules || [], fresh.dealBundles || [], purchaseMode,orderChannel);
       setProducts(fresh.products || []); setDiscountRules(fresh.discountRules || []); setTaxPolicy(fresh.taxPolicy || { enabled: false }); setDealBundles(fresh.dealBundles || []);
       if (changed || freshPricing.total !== total) {
         setCart(cart.map((item) => freshMap.has(item.id) ? { ...freshMap.get(item.id), quantity: Math.min(item.quantity, freshMap.get(item.id).stock) } : { ...item, stock: 0 }).filter((item) => item.quantity > 0 && item.stock > 0));
@@ -496,7 +504,7 @@ function Till() {
       const linkedOrder = orders.find((item) => item.orderId === orderReference);
       if (saleAttempt.current?.fingerprint !== fingerprint) saleAttempt.current = { fingerprint, transactionId: saleAttempt.current?.transactionId || crypto.randomUUID() };
       baskets.captureAttempt();
-      const payload = { purchaseType: purchaseMode, expectedTotal: total, transactionId: saleAttempt.current.transactionId, paymentMethod, cashChangeSource, transactionVerified, salesChannel: orderChannel, orderReference: orderReference || null, customerName, customerPhone, amountPaid: tendered, shiftId: shift.shiftId, deviceId, items: cart.map(({ id, quantity }) => ({ id, quantity })) };
+      const payload = { purchaseType: purchaseMode, expectedTotal: total, transactionId: saleAttempt.current.transactionId, paymentMethod, cashChangeSource, transactionVerified, salesChannel: orderChannel, orderReference: orderReference || null, customerName, customerPhone, amountPaid: tendered, shiftId: shift.shiftId, deviceId, items: cart.map(p => ({ id:p.id,quantity:p.quantity,retailUnit:p.retailUnit,...(purchaseMode==="wholesale"?{expectedPackSize:wholesaleSize(p),expectedSellingUnit:wholesaleUnitName(p)}:{}) })) };
       saleAttempt.current.uncertain = true;
       const response = await request("/api/pos/sales", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
       const data = await response.json();
@@ -505,7 +513,7 @@ function Till() {
       setReceipt(data);
       saleAttempt.current = null;
       setConfirmSale(false);
-      if (linkedOrder) {
+      if (linkedOrder && !linkedOrder.marketplace) {
         try {
           const orderResponse = await request("/api/admin/orders", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ orderId: orderReference, status: "paid" }) });
           const orderResult = await orderResponse.json();

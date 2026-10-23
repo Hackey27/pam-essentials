@@ -1,3 +1,6 @@
+import {channelProduct} from "@/lib/channelPricing.mjs";
+import {availableStock} from "@/lib/reservations.mjs";
+import {unitSnapshot,stockUnitIssue} from "@/lib/stockUnits.mjs";
 import {packingIssue} from "@/lib/wholesaleUnits.mjs";
 import { pricePurchaseCart, purchaseType } from "@/lib/wholesale.mjs";
 import { FieldValue } from "firebase-admin/firestore";
@@ -70,10 +73,11 @@ export async function POST(request) {
     const quantity = normalizedItems[index].quantity;
     if (!snap.exists || !(mode === "wholesale" ? availableForWholesale(snap.data(),context) : availableForSale(snap.data(), context))) return NextResponse.json({ error: "A selected product is no longer available." }, { status: 409 });
     if(mode==="wholesale"){const issue=packingIssue(snap.data(),requested.find(item=>String(item.id||"").trim()===normalizedItems[index].id));if(issue)return NextResponse.json({error:issue},{status:409});}
-    if (Number(snap.data().stock) < quantity) return NextResponse.json({ error: `Only ${snap.data().stock} × ${snap.data().name} remain.` }, { status: 409 });
+    const unitIssue=stockUnitIssue(snap.data(),requested.find(i=>i.id===normalizedItems[index].id));if(unitIssue)return NextResponse.json({error:unitIssue},{status:409});
+    if (availableStock(snap.data()) < quantity) return NextResponse.json({ error: `Only ${snap.data().stock} × ${snap.data().name} remain.` }, { status: 409 });
   }
   let pricing;
-  try { pricing = pricePurchaseCart(productSnaps.map((snap,index)=>({...snap.data(),id:normalizedItems[index].id,quantity:normalizedItems[index].quantity})),context.rules,context.deals,mode); }
+  try { pricing = pricePurchaseCart(productSnaps.map((snap,index)=>({...channelProduct(snap.data(),context.channelSettings,"website"),id:normalizedItems[index].id,quantity:normalizedItems[index].quantity})),context.rules,context.deals,mode); }
   catch(error) { return NextResponse.json({error:error.message},{status:409}); }
   if(mode==="wholesale" && (!Number.isFinite(Number(body.expectedTotal)) || Math.abs(Number(body.expectedTotal)-pricing.total)>.005)) return NextResponse.json({error:"Wholesale prices changed. Refresh your basket and review the total before ordering."},{status:409});
   for (let index = 0; index < normalizedItems.length; index += 1) {
@@ -90,6 +94,7 @@ export async function POST(request) {
       colour: product.colour || "",
       size: product.size || "",
       variantOptions: product.variantOptions || {},
+      ...unitSnapshot(product),
       name: product.name,
       quantity,
       unitPrice: Number(priced.price),
@@ -126,6 +131,6 @@ export async function POST(request) {
     createdAt: FieldValue.serverTimestamp(),
   };
   await store.collection("orders").doc(orderId).create(orderSnapshot);
-  return NextResponse.json({ orderId, purchaseType: mode, subtotal: orderSnapshot.subtotal, discount: orderSnapshot.discount, total, items: items.map(({ name, sku, colour, size, variantOptions, quantity, unitPrice, lineTotal, purchaseType, wholesaleSnapshot }) => ({ name, sku, colour, size, variantOptions, quantity, unitPrice, lineTotal, ...(purchaseType==="wholesale"?{purchaseType,wholesaleSnapshot}:{}) })), deliveryMethod, originAddress: CURRENT_SHOP_ADDRESS, deliveryAddress: orderSnapshot.deliveryAddress, notes, fulfilmentDetails });
+  return NextResponse.json({ orderId, purchaseType: mode, subtotal: orderSnapshot.subtotal, discount: orderSnapshot.discount, total, items: items.map(({ name, sku, colour, size, variantOptions, quantity, unitPrice, lineTotal, purchaseType, wholesaleSnapshot,retailUnit }) => ({ name, sku, colour, size, variantOptions, quantity, unitPrice, lineTotal,retailUnit, ...(purchaseType==="wholesale"?{purchaseType,wholesaleSnapshot}:{}) })), deliveryMethod, originAddress: CURRENT_SHOP_ADDRESS, deliveryAddress: orderSnapshot.deliveryAddress, notes, fulfilmentDetails });
 }
 

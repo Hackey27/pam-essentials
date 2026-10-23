@@ -1,3 +1,4 @@
+import {assertAvailable} from "@/lib/reservations.mjs";
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { NextResponse } from 'next/server';
 import { adminDb, requireRole } from '@/lib/admin';
@@ -39,6 +40,7 @@ export async function POST(request){
    if(b.mode==='preview')return {previewHash,record,asset,journal:settings.active?journal:null};
    if(!b.previewHash||b.previewHash!==previewHash)throw new Error('Stock, cost or settings changed. Preview again; nothing was saved.');
    const now=FieldValue.serverTimestamp(),movementId='USE-'+ref.id;
+   if(direction<0)assertAvailable(product,record.quantity);
    tx.update(productRef,{stock:newStock,updatedAt:now,...(settings.active?{accountingStockQuantity:newStock,accountingStockValueCents:nextBookValue,...(nextCost!==product.costPrice?{costPrice:nextCost}:{})}:{})});
    if(nextCost!==product.costPrice)tx.create(store.collection('admin_audit').doc(),auditPayload(access.user,'UPDATE_PRODUCT','product',productId,'Business-use stock movement recalculated weighted-average cost. '+notes,{id:productId,sku:product.sku||productId,name:product.name,price:product.price??null,costPrice:product.costPrice},{id:productId,sku:product.sku||productId,name:product.name,price:product.price??null,costPrice:nextCost}));
    tx.create(ref,{...record,createdAt:now});

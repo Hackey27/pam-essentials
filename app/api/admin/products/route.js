@@ -1,3 +1,5 @@
+import { validateStockUnit,stockUnit } from "@/lib/stockUnits.mjs";
+import { heldQuantity } from "@/lib/reservations.mjs";
 import { parseInventoryCategory, businessUsePolicy } from '@/lib/businessUse.mjs';
 import { validateWholesale } from "@/lib/wholesale.mjs";
 import { FieldValue } from "firebase-admin/firestore";
@@ -88,6 +90,7 @@ export async function POST(request) {
   const costPrice = nullableNumber(body.costPrice);
   if ((price != null && price < 0) || (costPrice != null && costPrice < 0)) return NextResponse.json({ error: "Prices cannot be negative." }, { status: 400 });
   let inventoryFields={};
+  try { if(body.retailEnabled!==undefined){if(typeof body.retailEnabled!=="boolean")throw new Error("Invalid retail visibility.");inventoryFields.retailEnabled=body.retailEnabled;}if(body.retailUnit!==undefined){const next=validateStockUnit(body.retailUnit);if(oldValue&&JSON.stringify(next)!==JSON.stringify(stockUnit(oldValue))&&(Number(oldValue.stock)||heldQuantity(oldValue))){if(heldQuantity(oldValue)||body.confirmUnitMapping!==true||!text(body.unitMappingReason,500))throw new Error("Review the existing stock/cost unit mapping, confirm quantities already count complete units, and give a reason. Active reservations must be released first.");}inventoryFields.retailUnit=next;} }catch(error){return NextResponse.json({error:error.message},{status:400});}
   try { if(body.inventoryCategory!==undefined)inventoryFields.inventoryCategory=parseInventoryCategory(body.inventoryCategory); if(body.businessUse!==undefined)inventoryFields.businessUse=businessUsePolicy(body.businessUse); }
   catch(error){return NextResponse.json({error:error.message},{status:400});}
   let wholesale;
@@ -178,7 +181,7 @@ export async function POST(request) {
     });
   }
   const auditRef = store.collection("admin_audit").doc();
-  batch.create(auditRef, auditPayload(access.user, existing.exists ? "UPDATE_PRODUCT" : "CREATE_PRODUCT", "product", id, `${existing.exists ? "Updated" : "Created"} ${name}.${body.priceChangeReason ? ` Price/cost reason: ${text(body.priceChangeReason, 500)}` : ""}`, oldValue, product));
+  batch.create(auditRef, auditPayload(access.user, existing.exists ? "UPDATE_PRODUCT" : "CREATE_PRODUCT", "product", id, `${existing.exists ? "Updated" : "Created"} ${name}.${body.unitMappingReason?` Unit mapping: ${text(body.unitMappingReason,500)}`:""}${body.priceChangeReason ? ` Price/cost reason: ${text(body.priceChangeReason, 500)}` : ""}`, oldValue, product));
   for (const entry of barcodes.deleted) {
     const { reason, ...record } = entry;
     batch.create(store.collection("admin_audit").doc(), auditPayload(access.user, "DELETE_BARCODE", "product", id, `Deleted barcode ${entry.code} from SKU ${entry.sku || oldValue?.sku || id}. Reason: ${reason}`, record, { code: entry.code, unlinked: true, reason }));

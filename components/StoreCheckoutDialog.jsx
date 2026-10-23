@@ -69,7 +69,7 @@ export default function StoreCheckoutDialog({ products, cart, pricing, order, se
           </>}
         </div>;
   const orderPane = <aside key="order" ref={summary} className="checkout-order-pane" aria-labelledby="checkout-order-title">
-          <h3 id="checkout-order-title">{purchaseMode === "wholesale" ? "Your wholesale order" : "Your order"} <span>{lines.reduce((sum, line) => sum + line.quantity, 0)} {purchaseMode==="wholesale"?"pieces":"items"}</span></h3>
+          <h3 id="checkout-order-title">{purchaseMode === "wholesale" ? "Your wholesale order" : "Your order"} <span>{lines.reduce((sum, line) => sum + line.quantity, 0)} {purchaseMode==="wholesale"?"retail stock units":"items"}</span></h3>
           <div className="checkout-order-items">{!lines.length && <p className="checkout-empty">Your cart is empty. Go back to your cart or continue browsing.</p>}{lines.map((item, index) => {
             const line = complete ? item : pricing.lines.find(entry => entry.id === item.id);
             const imageProduct = complete ? { ...products.find(product => (product.sku || product.id) === item.sku), ...item } : item;

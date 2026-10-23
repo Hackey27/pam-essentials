@@ -1,3 +1,6 @@
+import {putHold,releaseHold,availableStock} from "@/lib/reservations.mjs";
+import {marketplaceConfigRef} from "@/lib/marketplaceServer";
+import {purchaseProduct} from "@/lib/wholesale.mjs";
 import { FieldValue } from "firebase-admin/firestore";
 import { NextResponse } from "next/server";
 import { adminDb, requireRole } from "@/lib/admin";
@@ -24,6 +27,8 @@ export async function POST(request) {
       const snap = await tx.get(ref);
       if (!snap.exists) throw new Error("Order not found.");
       const order = snap.data();
+      if(order.marketplace)throw new Error("Use Marketplace > Orders & Reservations for this order. Fulfil it through the linked POS basket.");
+      const marketSettings=await tx.get(marketplaceConfigRef(store));
       if (actionId && (order.processedActionIds || []).includes(actionId)) return { orderId, status: order.status, paymentStatus: order.paymentStatus, fulfilmentCounts: fulfilmentCounts(order), duplicate: true };
       if (confirmingLine) {
         if (["completed", "cancelled"].includes(order.status)) throw new Error("This order cannot be changed after completion or cancellation.");
@@ -37,14 +42,20 @@ export async function POST(request) {
         tx.create(store.collection("admin_audit").doc(), auditPayload(access.user, "CONFIRM_ORDER_ITEM", "order", orderId, `Confirmed ${confirmedQuantity} of ${items[lineIndex].quantity} for ${items[lineIndex].name || items[lineIndex].productId}.`, { lineIndex, previousQuantity: fulfilmentCounts(order)[lineIndex] }, { lineIndex, confirmedQuantity }));
         return { orderId, fulfilmentCounts: counts, fulfilmentComplete: fulfilmentComplete({ ...order, fulfilmentCounts: counts }) };
       }
+      if(status==="completed"&&order.reservationStatus&&(order.fulfilledQuantities||[]).some((q,i)=>q!==order.items[i].quantity))throw new Error("Process the remaining items through POS before completing this order.");
+      if(status==="completed"&&order.reservationStatus&&!(order.fulfilledQuantities||[]).length)throw new Error("Complete the linked POS sale before closing this reserved order.");
       if (status === "completed" && !fulfilmentComplete(order)) throw new Error("Confirm the full quantity of every order item before completing fulfilment.");
       const pickupCode = status === "ready" ? order.pickupCode || String(Math.floor(100000 + Math.random() * 900000)) : order.pickupCode || null;
       const paymentStatus = status === "paid" || (status === "completed" && body.confirmPayment) ? "paid" : order.paymentStatus || "pending";
       const countPurchases = !order.popularityCounted && paymentStatus === "paid";
-      const productRefs = countPurchases ? (order.items || []).map((item) => store.collection("products").doc(encodeURIComponent(item.productId))) : [];
+      const holdAction=["confirmed","paid","processing","ready"].includes(status),releaseAction=["cancelled","completed"].includes(status)&&Boolean(order.reservationStatus);
+      const productRefs = countPurchases||holdAction||releaseAction ? (order.items || []).map((item) => store.collection("products").doc(encodeURIComponent(item.productId))) : [];
       const productSnaps = productRefs.length ? await tx.getAll(...productRefs) : [];
+      const expiresAt=new Date(Date.now()+Number(marketSettings.data()?.reservationHours||24)*3600000).toISOString();
+      const holdUpdates=productSnaps.map((s,i)=>{if(!s.exists)throw new Error("Order product no longer exists.");const p=s.data(),remaining=order.items[i].quantity-Number(order.fulfilledQuantities?.[i]||0);if(holdAction&&order.purchaseType==="wholesale"&&remaining)purchaseProduct({...p,stock:availableStock(p,Date.now(),orderId),stockHolds:{}},"wholesale",remaining);return holdAction?putHold(p,orderId,remaining,expiresAt):releaseHold(p,orderId);});
       tx.update(ref, {
         status,
+        ...(holdAction?{reservationStatus:"reserved",reservationExpiresAt:expiresAt}:releaseAction?{reservationStatus:status==="completed"?"fulfilled":"released",reservationExpiresAt:null}:{}),
         ...(actionId ? { processedActionIds: FieldValue.arrayUnion(actionId) } : {}),
         paymentStatus,
         popularityCounted: order.popularityCounted === true || countPurchases,
@@ -53,7 +64,7 @@ export async function POST(request) {
         updatedAt: FieldValue.serverTimestamp(),
       });
       productRefs.forEach((productRef, index) => {
-        if (productSnaps[index].exists) tx.update(productRef, { purchaseCount: FieldValue.increment(Number(order.items[index].quantity || 0)) });
+        if (productSnaps[index].exists) tx.update(productRef, { ...(countPurchases?{purchaseCount: FieldValue.increment(Number(order.items[index].quantity || 0))}:{}),...((holdAction||releaseAction)?{stockHolds:holdUpdates[index]}:{}) });
       });
       tx.create(store.collection("admin_audit").doc(), auditPayload(access.user, "UPDATE_ORDER_STATUS", "order", orderId, `Changed order ${orderId} from ${order.status} to ${status}.`, { status: order.status }, { status, paymentStatus, pickupCode }));
       return { orderId, status, paymentStatus, pickupCode };

@@ -1,3 +1,4 @@
+import {assertAvailable} from "@/lib/reservations.mjs";
 import { FieldValue } from "firebase-admin/firestore";
 import { NextResponse } from "next/server";
 import { adminDb, requireRole } from "@/lib/admin";
@@ -31,6 +32,7 @@ export async function POST(request) {
       const oldStock = Number(productSnap.data().stock || 0);
       const change = type === "receive" ? Math.abs(quantity) : quantity;
       const newStock = oldStock + change;
+      if(change<0)assertAvailable(productSnap.data(),-change);
       if (newStock < 0) throw new Error("This adjustment would take stock below zero.");
       tx.update(productRef, { stock: newStock, updatedAt: FieldValue.serverTimestamp() });
       const movementRef = store.collection("stock_movements").doc();

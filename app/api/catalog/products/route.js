@@ -1,3 +1,4 @@
+import {channelProduct} from "@/lib/channelPricing.mjs";
 import { reviewKey } from "@/lib/reviewStore";
 import { reviewSummary } from "@/lib/productReviews.mjs";
 import { NextResponse } from "next/server";
@@ -29,7 +30,7 @@ export async function GET() {
     const ranked = snapshot.docs
       .map(serializeDoc)
       .filter((product) => availableOnStorefront(product, context))
-      .map((product) => ({ ...publicProduct(product), ...categoryLabels(product, context.hierarchy), collections: effectiveCollections(product, context.hierarchy), _score: popularityScore(product), _popular: Number(product.clickCount || 0) >= 20 || Number(product.purchaseCount || 0) >= 3 }))
+      .map((product) => ({ ...publicProduct(channelProduct(product,context.channelSettings,"website")), ...categoryLabels(product, context.hierarchy), collections: effectiveCollections(product, context.hierarchy), _score: popularityScore(product), _popular: Number(product.clickCount || 0) >= 20 || Number(product.purchaseCount || 0) >= 3 }))
       .sort((a, b) => (publicLaunch ? b._score - a._score : 0) || Number(b.pinned) - Number(a.pinned) || a.name.localeCompare(b.name));
 
     const popularProducts = publicLaunch ? ranked
@@ -37,7 +38,7 @@ export async function GET() {
       .slice(0, 3)
       .map(({ id, name }) => ({ id, name })) : [];
     const products = ranked.map(({ _score, _popular, ...product }) => { const summary = ratings.get(reviewKey(product)); return { ...product, rating: summary?.average || 0, reviewCount: summary?.count || 0 }; });
-    const wholesaleProducts = snapshot.docs.map(serializeDoc).filter(p=>availableForWholesale(p,context)).map(p=>({...publicProduct(p),...categoryLabels(p,context.hierarchy)}));
+    const wholesaleProducts = snapshot.docs.map(serializeDoc).filter(p=>availableForWholesale(p,context)).map(p=>({...publicProduct(channelProduct(p,context.channelSettings,"website")),...categoryLabels(p,context.hierarchy)}));
     const productMap = new Map(products.map((product) => [product.id, product]));
     const dealBundles = context.deals.filter((deal) => (deal.productIds || []).length >= 2 && deal.productIds.every((id) => productMap.has(id) && hasSellingPrice(productMap.get(id)))).map((deal) => ({ dealId: deal.dealId, name: deal.name, productIds: deal.productIds, finalPrice: Number(deal.finalPrice), aggregatePrice: Math.round(deal.productIds.reduce((sum, id) => sum + productMap.get(id).price, 0) * 100) / 100, available: deal.productIds.every((id) => productMap.get(id).stock > 0) }));
 

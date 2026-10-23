@@ -1,3 +1,5 @@
+import {channelProduct} from "@/lib/channelPricing.mjs";
+import {availableStock} from "@/lib/reservations.mjs";
 import { NextResponse } from "next/server";
 import { adminDb, requireRole } from "@/lib/admin";
 import { availableForSale, availableForWholesale, catalogueContext, publicDiscountRule } from "@/lib/commerce";
@@ -12,10 +14,14 @@ export async function GET(request) {
 
   const store = adminDb();
   const [snapshot, context] = await Promise.all([store.collection("products").get(), catalogueContext(store)]);
+  const orderReference=String(new URL(request.url).searchParams.get("orderReference")||"").trim();
+  const orderSnap=orderReference?await store.collection("orders").doc(orderReference).get():null;
+  const ownOrder=orderSnap?.exists&&!["completed","cancelled"].includes(orderSnap.data().status)?orderReference:"";
   const accountingTax = (await store.collection("accounting_settings").doc("config").get()).data()?.tax || { enabled: false };
-  const products = snapshot.docs.map(serializeDoc).filter((product) => (availableForSale(product, context) || availableForWholesale(product,context))).map((product) => ({ ...publicProduct(product), sku: product.sku || product.id, barcode: product.barcode || "", barcodeEntries: product.barcodeEntries, qrCode: product.qrCode || "", productCode: product.productCode || "", purchaseCount: Number(product.purchaseCount || 0), ...categoryLabels(product, context.hierarchy), collections: effectiveCollections(product, context.hierarchy) }));
+  const requestedChannel=new URL(request.url).searchParams.get("channel")||"walk-in";
+  const products = snapshot.docs.map(serializeDoc).filter((product) => (availableForSale(product, context) || availableForWholesale(product,context))).map((product) => ({ ...publicProduct(channelProduct(product,context.channelSettings,["website","walk-in"].includes(requestedChannel)?requestedChannel:"walk-in")), ...(ownOrder?{stock:availableStock(product,Date.now(),ownOrder)}:{}), sku: product.sku || product.id, barcode: product.barcode || "", barcodeEntries: product.barcodeEntries, qrCode: product.qrCode || "", productCode: product.productCode || "", purchaseCount: Number(product.purchaseCount || 0), ...categoryLabels(product, context.hierarchy), collections: effectiveCollections(product, context.hierarchy) }));
   const productMap = new Map(products.map((product) => [product.id, product]));
   const dealBundles = context.deals.filter((deal) => (deal.productIds || []).length >= 2 && deal.productIds.every((id) => productMap.has(id))).map((deal) => ({ dealId: deal.dealId, name: deal.name, productIds: deal.productIds, finalPrice: Number(deal.finalPrice), aggregatePrice: Math.round(deal.productIds.reduce((sum, id) => sum + productMap.get(id).price, 0) * 100) / 100, available: deal.productIds.every((id) => productMap.get(id).stock > 0) }));
-  return NextResponse.json({ products, ...context.activeHierarchy, discountRules: context.rules.map(publicDiscountRule), dealBundles, taxPolicy: accountingTax });
+  return NextResponse.json({ products, ...context.activeHierarchy, discountRules: context.rules.map(publicDiscountRule), dealBundles, taxPolicy: accountingTax,channelPriceSettings:context.channelSettings.standardChannels||{} });
 }
 

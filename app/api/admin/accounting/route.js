@@ -1,3 +1,6 @@
+import {packingJournal} from "@/lib/packing.mjs";
+import {settlementJournal} from "@/lib/marketplaceFinance.mjs";
+import {assertAvailable} from "@/lib/reservations.mjs";
 import { businessUseJournal } from '@/lib/businessUse.mjs';
 import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
@@ -129,6 +132,7 @@ export async function POST(request){
                 if(p.costPrice==null)plan.warnings.push("Product cost is missing for "+p.name+". Review the cost before relying on profit.");
                 if(cost)rows.push(line("5000",cost/100,"Invoice product cost"),line("1200",-cost/100,"Invoice stock cost"));
                 inventoryChanges.push({productId:p.id,sku:p.sku||p.id,name:p.name,quantity:-quantity,cost:-cost});
+                assertAvailable(p,quantity);
                 writes.push(()=>tx.update(snap.ref,{stock:Number(p.stock)-quantity,...(Number.isInteger(valued)?{accountingStockQuantity:valued-quantity,accountingStockValueCents:Number.isSafeInteger(book)?book-cost:null}:{}),updatedAt:FieldValue.serverTimestamp()}));
                 const movementRef=store.collection("stock_movements").doc("INVOICE-"+requestId+"-"+inventoryChanges.length);
                 writes.push(()=>tx.create(movementRef,{type:"sale",productId:p.id,productName:p.name,quantity:-quantity,qtyChange:-quantity,oldStock:Number(p.stock),newStock:Number(p.stock)-quantity,accountingDocumentId:id,reason,staff:access.user.uid,createdAt:FieldValue.serverTimestamp()}));
@@ -200,6 +204,7 @@ export async function POST(request){
             const nextStock=Number(p.stock||0)+delta,nextQuantity=book.quantity+delta,nextValue=Number.isSafeInteger(book.value)?book.value+costChange:null;
             if(nextQuantity<0||nextValue!=null&&nextValue<0)throw new Error("Resolve the inventory book balance before posting this return.");
             const nextCost=s.costing==="weighted-average"&&nextQuantity>0&&nextValue!=null?Math.round(nextValue/nextQuantity):null;
+            if(nextStock<Number(p.stock||0))assertAvailable(p,Number(p.stock||0)-nextStock);
             updateProductPrice(snap.ref,p,{stock:nextStock,accountingStockQuantity:nextQuantity,accountingStockValueCents:nextValue,...(nextCost!=null?{costPrice:nextCost/100}:{}),updatedAt:FieldValue.serverTimestamp()});
             const movementRef=store.collection("stock_movements").doc("CREDIT-"+requestId+"-"+i);
             writes.push(()=>tx.create(movementRef,{type:"adjust",productId:item.productId,productName:item.description,quantity:delta,qtyChange:delta,oldStock:Number(p.stock||0),newStock:nextStock,accountingDocumentId:d.id,reason,staff:access.user.uid,createdAt:FieldValue.serverTimestamp()}));
@@ -260,22 +265,22 @@ export async function POST(request){
           }
           settings={...s,closedThrough:b.action==="close"?date:null,version:Number(s.version)+1};plan.changes.push(b.action==="close"?`Lock postings through ${date}`:"Reopen accounting periods; audit reason retained");
         }else if(b.action==="source"){
-          if(!["sale","expense","cash","stock","stock-use"].includes(b.sourceType))throw new Error("Choose a source type.");
-          const collection={sale:"sales",expense:"expenses",cash:"cash_movements",stock:"stock_movements","stock-use":"stock_use_records"}[b.sourceType],ref=store.collection(collection).doc(text(b.sourceId,160)),snap=await tx.get(ref);
+          if(!["sale","expense","cash","stock","stock-use","packing","marketplace-settlement"].includes(b.sourceType))throw new Error("Choose a source type.");
+          const collection={sale:"sales",expense:"expenses",cash:"cash_movements",stock:"stock_movements","stock-use":"stock_use_records",packing:"packing_records","marketplace-settlement":"marketplace_settlements"}[b.sourceType],ref=store.collection(collection).doc(text(b.sourceId,160)),snap=await tx.get(ref);
           if(!snap.exists)throw new Error("Source record not found.");
-          if(b.sourceType==="expense"&&snap.data().stockUseId)throw new Error("Post the linked business-use source; this expense is already included there.");
+          if(b.sourceType==="expense"&&(snap.data().stockUseId||snap.data().marketplaceSettlementId))throw new Error("Post the linked business-use source; this expense is already included there.");
           const source={...snap.data(),id:snap.id},sourceDate=sourceDay(source.date||source.expenseDate||source.createdAt),key=sourceKey(b.sourceType,snap.id),existing=await tx.get(store.collection("accounting_journals").doc(key));if(existing.exists)throw new Error("This source has already been posted.");
           if(sourceDate<s.startDate||s.cutoverAt&&String(source.createdAt?.toDate?.()?.toISOString()||source.createdAt)<s.cutoverAt)throw new Error("This source precedes the opening date and should be covered by opening balances.");
           let journal;
           if(b.sourceType==="stock"){
-            if(source.stockUseId)throw new Error("This movement is already linked to its business-use source.");
+            if(source.stockUseId||source.packingId)throw new Error("This movement is already linked to its business-use source.");
             if(source.saleId||source.reversalId||source.accountingDocumentId||source.type!=="adjust")throw new Error("Stock receipts must be linked to a supplier bill. Sale movements are covered by their receipts.");
             journal=entry(rowsFromForm(b.lines));plan.warnings.push("Stock quantity is already recorded. This action adds financial classification only.");
             const productRef=store.collection("products").doc(encodeURIComponent(source.productId)),productSnap=await tx.get(productRef),quantity=Number(source.quantity??source.qtyChange),cost=journal.lines.filter(l=>l.account==="1200").reduce((n,l)=>n+l.debit-l.credit,0);
             if(!productSnap.exists||!Number.isInteger(quantity)||!quantity||!cost||Math.sign(cost)!==Math.sign(quantity))throw new Error("Inventory debit/credit must match the direction of this stock adjustment.");
             const p=productSnap.data(),book=productBook(p,s);journal.inventoryChanges=[{productId:p.id,sku:p.sku||p.id,name:p.name,quantity,cost}];
             if(Number.isInteger(book.quantity)){const nextQuantity=book.quantity+quantity,nextValue=Number.isSafeInteger(book.value)?book.value+cost:null;if(nextQuantity<0||nextValue!=null&&(nextValue<0||nextQuantity===0&&nextValue!==0))throw new Error("This adjustment exceeds the remaining inventory book balance.");updateProductPrice(productRef,p,{accountingStockQuantity:nextQuantity,accountingStockValueCents:nextValue,...(s.costing==="weighted-average"&&nextQuantity>0&&nextValue!=null?{costPrice:Math.round(nextValue/nextQuantity)/100}:{})});}
-          }else journal=({sale:saleJournal,expense:expenseJournal,cash:cashJournal,"stock-use":businessUseJournal})[b.sourceType](source,sourceDate);
+          }else journal=({sale:saleJournal,expense:expenseJournal,cash:cashJournal,"stock-use":businessUseJournal,packing:packingJournal,"marketplace-settlement":settlementJournal})[b.sourceType](source,sourceDate);
           if(!journal||!journal.lines.length&&!journal.nonfinancial)throw new Error("This source does not require a financial entry.");
           if(journal.issues?.length&&b.reviewConfirmed!==true)throw new Error("Confirm that you have reviewed the flagged source details.");
           if(b.sourceType==="cash"&&b.offsetAccount){account(b.offsetAccount);if(b.offsetAccount==="1010")throw new Error("The offset must differ from Till cash.");journal.lines=journal.lines.map(l=>["1090","2990"].includes(l.account)?{...l,account:b.offsetAccount}:l);journal.issues=[];}
