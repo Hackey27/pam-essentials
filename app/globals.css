@@ -2660,3 +2660,9 @@ body > div > main h1 { color: var(--navy); }
 @media(max-width:1000px){.market-form-grid{grid-template-columns:1fr}.market-tabs{gap:6px}.market-tabs button{font-size:.8rem;padding:10px}.market-fee-row{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:600px){.market-order-line,.market-price-explanation,.market-fee-row{grid-template-columns:1fr}.marketplace-workspace .panel,.marketplace-report .panel{padding:16px}.market-bar-row{grid-template-columns:100px 1fr 85px;font-size:.75rem}.market-balance{font-size:1.6rem}}
 
 .wholesale-facts{margin:12px 0;border:1px solid #dce5ee;border-radius:10px;padding:10px;background:#f5fafb;font-size:.85rem}.wholesale-facts>div{display:flex;justify-content:space-between;gap:12px;padding:5px 0}.wholesale-facts dt{color:#4b5d70}.wholesale-facts dd{margin:0;text-align:right;font-weight:700;color:#05265d}.order-discount-workspace{display:grid;gap:20px}.order-discount-workspace input[type=number]{max-width:180px}.pos-order-discount{padding:12px;border:1px solid #dce5ee;border-radius:12px;margin:10px 0}.pos-order-discount label{display:grid;gap:5px}.source-import-preview{max-height:45vh;overflow:auto}.source-import-mapping{min-height:140px;font-family:monospace}
+
+/* Compact catalogue card pricing; detailed wholesale facts stay in product details. */
+.wholesale-card-price{display:grid;gap:.15rem;margin-top:.3rem;}
+.wholesale-card-price>span{font-size:.73rem;color:#526781;}
+.wholesale-product-copy>.wholesale-card-moq{display:flex;gap:.5rem;align-items:baseline;margin:0;color:var(--navy);font-size:.8rem;}
+.wholesale-card-moq b{font-weight:700;}
