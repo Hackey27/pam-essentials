@@ -2,7 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {planSourceCatalogue,parseSourceCatalogue} from "../lib/sourceCatalogue.mjs";
 import {addToCart} from "../lib/storeCart.js";
-import {priceEvents} from "../lib/priceHistory.mjs";
+import {wholesaleUnitName} from "../lib/wholesaleUnits.mjs";
+import {productPerformance,priceEvents} from "../lib/priceHistory.mjs";
 const headers=["PRODUCT ID/ SKU","ITEMS","CATEGORY","SUBCATEGORY","SUB-SUBCATEGORY","PRODUCT_TYPE","PRODUCT_ID","COLOR-VARINAT_SIZE_PRODUCT_ID","SIZE-VARIANT_COLOR_PRODUCT_ID","COLOUR","SIZE_OR_TYPE","KEYWORDS_TAGS","QUANTITY_OR_STOCK","PER_UNIT_COST_PRICE","PIECES_PER_RETAIL_UNIT","RETAIL_SELLING_UNIT","RETAIL_UNITS_PER_WHOLESALE_UNIT","PER_UNIT_SELLING_PRICE","WHOLESALE_PRICE","INVENTORY_CATEGORY","PRODUCT_DESCRIPTION"];
 const row=(changes={})=>({sku:"A",name:"Bands",stock:200,cost:.04,contents:10,unit:"Pack",moq:2,price:.08,wholesale:.06,group:"",colour:"",size:"",...changes});
 const csv=rows=>[headers.join(","),...rows.map(r=>[r.sku,r.name,"School","Bands","","",""+r.group,"","",r.colour,r.size,"bands",r.stock,r.cost,r.contents,r.unit,r.moq,r.price,r.wholesale,"Resale Inventory","Useful bands"].join(","))].join("\n").replaceAll("\\n","\n");
@@ -21,3 +22,5 @@ test("pack conversion preserves stock-warning and per-issue limits in the new un
 test("adding a pack after migration does not reuse a saved loose-piece cart quantity",()=>{const product={id:"A",price:5,stock:20,retailUnit:{unit:"pack",contents:10,version:1}};assert.equal(addToCart([{id:"A",quantity:15}],product,2)[0].quantity,2);assert.equal(addToCart([{...product,quantity:3}],product,2)[0].quantity,5);});
 
 test("source replacement history records price/cost and identifies unit conversion",()=>{const events=priceEvents({id:"A",sku:"A"},[{id:"AUD",action:"REPLACE_SOURCE_CATALOGUE",timestamp:"2026-10-24T00:00:00Z",reason:"Reviewed source",newValue:{products:[{id:"A",sku:"A",priceBefore:.08,costBefore:.04,priceAfter:.8,costAfter:.4,unitBefore:{unit:"individual",contents:1},unitAfter:{unit:"pack",contents:10}}]}}]);assert.equal(events.length,1);assert.equal(events[0].unitChanged,true);assert.equal(events[0].before.price,.08);assert.match(events[0].reason,/direct price-change percentages do not apply/);});
+
+test("finished retail packs use pack labels and comparable history quantities",()=>{const p={id:"A",sku:"A",retailUnit:{unit:"pack",contents:10},wholesale:{sellingUnit:"unit",unitsPerPack:1}};assert.equal(wholesaleUnitName(p),"pack");assert.equal(wholesaleUnitName(p,true),"packs");const performance=productPerformance(p,[{id:"OLD",createdAt:"2026-10-23T01:00:00Z",items:[{productId:"A",quantity:20,lineTotal:2,unitPrice:.1,unitCost:.04,costRecorded:true}]}],{start:Date.parse("2026-10-23"),end:Date.parse("2026-10-24")});assert.equal(performance.unitsSold,2);assert.equal(performance.cogs,.8);assert.equal(performance.netRevenue,2);});
