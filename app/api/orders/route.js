@@ -77,7 +77,7 @@ export async function POST(request) {
     if (availableStock(snap.data()) < quantity) return NextResponse.json({ error: `Only ${snap.data().stock} × ${snap.data().name} remain.` }, { status: 409 });
   }
   let pricing;
-  try { pricing = pricePurchaseCart(productSnaps.map((snap,index)=>({...channelProduct(snap.data(),context.channelSettings,"website"),id:normalizedItems[index].id,quantity:normalizedItems[index].quantity})),context.rules,context.deals,mode); }
+  try { pricing = pricePurchaseCart(productSnaps.map((snap,index)=>({...channelProduct(snap.data(),context.channelSettings,"website"),id:normalizedItems[index].id,quantity:normalizedItems[index].quantity})),context.rules,context.deals,mode,true,{channel:body.channel==="whatsapp"?"whatsapp":"website"}); }
   catch(error) { return NextResponse.json({error:error.message},{status:409}); }
   if(mode==="wholesale" && (!Number.isFinite(Number(body.expectedTotal)) || Math.abs(Number(body.expectedTotal)-pricing.total)>.005)) return NextResponse.json({error:"Wholesale prices changed. Refresh your basket and review the total before ordering."},{status:409});
   for (let index = 0; index < normalizedItems.length; index += 1) {
@@ -102,6 +102,7 @@ export async function POST(request) {
       ...(mode === "wholesale" ? { wholesaleSnapshot: priced.wholesaleSnapshot } : {}),
       lineTotal: priced.lineTotal,
       categorySnapshot: { id: product.categoryId, name: product.category },
+      orderDiscountSnapshot: pricing.orderDiscount ? {...pricing.orderDiscount,amount:Number(priced.orderDiscountCents||0)/100}:null,
       discountRuleSnapshot: priced.rule ? { ruleId: priced.rule.ruleId, name: priced.rule.name, discountType: priced.rule.discountType, value: priced.rule.value, minQty: priced.rule.minQty, amount: priced.ruleDiscountCents / 100 } : null,
       dealBundleSnapshot: priced.dealIds.length ? { dealIds: priced.dealIds, amount: priced.dealDiscountCents / 100 } : null,
     });
@@ -116,6 +117,7 @@ export async function POST(request) {
     items,
     subtotal: pricing.subtotal,
     discount: pricing.discount,
+    orderDiscount: pricing.orderDiscount || null,
     total,
     purchaseType: mode,
     channel: body.channel === "whatsapp" ? "whatsapp" : "website",

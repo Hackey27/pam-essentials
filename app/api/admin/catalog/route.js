@@ -14,7 +14,7 @@ export async function GET(request) {
 
   const store = adminDb();
   const isAdmin = ["owner", "admin"].includes(access.user.role);
-  const [productsSnap, ordersSnap, movementsSnap, hierarchy, discountsSnap, settingsSnap, usersSnap, auditSnap, salesSnap, expensesSnap, dealsSnap] = await Promise.all([
+  const [productsSnap, ordersSnap, movementsSnap, hierarchy, discountsSnap, settingsSnap, usersSnap, auditSnap, salesSnap, expensesSnap, dealsSnap, orderRulesSnap] = await Promise.all([
     store.collection("products").get(),
     store.collection("orders").get(),
     store.collection("stock_movements").orderBy("createdAt", "desc").limit(100).get(),
@@ -26,6 +26,7 @@ export async function GET(request) {
     isAdmin ? store.collection("sales").orderBy("createdAt", "desc").limit(500).get() : Promise.resolve({ docs: [] }),
     isAdmin ? store.collection("expenses").orderBy("createdAt", "desc").get() : Promise.resolve({ docs: [] }),
     isAdmin ? store.collection("deal_bundles").get() : Promise.resolve({ docs: [] }),
+    isAdmin ? store.collection("order_discount_rules").get() : Promise.resolve({docs:[]}),
   ]);
 
   if(expensesSnap.docs.length>50000)return NextResponse.json({error:"Expense dataset exceeds the reporting limit; no partial expense total was generated."},{status:409});
@@ -34,7 +35,7 @@ export async function GET(request) {
   const orders = ordersSnap.docs.map(serializeDoc).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
   const movements = movementsSnap.docs.map(serializeDoc);
   const { categories, subcategories, subSubcategories } = hierarchy;
-  const discounts = discountsSnap.docs.map(serializeDoc).map((rule) => ({ ...rule, startDate: rule.startDate?.toDate?.()?.toISOString?.() || rule.startDate || null, endDate: rule.endDate?.toDate?.()?.toISOString?.() || rule.endDate || null })).sort((a, b) => Number(b.priority || 0) - Number(a.priority || 0));
+  const discounts = [...discountsSnap.docs,...orderRulesSnap.docs].map(serializeDoc).map((rule) => ({ ...rule, startDate: rule.startDate?.toDate?.()?.toISOString?.() || rule.startDate || null, endDate: rule.endDate?.toDate?.()?.toISOString?.() || rule.endDate || null })).sort((a, b) => Number(b.priority || 0) - Number(a.priority || 0));
   const settings = Object.fromEntries(settingsSnap.docs.map((doc) => [doc.id, serializeDoc(doc)]));
   if (settings.STORE_LOCATION) settings.STORE_LOCATION.value = currentShopAddress(settings.STORE_LOCATION.value);
   const users = usersSnap.docs.map(serializeDoc).map(({ email = "", displayName = "", role = "", active = true, id }) => ({ id, email, displayName, role, active }));

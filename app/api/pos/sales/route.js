@@ -1,3 +1,4 @@
+import {authorizeOrderDiscount} from "@/lib/orderDiscountServer";
 import {channelProduct} from "@/lib/channelPricing.mjs";
 import { marketContext } from "@/lib/marketplaceServer";
 import { marketplaceCart,marketplaceChannels,salesChannels } from "@/lib/marketplace.mjs";
@@ -56,6 +57,7 @@ export async function POST(request) {
   const transactionId = String(body.transactionId || "").trim();
   if (!/^[A-Za-z0-9-]{1,120}$/.test(transactionId)) return NextResponse.json({ error: "A valid transaction ID is required." }, { status: 400 });
   const offlineFinal = body.offlineFinal === true;
+  if(offlineFinal&&body.orderDiscount?.value)return NextResponse.json({error:"Manual order discounts require an online approval check."},{status:409});
   if (offlineFinal && (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(transactionId) || !Number.isFinite(Number(body.offlineTotal)))) return NextResponse.json({ error: "Offline sale needs a valid transaction ID and captured total." }, { status: 400 });
   const shiftId = String(body.shiftId || "").trim();
   if (reconciliation && reconciliation.receipt?.receiptId !== offlineReceiptId(transactionId)) return NextResponse.json({ error: "Captured receipt number does not match the offline transaction." }, { status: 400 });
@@ -116,11 +118,14 @@ export async function POST(request) {
         if (Number(snap.data().stock) < quantity) throw new Error(`Only ${snap.data().stock} × ${snap.data().name} remain.`);
       }
       const currentProducts=productSnaps.map((snap,index)=>({...(isMarketplace?snap.data():channelProduct(snap.data(),market.settings,["website","walk-in"].includes(salesChannel)?salesChannel:"walk-in")),stock:availableStock(snap.data(),Date.now(),orderReference||""),stockHolds:{},id:normalizedItems[index].id,quantity:normalizedItems[index].quantity}));
-      let currentPricing = isMarketplace?null:pricePurchaseCart(currentProducts,context.rules,context.deals,mode,!reconciliation);
+      let currentPricing = isMarketplace?null:pricePurchaseCart(currentProducts,context.rules,context.deals,mode,!reconciliation,{channel:salesChannel});
       if(isMarketplace){currentPricing=marketplaceCart(currentProducts,market.listings,market.settings,salesChannel,mode,body.negotiatedPrices||{},access.user.role);for(const line of currentPricing.lines){const ordered=linkedOrder.items.find(i=>i.productId===line.id);if(ordered.marketplaceSnapshot?.negotiationReason){if(ordered.marketplaceSnapshot.listingVersion!==line.marketplaceSnapshot.listingVersion)throw new Error("Listing approval changed after negotiation. Review the marketplace order.");line.price=ordered.unitPrice;line.marketplaceSnapshot=ordered.marketplaceSnapshot;line.lineTotal=Math.round(ordered.marketplaceSnapshot.sellingUnitPrice*100*line.quantity/ordered.marketplaceSnapshot.sellingSize)/100;line.subtotalCents=Math.round(line.lineTotal*100);if(line.wholesaleSnapshot)line.wholesaleSnapshot={...line.wholesaleSnapshot,unitPrice:line.price,sellingUnitPrice:ordered.marketplaceSnapshot.sellingUnitPrice};}else if(Math.abs(ordered.unitPrice-line.price)>.0000001)throw new Error("The agreed marketplace order price differs from current approval. Review the order before fulfilment.");}}
       if(isMarketplace){currentPricing.total=Math.round(currentPricing.lines.reduce((n,l)=>n+l.lineTotal,0)*100)/100;currentPricing.subtotal=currentPricing.total;}
+      if(!isMarketplace)currentPricing=await authorizeOrderDiscount(tx,store,currentPricing,body.orderDiscount,access.user,mode,salesChannel,transactionId);
+      else if(body.orderDiscount?.value)throw new Error("Marketplace prices use their approved order workflow.");
       if(isMarketplace&&(!Number.isFinite(Number(body.expectedTotal))||Math.abs(Number(body.expectedTotal)-currentPricing.total)>.005))throw new Error("Marketplace total changed. Reload the linked order.");
       if (mode === "wholesale" && !offlineFinal && (!Number.isFinite(Number(body.expectedTotal)) || Math.abs(Number(body.expectedTotal)-currentPricing.total)>.005)) throw new Error("Wholesale prices changed. Refresh the basket and confirm the new total.");
+      if(body.orderDiscount?.value&&(!Number.isFinite(Number(body.expectedTotal))||Math.abs(Number(body.expectedTotal)-currentPricing.total)>.005))throw new Error("Discounted total changed. Review the basket before checkout.");
       const pricing = reconciliation ? capturedPricing(reconciliation.receipt, normalizedItems) : currentPricing;
       if (offlineFinal && Math.abs(pricing.total - Number(body.offlineTotal)) > 0.005) throw new Error("Offline total differs from current pricing. Keep the local receipt and ask a manager to reconcile this sale.");
       const accounting = await accountingContext(tx, store, today(), { type: "sale", id: transactionId });
@@ -166,6 +171,7 @@ export async function POST(request) {
           lineCost,
           lineProfit: Math.round((netLineTotal - Number(taxSnapshot.productLines?.[index]?.tax || 0) - lineCost) * 100) / 100,
           categorySnapshot: { id: product.categoryId, name: product.category },
+          orderDiscountSnapshot: pricing.orderDiscount ? {...pricing.orderDiscount,amount:Number(priced.orderDiscountCents||0)/100}:null,
           discountRuleSnapshot: priced.rule ? { ruleId: priced.rule.ruleId, name: priced.rule.name, discountType: priced.rule.discountType, value: priced.rule.value, minQty: priced.rule.minQty, amount: priced.ruleDiscountCents / 100 } : null,
           dealBundleSnapshot: priced.dealIds.length ? { dealIds: priced.dealIds, amount: priced.dealDiscountCents / 100 } : null,
         });
@@ -203,6 +209,7 @@ export async function POST(request) {
         items: lines,
         subtotal: pricing.subtotal,
         discount: pricing.discount,
+        orderDiscount: pricing.orderDiscount || null,
         total,
         cost,
         profit: Math.round((total - Number(taxSnapshot.tax || 0) - cost) * 100) / 100,
@@ -231,6 +238,8 @@ export async function POST(request) {
       };
       if(linkedOrder){const fulfilled=(linkedOrder.fulfilledQuantities||linkedOrder.items.map(()=>0)).map((q,i)=>Number(q)+Number(quantities.get(linkedOrder.items[i].productId)||0));if(fulfilled.some((q,i)=>q+Number(linkedOrder.cancelledQuantities?.[i]||0)>linkedOrder.items[i].quantity))throw new Error("Order quantity already fulfilled.");const complete=fulfilled.every((q,i)=>q+Number(linkedOrder.cancelledQuantities?.[i]||0)===linkedOrder.items[i].quantity);tx.update(linkedOrderSnap.ref,{fulfilledQuantities:fulfilled,...(isMarketplace?{status:complete?"completed":"confirmed",reservationStatus:complete?"fulfilled":"reserved",paymentStatus:pendingSettlement?"pending-settlement":"paid"}:{}),saleIds:FieldValue.arrayUnion(transactionId),updatedAt:FieldValue.serverTimestamp()});}
       tx.create(saleRef, saleData);
+      if(pricing.approvalRef)tx.update(pricing.approvalRef,{status:"used",transactionId,usedAt:FieldValue.serverTimestamp()});
+      if(pricing.orderDiscount)tx.create(store.collection("admin_audit").doc(),auditPayload(access.user,"APPLY_ORDER_DISCOUNT","sale",transactionId,pricing.orderDiscount.reason||pricing.orderDiscount.justification||pricing.orderDiscount.name,null,pricing.orderDiscount));
       postSource(tx, accounting, saleJournal({ ...saleData, id: transactionId }, today()), access.user);
       if (reconciliation) tx.create(store.collection("admin_audit").doc(), auditPayload(access.user, "RECONCILE_OFFLINE_SALE", "sale", transactionId, text(reconciliation.reason, 500), { currentTotal: currentPricing.total }, { capturedTotal: pricing.total, receiptId, shiftId }));
       if (shiftSnap.data().aggregationVersion === 1) tx.update(shiftRef, { transactionCount: FieldValue.increment(1), salesTotal: FieldValue.increment(total), [`paymentMix.${paymentMethod}`]: FieldValue.increment(total) });
