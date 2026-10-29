@@ -39,3 +39,25 @@ test("legacy galleries remain usable without requiring new image fields", () => 
   assert.deepEqual(productGallery(product).map((item) => item.source.url), [product.imageUrl, product.images[1]]);
   assert.equal(productGallery({ imageUrl: product.imageUrl, images: "not-an-array" }).length, 1);
 });
+
+test("product routes resolve escaped slashes and preserve exact public identities", async () => {
+  const { resolveStorefrontProduct } = await import("../lib/productRouting.mjs");
+  const wipes = { id: "MIN-WIP-BL/P-004", sku: "MIN-WIP-BL/P-004", name: "Mini wet wipes" };
+  const renamed = { id: "OLD-ID", sku: "CURRENT-SKU" };
+  const products = [wipes, renamed];
+  const before = JSON.stringify(products);
+  for (const route of [wipes.id, encodeURIComponent(wipes.id), encodeURIComponent(encodeURIComponent(wipes.id))]) assert.equal(resolveStorefrontProduct(products, route), wipes);
+  assert.equal(resolveStorefrontProduct(products, "CURRENT-SKU"), renamed);
+  assert.equal(resolveStorefrontProduct(products, "OLD-ID"), renamed);
+  assert.equal(JSON.stringify(products), before);
+});
+
+test("route lookup never exposes missing products or confuses literal percent identifiers", async () => {
+  const { resolveStorefrontProduct, productRouteCandidates } = await import("../lib/productRouting.mjs");
+  const slash = { id: "A/B", sku: "SLASH" }, percent = { id: "A%2FB", sku: "PERCENT" };
+  assert.equal(resolveStorefrontProduct([slash, percent], "A%2FB"), percent);
+  assert.equal(resolveStorefrontProduct([slash, percent], "A%252FB"), percent);
+  assert.equal(resolveStorefrontProduct([slash], "A%2FB"), slash);
+  for (const value of [undefined, null, "", ["A", "B"], "DELETED-SKU", "%malformed"]) assert.equal(resolveStorefrontProduct([slash], value), null);
+  assert.deepEqual(productRouteCandidates("%malformed"), ["%malformed"]);
+});

@@ -12,6 +12,7 @@ import CustomerFooter from "@/components/CustomerFooter";
 import PaymentDetails from "@/components/PaymentDetails";
 import DeliveryInformationDialog from "@/components/DeliveryInformationDialog";
 import { loadStorefrontCatalogue } from "@/lib/storefrontCatalogue";
+import { resolveStorefrontProduct } from "@/lib/productRouting.mjs";
 import { CURRENT_SHOP_ADDRESS } from "@/lib/shopAddress.mjs";
 import { readCompare, toggleCompare } from "@/lib/compare.mjs";
 import { productOptions, variantDetail, variantTitles } from "@/lib/variantDisplay.mjs";
@@ -81,8 +82,9 @@ export default function ProductDetailView({ id, initialCatalogue, embedded = fal
       setCatalogue(data);
       setProducts(data.products || []);
       setDiscountRules(data.discountRules || []);
-      if (data.publicLaunch === true) {
-        const productId = String(id);
+      const openedProduct = resolveStorefrontProduct(data.products || [], id);
+      if (data.publicLaunch === true && openedProduct) {
+        const productId = openedProduct.id;
         const seenKey = `pam-click-${productId}`;
         if (!sessionStorage.getItem(seenKey)) {
           const visitorId = sessionStorage.getItem("pam-visitor-id") || crypto.randomUUID();
@@ -94,8 +96,8 @@ export default function ProductDetailView({ id, initialCatalogue, embedded = fal
     }).catch((reason) => { if (live) setError(reason.message); }).finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
   }, [id, initialCatalogue]);
-  const product = products.find((item) => item.id === id);
-  const productPath = `/products/${encodeURIComponent(id)}${quickReturnId ? `?quick=${encodeURIComponent(quickReturnId)}` : ""}`;
+  const product = resolveStorefrontProduct(products, id);
+  const productPath = `/products/${encodeURIComponent(product?.id || id)}${quickReturnId ? `?quick=${encodeURIComponent(quickReturnId)}` : ""}`;
   const cartUrl = `/?cart=1&returnTo=${encodeURIComponent(productPath)}`;
   function rememberCartPosition() { sessionStorage.setItem("pam-cart-return-scroll", JSON.stringify({ path: window.location.pathname + window.location.search, y: window.scrollY })); }
   useEffect(() => {
