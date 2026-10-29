@@ -1,3 +1,4 @@
+import { GET as publicCatalogue } from "../app/api/catalog/products/route.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { POST as bulk } from "../app/api/admin/bulk-products/route.js";
@@ -80,4 +81,19 @@ test("catalogue revision metadata is read-only and supervisor data excludes prof
   const owner = await (await catalog(get("owner", "catalog"))).json(); assert.equal(owner.metrics.quoteProducts, 1); assert.equal(owner.metrics.needsPricing, 0); assert.ok(owner.products[0].editVersion);
   const supervisor = await (await catalog(get("supervisor", "catalog"))).json(); assert.equal(supervisor.metrics.profit, undefined); assert.equal(supervisor.products.find((p) => p.id === "P").costPrice, undefined); assert.equal(supervisor.products.find((p) => p.id === "P").wholesalePackPrice, undefined); assert.deepEqual(supervisor.audit, []);
   assert.equal(store.inspect("products", "P").editVersion, undefined);
+});
+
+test("retired SKUs disappear from Admin and storefront but retain immutable history and component inventory", async () => {
+  const store = setup(), old = { id: "OLD", sku: "ERA-COL-002", name: "Retired eraser", categoryId: "c", price: 20, costPrice: 5, stock: 0, active: true, catalogueRetirement: { replacements: ["SKU-P"] }, wholesale: { enabled: true, unitPrice: 10, minQty: 1, increment: 1 } };
+  await store.collection("products").doc("OLD").create(old);
+  await store.collection("products").doc("LOOSE").create({ ...old, id: "LOOSE", sku: "LOOSE", catalogueRetirement: null, stock: 4, retailUnit: { unit: "individual", contents: 1, role: "component" } });
+  const owner = await (await catalog(get("owner", "catalog"))).json();
+  assert.equal(owner.products.some(p => p.id === "OLD"), false);
+  assert.equal(owner.products.some(p => p.id === "LOOSE"), true);
+  assert.equal(owner.metrics.products, 2); assert.equal(owner.metrics.outOfStock, 0);
+  const storefront = await (await publicCatalogue()).json();
+  assert.equal(storefront.products.some(p => ["OLD", "LOOSE"].includes(p.id)), false);
+  assert.equal(storefront.wholesaleProducts.some(p => ["OLD", "LOOSE"].includes(p.id)), false);
+  assert.deepEqual(store.inspect("products", "OLD"), old);
+  assert.equal(store.inspect("products", "LOOSE").stock, 4);
 });

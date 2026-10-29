@@ -53,3 +53,22 @@ test("drafts are account-scoped, expire, and recover only edits while flagging c
   const changes = recoveredDraftChanges(draft, { ...base, price: 23, name: "Someone else's name", expectedVersion: "2" }); assert.deepEqual(changes.map((c) => c.field), ["price"]); assert.equal(changes[0].conflict, true);
   rows.set(draftKey("owner", "p"), "broken"); assert.equal(readProductDraft(storage, "owner", "p", at), null);
 });
+
+test("retired catalogue records and loose components never become readiness tasks or product exports", async () => {
+  const { inProductCatalogue, retailEnabled } = await import("../lib/stockUnits.mjs");
+  const { wholesaleEnabled } = await import("../lib/wholesale.mjs");
+  const { exportCatalogueCsv, parseCatalogueCsv } = await import("../lib/catalogueImport.mjs");
+  const { stockMetricProducts } = await import("../lib/adminReporting.mjs");
+  const retired = { ...product, id: "old", sku: "OLD", stock: 0, imageUrl: "", catalogueRetirement: { replacements: ["SKU-P"] }, wholesale: { enabled: true, unitPrice: 10, minQty: 1, increment: 1 } };
+  const component = { ...product, id: "loose", sku: "LOOSE", imageUrl: "", retailUnit: { unit: "individual", contents: 1, role: "component" } };
+  const unpriced = { ...product, id: "unpriced", sku: "UNPRICED", price: null };
+  assert.equal(inProductCatalogue(retired), false); assert.equal(retailEnabled(retired), false); assert.equal(wholesaleEnabled(retired), false);
+  assert.equal(inProductCatalogue(component), false);
+  assert.equal(inProductCatalogue({ ...product, archived: true }), true);
+  assert.equal(inProductCatalogue(unpriced), true);
+  for (const p of [retired, component]) { const result = productReadiness(p, [product, p], hierarchy); assert.deepEqual(result.issues, []); assert.equal(result.excluded, true); }
+  assert.equal(productReadiness(unpriced, [unpriced], hierarchy).issues.includes("pricing"), true);
+  assert.deepEqual(parseCatalogueCsv(exportCatalogueCsv([product, retired, component])).map(p => p.sku), ["SKU-P"]);
+  assert.deepEqual(stockMetricProducts([product, retired, component], "Out of stock"), []);
+  assert.deepEqual(stockMetricProducts([product, retired, component], "Products").map(p => p.id), ["p"]);
+});

@@ -1,4 +1,5 @@
 "use client";
+import { inProductCatalogue } from "@/lib/stockUnits.mjs";
 import AdminOrderDiscounts from "@/components/AdminOrderDiscounts";
 
 import {packDescription,displayQuantity,displayUnitPrice} from "@/lib/wholesaleUnits.mjs";
@@ -136,7 +137,8 @@ function AdminPortal() {
   const loadGeneration = useRef(0), authScope = useRef("");
   authScope.current = `${user?.uid || ""}:${role || ""}`;
   const protection = useProductEditorProtection({ editor, setEditor, uid: user?.uid, saving, uploadingImages });
-  const readiness = useMemo(() => Object.fromEntries(data.products.map((product) => [product.id, productReadiness(product, data.products, data)])), [data.products, data.categories, data.subcategories, data.subSubcategories]);
+  const catalogueProducts = useMemo(() => data.products.filter(inProductCatalogue), [data.products]);
+  const readiness = useMemo(() => Object.fromEntries(catalogueProducts.map((product) => [product.id, productReadiness(product, catalogueProducts, data)])), [catalogueProducts, data.categories, data.subcategories, data.subSubcategories]);
   function setProductFilters(filters) { setQuery(filters.query); setProductCategory(filters.category); setStatus(filters.status); setReadinessFilter(filters.readiness); }
   function navigate(tab, record = null) { protection.request(() => { setEditor(null); setSection(tab); setSectionRecord(record); setMobileNavOpen(false); if (tab === "Orders" && record) { setOrderStatus("all"); setOrderQuery(""); setSelectedOrder(record); } }); }
   function viewReadiness(filter) { protection.request(() => { setEditor(null); setProductFilters({ query: "", category: "all", status: "all", readiness: filter }); setSection("Products"); setSectionRecord(null); }); }
@@ -257,12 +259,12 @@ function AdminPortal() {
     await mutate("/api/admin/orders", { orderId, status: nextStatus, confirmPayment: nextStatus === "completed" }, `Order ${orderId} moved to ${nextStatus}.`);
   }
 
-  const products = useMemo(() => data.products.filter((product) => {
+  const products = useMemo(() => catalogueProducts.filter((product) => {
     const matches = `${product.name} ${product.id} ${product.sku || ""} ${activeBarcodes(product).join(" ")} ${product.category}`.toLowerCase().includes(query.trim().toLowerCase());
     const state = status === "all" || (status === "priced" && Number(product.price) > 0) || (status === "needs-pricing" && !(Number(product.price) > 0) && !requiresPricingInquiry(product)) || (status === "quote" && requiresPricingInquiry(product)) || (status === "active" && product.active !== false && !product.archived) || (status === "inactive" && product.active === false && !product.archived) || (status === "low" && Number(product.stock) <= Number(product.lowStockLevel || 8)) || (status === "archived" && product.archived);
     const category = productCategory === "all" || product.categoryId === productCategory;
     return matches && state && category && matchesReadiness(readiness[product.id], readinessFilter);
-  }), [data.products, query, status, productCategory, readiness, readinessFilter]);
+  }), [catalogueProducts, query, status, productCategory, readiness, readinessFilter]);
 
   const filteredOrders = useMemo(() => data.orders.filter((order) => {
     const searchable = `${order.customer || ""} ${order.phone || ""} ${order.orderId || ""} ${order.createdAt || ""}`.toLowerCase();
@@ -363,7 +365,7 @@ function AdminPortal() {
         {loading ? <div className="empty-state"><div className="spinner" /><p>Loading admin data…</p></div> : <>
           {section === "Overview" && <><AdminAttention attention={visibleAttention} loading={attentionLoading} error={attentionError} onRefresh={loadAttention} onNavigate={navigate} />{isAdmin && <AdminReadiness readiness={readiness} onView={viewReadiness} />}<div className="metric-grid">{metricCards.map(([label, value, note]) => <button type="button" className="metric-card metric-card-active" key={label} onClick={() => setSelectedMetric({ label, report: periodReport })} aria-label={`View ${label.toLowerCase()} details`}><p>{label}</p><strong>{value}</strong><span>{note}</span><b className="metric-view-details">View details →</b></button>)}</div>{isAdmin && <div className="metric-grid compact current-state">{stateCards.map(([label, value, note]) => <button type="button" className="metric-card metric-card-active" key={label} onClick={() => setSelectedMetric({ label, report: periodReport })} aria-label={`View ${label.toLowerCase()} details`}><p>{label}</p><strong>{value}</strong><span>{note} · current state</span><b className="metric-view-details">View details →</b></button>)}</div>}<div className="admin-panels"><article className="panel"><div className="panel-title"><h2>Stock attention</h2><button type="button" onClick={() => navigate("Inventory")}>View inventory</button></div><div className="attention-row"><span className="status-icon danger">↓</span><div><b>{data.metrics.lowStock || 0} products are low in stock</b><p>Review quantities before the next trading period.</p></div></div></article><article className="panel"><div className="panel-title"><h2>Open orders</h2><button onClick={() => setSection("Orders")}>View queue</button></div><div className="status-strip">{openOrderStatuses.map(([value, count]) => <button key={value} onClick={() => { setOrderStatus(value); setSection("Orders"); }}><span>{value.replace("-", " ")}</span><b>{count}</b></button>)}</div>{!data.orders.length ? <p className="muted">No orders yet.</p> : data.orders.filter((order) => !["completed", "cancelled"].includes(order.status)).slice(0, 4).map((order) => <div className="order-row" key={order.orderId}><div><b>{order.customer}</b><span>{order.orderId}</span></div><strong>{money.format(order.total || 0)}</strong><span className="badge warning">{order.status}</span></div>)}</article></div></>}
 
-          {section === "Products" && <><AdminProductSearch query={query} setQuery={setQuery} category={productCategory} setCategory={setProductCategory} status={status} setStatus={setStatus} categories={data.categories} products={products} onSelect={(product) => openEditor("product", product)} /><AdminProductWorkspace products={products} data={data} readiness={readiness} filters={{ query, category: productCategory, status, readiness: readinessFilter }} onFilters={setProductFilters} onEdit={(product) => openEditor("product", product)} authorizedFetch={authorizedFetch} onApplied={(result) => { setNotice(`${result.changedCount} product updates saved together and recorded in Audit.`); load(); }} /></>}
+          {section === "Products" && <><AdminProductSearch query={query} setQuery={setQuery} category={productCategory} setCategory={setProductCategory} status={status} setStatus={setStatus} categories={data.categories} products={products} onSelect={(product) => openEditor("product", product)} /><AdminProductWorkspace products={products} data={{ ...data, products: catalogueProducts }} readiness={readiness} filters={{ query, category: productCategory, status, readiness: readinessFilter }} onFilters={setProductFilters} onEdit={(product) => openEditor("product", product)} authorizedFetch={authorizedFetch} onApplied={(result) => { setNotice(`${result.changedCount} product updates saved together and recorded in Audit.`); load(); }} /></>}
 
           {section === "Categories" && <CategoryHierarchy categories={data.categories} subcategories={data.subcategories} subSubcategories={data.subSubcategories} onEdit={openEditor} />}
 

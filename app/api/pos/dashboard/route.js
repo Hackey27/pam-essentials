@@ -1,3 +1,4 @@
+import { inProductCatalogue } from "@/lib/stockUnits.mjs";
 import { tradePerformance } from "@/lib/tradePerformance.mjs";
 import { Timestamp } from "firebase-admin/firestore";
 import { NextResponse } from "next/server";
@@ -48,7 +49,7 @@ export async function GET(request) {
   const sales = salesSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
   const expenses = expensesSnap.docs.map((doc) => doc.data());
   const products = productsSnap.docs.map((doc) => doc.data());
-  const priced = products.filter((product) => Number(product.price) > 0 && product.active !== false && !product.archived);
+  const priced = products.filter((product) => inProductCatalogue(product) && Number(product.price) > 0 && product.active !== false && !product.archived);
   const quantities = new Map();
   const channels = new Map();
   for (const sale of sales) {

@@ -1,3 +1,4 @@
+import { inProductCatalogue, isRetiredCatalogueProduct } from "@/lib/stockUnits.mjs";
 import { NextResponse } from "next/server";
 import { adminDb, requireRole } from "@/lib/admin";
 import { serializeDoc } from "@/lib/productData";
@@ -31,7 +32,9 @@ export async function GET(request) {
 
   if(expensesSnap.docs.length>50000)return NextResponse.json({error:"Expense dataset exceeds the reporting limit; no partial expense total was generated."},{status:409});
   const fullProducts = productsSnap.docs.map((doc) => ({ ...serializeDoc(doc), editVersion: documentVersion(doc) })).map((product) => ({ ...product, ...categoryLabels(product, hierarchy) })).sort((a, b) => a.name.localeCompare(b.name));
-  const products = isAdmin ? fullProducts : fullProducts.map(({ costPrice, wholesalePackPrice, accountingStockValueCents, accountingStockQuantity, ...product }) => product);
+  const inventoryProducts = fullProducts.filter((product) => !isRetiredCatalogueProduct(product));
+  const catalogueProducts = inventoryProducts.filter(inProductCatalogue);
+  const products = isAdmin ? inventoryProducts : inventoryProducts.map(({ costPrice, wholesalePackPrice, accountingStockValueCents, accountingStockQuantity, ...product }) => product);
   const orders = ordersSnap.docs.map(serializeDoc).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
   const movements = movementsSnap.docs.map(serializeDoc);
   const { categories, subcategories, subSubcategories } = hierarchy;
@@ -45,12 +48,12 @@ export async function GET(request) {
   const dealBundles = dealsSnap.docs.map(serializeDoc).map((deal) => ({ ...deal, aggregatePrice: Math.round((deal.productIds || []).reduce((sum, id) => sum + Number(fullProducts.find((product) => product.id === id)?.price || 0), 0) * 100) / 100 }));
 
   const metrics = {
-    products: fullProducts.length,
-    active: fullProducts.filter((p) => p.active !== false && !p.archived && Number(p.price) > 0).length,
-    needsPricing: fullProducts.filter((p) => !(Number(p.price) > 0) && !requiresPricingInquiry(p)).length,
-    quoteProducts: fullProducts.filter(requiresPricingInquiry).length,
-    lowStock: fullProducts.filter((p) => Number(p.price) > 0 && Number(p.stock) > 0 && Number(p.stock) <= Number(p.lowStockLevel || 8)).length,
-    outOfStock: fullProducts.filter((p) => Number(p.price) > 0 && Number(p.stock) <= 0).length,
+    products: catalogueProducts.length,
+    active: catalogueProducts.filter((p) => p.active !== false && !p.archived && Number(p.price) > 0).length,
+    needsPricing: catalogueProducts.filter((p) => !(Number(p.price) > 0) && !requiresPricingInquiry(p)).length,
+    quoteProducts: catalogueProducts.filter(requiresPricingInquiry).length,
+    lowStock: catalogueProducts.filter((p) => Number(p.price) > 0 && Number(p.stock) > 0 && Number(p.stock) <= Number(p.lowStockLevel || 8)).length,
+    outOfStock: catalogueProducts.filter((p) => Number(p.price) > 0 && Number(p.stock) <= 0).length,
     openOrders: orders.filter((o) => !["completed", "cancelled"].includes(o.status)).length,
   };
   if (isAdmin) {

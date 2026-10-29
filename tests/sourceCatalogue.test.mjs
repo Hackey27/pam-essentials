@@ -26,3 +26,9 @@ test("source replacement history records price/cost and identifies unit conversi
 test("finished retail packs use pack labels and comparable history quantities",()=>{const p={id:"A",sku:"A",retailUnit:{unit:"pack",contents:10},wholesale:{sellingUnit:"unit",unitsPerPack:1}};assert.equal(wholesaleUnitName(p),"pack");assert.equal(wholesaleUnitName(p,true),"packs");const performance=productPerformance(p,[{id:"OLD",createdAt:"2026-10-23T01:00:00Z",items:[{productId:"A",quantity:20,lineTotal:2,unitPrice:.1,unitCost:.04,costRecorded:true}]}],{start:Date.parse("2026-10-23"),end:Date.parse("2026-10-24")});assert.equal(performance.unitsSold,2);assert.equal(performance.cogs,.8);assert.equal(performance.netRevenue,2);});
 
 test("Firestore audit timestamps become valid history dates",()=>{const events=priceEvents({id:"A",sku:"A"},[{id:"T",entityId:"A",action:"UPDATE_PRODUCT",timestamp:{toDate:()=>new Date("2026-10-24T00:00:00.000Z")},oldValue:{price:1},newValue:{price:2}}]);assert.equal(events[0].at,"2026-10-24T00:00:00.000Z");});
+
+test("an explicitly reintroduced source SKU clears its previous retirement marker", () => {
+  const plan = planSourceCatalogue(csv([row()]), [record({ catalogueRetirement: { replacements: ["OTHER"] }, retailEnabled: false })], hierarchy);
+  assert.equal(plan.entries[0].patch.catalogueRetirement, null);
+  assert.equal(plan.entries[0].patch.retailEnabled, true);
+});
