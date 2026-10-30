@@ -36,3 +36,9 @@ test("server-side catalogue pagination filters without dropping the legacy defau
  const result=cataloguePage(snapshot,catalogueQuery(new URLSearchParams("q=pen&categoryId=writing&limit=1&page=2&sort=name")));assert.equal(result.products[0].id,"2");assert.equal(result.pagination.total,2);assert.equal(result.pagination.hasMore,false);assert.equal(result.wholesaleProducts.length,0);
  for(const query of ["limit=10000","page=-1","mode=admin","q=a&q=b","token=private"])assert.throws(()=>catalogueQuery(new URLSearchParams(query)));
 });
+
+test("image memory cache evicts old entries within both byte and entry budgets",async()=>{
+ let reads=0;const bucket={file:()=>({download:async()=>{reads++;return [Buffer.from("abc")];}})},options={width:160,quality:70};
+ const images=createStoredImageService(bucket,{maxCacheBytes:4,maxCacheEntries:1});
+ await images.read("one",options);await images.read("two",options);await images.read("one",options);assert.equal(reads,3);
+});
