@@ -8,7 +8,7 @@ const SessionContext=createContext({locked:true});
 export const useStaffSession=()=>useContext(SessionContext);
 const storage=()=>{try{return window.sessionStorage;}catch{return null;}};
 
-export default function StaffSessionGate({user,children}) {
+export default function StaffSessionGate({user,children,accessLabel="Staff access"}) {
  const [ready,setReady]=useState(false),[locked,setLocked]=useState(true),[opened,setOpened]=useState(false);
  const [email,setEmail]=useState(user.email||""),[password,setPassword]=useState(""),[error,setError]=useState(""),[busy,setBusy]=useState(false),[expired,setExpired]=useState(false);
  const timer=useRef(null),lastActivity=useRef(0),paused=useRef(true),pending=useRef(false),lockDialog=useRef(null);
@@ -64,8 +64,8 @@ export default function StaffSessionGate({user,children}) {
  return <SessionContext.Provider value={{locked}}>
   {opened&&<div hidden={locked} inert={locked?true:undefined} style={locked?{display:"none"}:undefined}>{children}</div>}
   {locked&&<dialog ref={lockDialog} aria-label="Staff session locked" onCancel={event=>event.preventDefault()} style={{border:0,padding:0,width:"100vw",height:"100dvh",maxWidth:"100vw",maxHeight:"100dvh",background:"#eaf1f7"}}><main className="pos-entry"><section className="pos-entry-card" aria-label="Staff sign in">
-   <BrandLogo symbol/><h1>{expired?"Session paused":"Staff sign in"}</h1>
-   <p>{expired?"Your session paused after 10 minutes of inactivity. Enter your password to resume.":"Enter your staff email and password to open Admin or POS."}</p>
+   <BrandLogo symbol/><p className="eyebrow">{accessLabel}</p><h1>{expired?"Session paused":"Welcome back"}</h1>
+   <p>{expired?"Your session paused after 10 minutes of inactivity. Enter your password to resume.":accessLabel==="Admin access"?"Enter your Admin email and password to open the Admin Portal.":"Enter your staff email and password to open POS."}</p>
    <p>Your open shift is kept. Resuming does not start a new shift.</p>
    <form onSubmit={resume}><label htmlFor="staff-resume-email">Staff email<input id="staff-resume-email" required type="email" autoComplete="username" value={email} onChange={e=>setEmail(e.target.value)}/></label>
    <label htmlFor="staff-resume-password">Password<input id="staff-resume-password" required type="password" autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)}/></label>

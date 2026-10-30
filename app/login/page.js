@@ -6,18 +6,21 @@ import { auth } from "@/lib/firebase";
 import { useAuth } from "@/components/AuthProvider";
 import BrandLogo from "@/components/BrandLogo";
 import { verifyStaffSession } from "@/lib/staffSession.mjs";
+import { loginDestination, afterStaffLogin } from "@/lib/staffAccess.mjs";
 
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const { user, role, loading } = useAuth();
+  const { user, role, loading, roleError, retryRole } = useAuth();
+  const [destination, setDestination] = useState(null);
+  useEffect(() => { setDestination(loginDestination(window.location.search)); }, []);
   const router = useRouter();
 
   useEffect(() => {
-    if (!loading && user && !busy) router.replace(role === "cashier" ? "/pos" : "/admin");
-  }, [loading, user, role, router, busy]);
+    if (destination !== null && !loading && user && !busy && !roleError) router.replace(afterStaffLogin(destination, role));
+  }, [loading, user, role, router, busy, destination, roleError]);
 
   async function handleSignIn(event) {
     event?.preventDefault();
@@ -51,9 +54,9 @@ export default function Login() {
       </section>
       <section className="login-form-panel">
       <form className="login-card" onSubmit={handleSignIn}>
-        <p className="eyebrow">Staff access</p>
+        <p className="eyebrow">{destination === "/admin" ? "Admin access" : "Staff access"}</p>
         <h2>Welcome back</h2>
-        <p>Sign in to open the till or Admin Portal. Customers can browse without an account.</p>
+        <p>{destination === "/admin" ? "Sign in with your authorised Admin account to open the Admin Portal." : "Sign in with your staff account to open the POS. Customers can browse without an account."}</p>
         <label htmlFor="email">Email<input
           id="email"
           type="email"
@@ -68,7 +71,8 @@ export default function Login() {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         /></label>
-        {error && <p className="notice error-notice">{error}</p>}
+        {error && <p className="notice error-notice" role="alert">{error}</p>}
+        {roleError && <div className="notice error-notice" role="alert"><p>{roleError}</p><button type="button" className="button secondary" onClick={retryRole}>Retry access check</button></div>}
         <button className="button primary" disabled={busy || !email || !password}>
           {busy ? "Signing in…" : "Sign in securely"}
         </button>
