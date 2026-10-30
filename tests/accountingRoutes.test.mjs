@@ -29,3 +29,24 @@ test("stock adjustment financial classification changes book quantities without 
 test("supplier return credits invoice value while removing the current weighted carrying value",async()=>{const store=setup();await store.collection("accounting_settings").doc("config").update({costing:"weighted-average"});const bill=await post({action:"document",kind:"bill",party:"Supplier",dueDate:date,items:[{description:"Bottle",productId:"A",quantity:10,unitPrice:6,account:"1200",receiveStock:true}]});assert.equal(bill.response.status,200);assert.equal((await salePost(request({transactionId:"sale-before-return",shiftId:"S1",deviceId:"TILL",paymentMethod:"cash",amountPaid:150,items:[{id:"A",quantity:15}]},"cashier"))).status,200);const credit=await post({action:"credit",documentId:bill.value.documentId,amount:30,restoreStock:true});assert.equal(credit.response.status,200,JSON.stringify(credit.value));assert.equal(store.inspect("products","A").stock,0);assert.equal(store.inspect("products","A").accountingStockValueCents,0);assert.equal(credit.preview.plan.journals[0].lines.find(l=>l.account==="5100").credit,500);});
 test("unknown opening cost can be allocated explicitly without changing quantities or images",async()=>{const store=setup();await store.collection("accounting_settings").doc("config").update({openingStock:[{productId:"A",sku:"PINK-500",name:"Bottle",quantity:10,unitCost:null}]});await store.collection("products").doc("A").update({costPrice:null,imageUrl:"existing-image"});const result=await post({action:"valuation",productId:"A",currentValue:40,newValue:40,offsetAccount:"3000"});assert.equal(result.response.status,200,JSON.stringify(result.value));assert.equal(store.inspect("products","A").stock,10);assert.equal(store.inspect("products","A").imageUrl,"existing-image");assert.equal(store.inspect("products","A").costPrice,4);assert.equal((await store.collection("accounting_journals").get()).size,0);assert.equal((await store.collection("accounting_stock_values").get()).size,1);});
 test("zero-cost free promotional receipts retain inventory quantities in nonfinancial source journals",async()=>{const store=setup();await store.collection("products").doc("A").update({costPrice:0});await store.collection("accounting_settings").doc("config").update({openingStock:[{productId:"A",quantity:10,unitCost:0}]});await store.collection("discount_rules").doc("FREE").set({name:"Free",scopeType:"GLOBAL",discountType:"PERCENT",value:100,minQty:1,active:true});const r=await salePost(request({transactionId:"free-source-sale",shiftId:"S1",deviceId:"TILL",paymentMethod:"cash",amountPaid:0,items:[{id:"A",quantity:1}]},"cashier"));assert.equal(r.status,200,JSON.stringify(await r.json()));const j=await store.collection("accounting_journals").get();assert.equal(j.size,1);assert.equal(j.docs[0].data().nonfinancial,true);assert.equal(j.docs[0].data().inventoryChanges[0].quantity,-1);});
+
+test("pending receipts can be inspected before opening setup without posting or repeating stock deductions",async()=>{
+ const store=setup(false);
+ const response=await salePost(request({transactionId:"pending-before-opening",shiftId:"S1",deviceId:"TILL",paymentMethod:"cash",amountPaid:10,items:[{id:"A",quantity:1}]},"cashier"));
+ assert.equal(response.status,200);
+ const sale=store.inspect("sales","pending-before-opening");
+ const data=await(await GET(request())).json();
+ assert.equal(data.settings.active,false);
+ const pending=data.pending.find(p=>p.sourceId==="pending-before-opening");
+ assert.equal(pending.receipt.receiptId,sale.receiptId);
+ assert.equal(pending.receipt.total,10);
+ assert.equal(pending.receipt.items[0].sku,"PINK-500");
+ assert.equal(pending.receipt.staffName,sale.staffName||sale.staffDisplayName||"");
+ assert.equal("costPrice" in pending.receipt.items[0],false);
+ const blocked=await POST(request({action:"source",sourceType:"sale",sourceId:"pending-before-opening",requestId:crypto.randomUUID(),date,reason:"Review existing receipt",reviewConfirmed:true,mode:"preview"}));
+ assert.equal(blocked.status,409);
+ assert.match((await blocked.json()).error,/opening setup/i);
+ assert.equal((await store.collection("accounting_journals").get()).size,0);
+ assert.equal(store.inspect("products","A").stock,9);
+ assert.deepEqual(store.inspect("sales","pending-before-opening"),sale);
+});
