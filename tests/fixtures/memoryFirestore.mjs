@@ -47,18 +47,19 @@ export function memoryFirestore(seed) {
   const snap = (name, id) => ({ id, ref: ref(name, id), updateTime: version(name, id) || -1, exists: table(name).has(id), data: () => table(name).get(id) });
   return {
     collection(name) {
-      const query = (filters = [], sort = null, cap = Infinity, cursor = null) => ({
+      const query = (filters = [], sort = null, cap = Infinity, cursor = null, fields = null) => ({
         doc(id) { return ref(name, id || `test-auto-${nextId++}`); },
-        where(field, op, value) { if (!["==", "in", ">=", "<=", ">", "<"].includes(op)) throw new Error("Unsupported query"); return query([...filters, [field, op, value]], sort, cap, cursor); },
-        orderBy(field, direction = "asc") { return query(filters, [field, direction], cap, cursor); },
-        limit(value) { return query(filters, sort, value, cursor); },
-        startAfter(value) { return query(filters, sort, cap, value); },
+        where(field, op, value) { if (!["==", "in", ">=", "<=", ">", "<"].includes(op)) throw new Error("Unsupported query"); return query([...filters, [field, op, value]], sort, cap, cursor, fields); },
+        orderBy(field, direction = "asc") { return query(filters, [String(field), direction], cap, cursor, fields); },
+        limit(value) { return query(filters, sort, value, cursor, fields); },
+        startAfter(value) { return query(filters, sort, cap, value, fields); },
+        select(...selectedFields) { return query(filters, sort, cap, cursor, selectedFields); },
         async get() {
           const comparable=value=>value?.toDate?.()?.getTime() ?? (value instanceof Date?value.getTime():value);
           let ids = [...table(name).keys()].filter((id) => filters.every(([field, op, value]) => {const raw=table(name).get(id)?.[field],a=comparable(raw),b=comparable(value);return op==="=="?raw===value:op==="in"?value.includes(raw):raw!==undefined&&(op===">="?a>=b:op==="<="?a<=b:op===">"?a>b:a<b);}));
-          if (sort) { const [field, direction] = sort; ids = ids.filter((id) => table(name).get(id)?.[field] !== undefined); const val = (id) => { const v = table(name).get(id)[field]; return v?.toDate?.()?.getTime() ?? (v instanceof Date ? v.getTime() : v); }; ids.sort((a, b) => { const x = val(a), y = val(b), delta = typeof x === "number" && typeof y === "number" ? x-y : String(x).localeCompare(String(y)); return (direction === "desc" ? -delta : delta) || a.localeCompare(b); }); }
-          if (cursor) ids = ids.slice(ids.indexOf(cursor.id) + 1);
-          const docs = ids.slice(0, cap).map((id) => snap(name, id));
+          if (sort) { const [field, direction] = sort; ids = ids.filter((id) => field==="__name__"||table(name).get(id)?.[field] !== undefined); const val = (id) => { const v = field==="__name__"?id:table(name).get(id)[field]; return v?.toDate?.()?.getTime() ?? (v instanceof Date ? v.getTime() : v); }; ids.sort((a, b) => { const x = val(a), y = val(b), delta = typeof x === "number" && typeof y === "number" ? x-y : String(x).localeCompare(String(y)); return (direction === "desc" ? -delta : delta) || a.localeCompare(b); }); }
+          if (cursor) ids = ids.slice(ids.indexOf(typeof cursor==="string"?cursor:cursor.id) + 1);
+          const docs = ids.slice(0, cap).map((id) => { const full=snap(name,id);return fields?{...full,data:()=>Object.fromEntries(fields.filter(field=>Object.hasOwn(full.data(),field)).map(field=>[field,full.data()[field]]))}:full; });
           return { docs, size: docs.length, empty: docs.length === 0 };
         },
       });

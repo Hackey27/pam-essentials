@@ -7,7 +7,7 @@ test("image paths stay inside the product image namespace", () => {
   assert.match(folder, /^sku-123-[a-z0-9]+$/);
   assert.equal(isProductImagePath(`products/${folder}/gallery/photo.jpg`), true);
   for (const path of ["products/sku/../../secret.jpg", "users/uid/avatar.jpg", "products/sku/gallery/photo.svg", "products/sku/gallery/photo.jpg/other"]) assert.equal(isProductImagePath(path), false);
-  assert.equal(getProductImageUrl(`products/${folder}/gallery/photo.jpg`, 500), `/images/products/${folder}/gallery/photo.jpg?w=500&fmt=webp&q=80`);
+  assert.equal(getProductImageUrl(`products/${folder}/gallery/photo.jpg`, 500), `/images/products/${folder}/gallery/photo.jpg?w=640&fmt=webp&q=85`);
 });
 
 test("variant combinations and image precedence are deterministic", () => {

@@ -1,3 +1,6 @@
+import {createHash} from "node:crypto";
+import {createSingleFlightCache} from "@/lib/singleFlightCache.mjs";
+import {PUBLIC_CATALOGUE_FIELDS,CATALOGUE_CACHE_CONTROL,catalogueQuery,cataloguePage} from "@/lib/publicCatalogue.mjs";
 import {channelProduct} from "@/lib/channelPricing.mjs";
 import { reviewKey } from "@/lib/reviewStore";
 import { reviewSummary } from "@/lib/productReviews.mjs";
@@ -17,10 +20,9 @@ import { activeAnnouncements } from "@/lib/announcements.mjs";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
-  try {
-    const store = adminDb();
-    const [snapshot, context, flyerSetting, webHeroSetting, mobileHeroSetting, locationSetting, mapsSetting, hoursSetting, announcementSnap, webGallerySetting, mobileGallerySetting, reviewSummaries] = await Promise.all([store.collection("products").get(), catalogueContext(store), store.collection("settings").doc("HERO_FLYER_URL").get(), store.collection("settings").doc("HERO_WEB_IMAGE_PATH").get(), store.collection("settings").doc("HERO_MOBILE_IMAGE_PATH").get(), store.collection("settings").doc("STORE_LOCATION").get(), store.collection("settings").doc("GOOGLE_MAPS_URL").get(), store.collection("settings").doc("OPENING_HOURS").get(), store.collection("announcements").get(), store.collection("settings").doc("HERO_WEB_IMAGES").get(), store.collection("settings").doc("HERO_MOBILE_IMAGES").get(), store.collection("product_review_summaries").get()]);
+const catalogueCache=createSingleFlightCache({ttl:60000});
+async function buildCatalogue(store) {
+    const [snapshot, context, flyerSetting, webHeroSetting, mobileHeroSetting, locationSetting, mapsSetting, hoursSetting, announcementSnap, webGallerySetting, mobileGallerySetting, reviewSummaries] = await Promise.all([store.collection("products").select(...PUBLIC_CATALOGUE_FIELDS).get(), catalogueContext(store), store.collection("settings").doc("HERO_FLYER_URL").get(), store.collection("settings").doc("HERO_WEB_IMAGE_PATH").get(), store.collection("settings").doc("HERO_MOBILE_IMAGE_PATH").get(), store.collection("settings").doc("STORE_LOCATION").get(), store.collection("settings").doc("GOOGLE_MAPS_URL").get(), store.collection("settings").doc("OPENING_HOURS").get(), store.collection("announcements").get(), store.collection("settings").doc("HERO_WEB_IMAGES").get(), store.collection("settings").doc("HERO_MOBILE_IMAGES").get(), store.collection("product_review_summaries").select("ratingCounts").get()]);
     const ratings = new Map(reviewSummaries.docs.map((doc) => [doc.id, reviewSummary(doc.data())]));
     const dealsActive = context.dealsActive;
     const flyerUrl = flyerSetting.exists ? String(flyerSetting.data().value || "") : "";
@@ -46,10 +48,21 @@ export async function GET() {
     const mapsUrl = isGoogleMapsUrl(mapsSetting.data()?.value) ? String(mapsSetting.data()?.value || "") : "";
     const openingHours = String(hoursSetting.data()?.value || OPENING_HOURS);
     const heroSettings = { HERO_WEB_IMAGE_PATH: { value: webHeroPath }, HERO_MOBILE_IMAGE_PATH: { value: mobileHeroPath }, ...(webGallerySetting.exists ? { HERO_WEB_IMAGES: webGallerySetting.data() } : {}), ...(mobileGallerySetting.exists ? { HERO_MOBILE_IMAGES: mobileGallerySetting.data() } : {}) };
-    return NextResponse.json({ products, wholesaleProducts, ...context.activeHierarchy, discountRules: context.rules.map(publicDiscountRule), dealBundles, popularProducts, publicLaunch, dealsActive, flyerUrl, webHeroPath, mobileHeroPath, heroWebImages: heroImageList(heroSettings, "web").filter((image) => image.active), heroMobileImages: heroImageList(heroSettings, "mobile").filter((image) => image.active), storeLocation, mapsUrl, openingHours, announcements: activeAnnouncements(announcementSnap.docs.map((doc) => ({ announcementId: doc.id, ...doc.data() }))) });
-  } catch (error) {
-    console.error("catalog", error);
-    return NextResponse.json({ products: [], error: "The catalogue is temporarily unavailable." }, { status: 503 });
-  }
-}
+    return { products, wholesaleProducts, ...context.activeHierarchy, discountRules: context.rules.map(publicDiscountRule), dealBundles, popularProducts, publicLaunch, dealsActive, flyerUrl, webHeroPath, mobileHeroPath, heroWebImages: heroImageList(heroSettings, "web").filter((image) => image.active), heroMobileImages: heroImageList(heroSettings, "mobile").filter((image) => image.active), storeLocation, mapsUrl, openingHours, announcements: activeAnnouncements(announcementSnap.docs.map((doc) => ({ announcementId: doc.id, ...doc.data() }))) };
 
+}
+export async function GET(request) {
+ let query;
+ try{const params=new URL(request?.url||"https://pam.local/api/catalog/products").searchParams;query=params.size?catalogueQuery(params):null;}
+ catch{return NextResponse.json({error:"Invalid catalogue query."},{status:400,headers:{"cache-control":"no-store"}});}
+ try{
+  const snapshot=await catalogueCache.get(adminDb(),async()=>({data:await buildCatalogue(adminDb()),generatedAt:new Date().toISOString()}));
+  const data=cataloguePage(snapshot.data,query),body=JSON.stringify(data),etag='"'+createHash("sha256").update(body).digest("hex")+'"';
+  const headers={"cache-control":CATALOGUE_CACHE_CONTROL,"etag":etag,"last-modified":new Date(snapshot.generatedAt).toUTCString(),"x-catalogue-generated-at":snapshot.generatedAt,"content-type":"application/json; charset=utf-8"};
+  if(request?.headers?.get("if-none-match")===etag)return new Response(null,{status:304,headers});
+  return new Response(body,{headers});
+ }catch(error){
+  console.error("catalog",error);
+  return NextResponse.json({products:[],error:"The catalogue is temporarily unavailable."},{status:503,headers:{"cache-control":"no-store"}});
+ }
+}

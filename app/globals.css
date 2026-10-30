@@ -2868,3 +2868,8 @@ body > div > main h1 { color: var(--navy); }
  .services-contact-card .button { width:100%; }
 }
 @media(prefers-reduced-motion:reduce) { .account-spinner { animation:none; border-style:dotted; } .services-page a.service-choice-card { transition:none; } }
+
+/* Low-distraction gallery hint and compact contact preference labels. */
+.carousel-view-hint { position:absolute; left:.65rem; bottom:.65rem; z-index:2; border:1px solid #d8e3ee; border-radius:7px; padding:.35rem .55rem; background:#fffffff0; color:#00235b; font:600 .7rem var(--font-body); box-shadow:0 2px 8px #00235b12; cursor:pointer; }
+.customer-profile .customer-preferences label { font-size:1rem; font-weight:700; line-height:1.5; }
+.account-claim-panel h3.guest-link-question { cursor:default; margin:0; }

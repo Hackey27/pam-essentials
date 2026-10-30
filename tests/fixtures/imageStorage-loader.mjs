@@ -1,0 +1,1 @@
+export async function resolve(specifier,context,nextResolve){if(specifier==="@google-cloud/storage")return {url:new URL("./mockImageStorage.mjs",import.meta.url).href,shortCircuit:true};return nextResolve(specifier,context);}

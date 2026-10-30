@@ -1,3 +1,4 @@
+import {writeImageVariants} from "@/lib/imageVariantStorage";
 import { Storage } from "@google-cloud/storage";
 import { NextResponse } from "next/server";
 import sharp from "sharp";
@@ -34,8 +35,10 @@ export async function POST(request) {
     const metadata = await sharp(bytes, { limitInputPixels: 40_000_000, failOn: "error" }).metadata();
     if (metadata.format !== types[type] || !metadata.width || !metadata.height || metadata.width * metadata.height > 40_000_000) return NextResponse.json({ error: "Choose a valid JPG, PNG, WebP or AVIF image under 40 megapixels." }, { status: 400 });
     await storage.bucket(bucketName).file(path).save(bytes, { resumable: false, preconditionOpts: { ifGenerationMatch: 0 }, metadata: { contentType: type, cacheControl: "public,max-age=31536000,immutable" } });
+    await writeImageVariants(storage.bucket(bucketName),path,bytes);
     return NextResponse.json({ path, width: metadata.width, height: metadata.height });
   } catch (error) {
+    if(error?.code==="IMAGE_BUSY")return NextResponse.json({error:error.message},{status:429,headers:{"retry-after":"3"}});
     if ([401, 403].includes(error?.code)) return NextResponse.json({ error: "Image storage rejected the server. Grant the Cloud Run service account Storage Object Creator on the image bucket." }, { status: 503 });
     if (error?.code === 404) return NextResponse.json({ error: "The configured image bucket was not found." }, { status: 503 });
     if (error?.code === 412) return NextResponse.json({ error: "That image already exists. Try uploading again." }, { status: 409 });
