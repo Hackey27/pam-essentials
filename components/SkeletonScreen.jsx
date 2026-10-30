@@ -1,0 +1,6 @@
+export default function SkeletonScreen({type="catalogue",count=6,label="Loading page"}) {
+ const shape=className=><span className={"skeleton-shape "+className}/>;
+ return <div className={"page-skeleton skeleton-"+type} role="status" aria-label={label} aria-busy="true" data-page-loading="true"><span className="sr-only">{label}</span><div aria-hidden="true">
+ {type==="product"?<div className="skeleton-product-layout">{shape("skeleton-product-photo")}<div>{shape("skeleton-title")}{shape("skeleton-line")}{shape("skeleton-short")}{shape("skeleton-button")}{[1,2,3].map(i=><div key={i}>{shape("skeleton-line")}</div>)}</div></div>:type==="catalogue"?<div className="skeleton-card-grid">{Array.from({length:count},(_,i)=><div className="skeleton-card" key={i}>{shape("skeleton-photo")}{shape("skeleton-line")}{shape("skeleton-short")}{shape("skeleton-button")}</div>)}</div>:<><div className="skeleton-heading">{shape("skeleton-title")}{shape("skeleton-line")}</div>{type==="account"&&<div className="skeleton-tabs">{[1,2,3,4].map(i=><span key={i}>{shape("skeleton-button")}</span>)}</div>}{Array.from({length:count===6?4:count},(_,i)=><div className="skeleton-record" key={i}>{shape("skeleton-short")}{shape("skeleton-line")}{shape("skeleton-line")}</div>)}</>}
+ </div></div>;
+}

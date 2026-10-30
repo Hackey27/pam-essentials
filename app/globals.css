@@ -726,7 +726,7 @@ html:has(#store-footer:target) { scroll-behavior: auto; }
 .receipt-actions { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; border-top: 1px solid var(--line); padding: 1rem 1.7rem; background: #f8fafc; }
 
 /* Login */
-body > div > main:not(.catalogue-main):not(.admin-main):not(.pos-main):not(.pos-dashboard):not(.pos-orders):not(.pos-simple-view):not(.product-page-main):not(.compare-main):not(.request-product-main):not(.wholesale-main) { max-width: 520px; margin: 7vh auto; padding: 2rem; }
+body > div > main:not(.catalogue-main):not(.admin-main):not(.pos-main):not(.pos-dashboard):not(.pos-orders):not(.pos-simple-view):not(.product-page-main):not(.compare-main):not(.request-product-main):not(.wholesale-main):not(.account-main):not(.route-loading) { max-width: 520px; margin: 7vh auto; padding: 2rem; }
 body > div > main h1 { color: var(--navy); }
 
 @media (max-width: 1180px) {
@@ -2672,3 +2672,125 @@ body > div > main h1 { color: var(--navy); }
 .wholesale-card-price>span{font-size:.73rem;color:#526781;}
 .wholesale-product-copy>.wholesale-card-moq{display:flex;gap:.5rem;align-items:baseline;margin:0;color:var(--navy);font-size:.8rem;}
 .wholesale-card-moq b{font-weight:700;}
+
+
+/* Customer navigation, announcements and account workspace */
+.announcement-modal { background:#fff; text-align:left; }
+.announcement-list { gap:1.25rem; text-align:left; }
+.announcement-list article { border:0; border-radius:0; padding:0; background:transparent; text-align:left; }
+.announcement-modal .announcement-crawler .announcement-message p { width:auto; max-width:100%; animation:none; }
+.announcement-rich-text { overflow-wrap:anywhere; }
+.announcement-rich-text p { min-height:1em; margin:0 0 .7rem; white-space:pre-wrap; line-height:1.55; }
+.announcement-rich-text h3 { margin:.65rem 0; line-height:1.4; }
+.announcement-rich-text a { text-decoration:underline; }
+.announcement-rich-text .rich-bullet { padding-left:1rem; position:relative; }
+.announcement-rich-text .rich-bullet:before { content:"•"; position:absolute; left:0; }
+.announcement-rich-editor { display:grid; gap:.55rem; }
+.rich-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:.35rem; border:1px solid var(--line); border-radius:10px; padding:.5rem; background:#f2f6fb; }
+.rich-toolbar button,.rich-link button { min-height:36px; border:1px solid var(--line); border-radius:6px; padding:.35rem .55rem; color:#00235b; background:#fff; cursor:pointer; }
+.announcement-editor .rich-toolbar select { width:auto; max-width:170px; min-height:36px; padding:.3rem; }
+.announcement-editor .rich-toolbar .rich-color { display:flex; align-items:center; gap:.35rem; font-size:.75rem; }
+.announcement-editor .rich-color input { width:35px; height:32px; padding:2px; }
+.rich-link { display:flex; flex-wrap:wrap; gap:.4rem; }
+.announcement-editor .rich-link input { flex:1 1 180px; min-width:0; }
+.rich-editing-area { min-height:190px; max-height:42vh; overflow-y:auto; border:1px solid #aab9cd; border-radius:10px; padding:1rem; background:white; color:#00235b; text-align:left; outline-offset:3px; }
+.rich-editing-area:focus { outline:2px solid #ffd166; }
+.header-account-actions { grid-area:cart; display:flex; align-items:center; justify-self:end; gap:.55rem; }
+.header-account-link { display:grid; place-items:center; flex:0 0 44px; width:44px; height:44px; color:#00235b; border:1px solid #dce5ef; border-radius:10px; }
+.header-account-link:hover { background:#ffd166; color:#00235b; }
+.desktop-thin-header .header-account-link,.compact-store-header .header-account-link { color:white; border-color:#ffffff45; }
+.header-account-actions .cart-button { grid-area:auto; }
+.selected-category-bar { position:sticky; top:62px; z-index:19; display:flex; align-items:center; gap:.6rem; flex-wrap:wrap; padding:.55rem 0; background:white; border-bottom:1px solid var(--line); }
+.selected-category-chip,.clear-selected-filters { min-height:38px; border:1px solid #00235b; border-radius:8px; padding:.45rem .8rem; cursor:pointer; }
+.selected-category-chip { display:flex; align-items:center; gap:.65rem; background:#00235b; color:white; font-weight:700; max-width:calc(100% - 100px); }
+.clear-selected-filters { color:#00235b; background:white; }
+.store-shell .selected-category-bar + .catalogue-heading { position:relative; top:auto; }
+.route-loading { max-width:1554px; width:calc(100% - 2rem); margin:2rem auto; }
+.page-skeleton { width:100%; padding:.75rem 0; }
+.skeleton-shape { display:block; position:relative; overflow:hidden; background:#e7edf4; border-radius:9px; min-height:15px; }
+.skeleton-shape:after { content:""; position:absolute; inset:0; background:linear-gradient(100deg,transparent 15%,#ffffffa6 48%,transparent 82%); transform:translateX(-100%); animation:pam-skeleton-shimmer 1.5s ease-in-out infinite; }
+.skeleton-card-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(100%,190px),1fr)); gap:1rem; }
+.skeleton-card { padding:10px; background:white; border:1px solid #e2e9f1; border-radius:13px; display:grid; gap:13px; }
+.skeleton-photo { aspect-ratio:1; width:100%; }
+.skeleton-line { width:100%; height:16px; margin:.55rem 0; }
+.skeleton-short { width:55%; height:18px; margin:.55rem 0; }
+.skeleton-title { width:65%; height:31px; margin:.8rem 0; }
+.skeleton-button { width:100%; height:39px; }
+.skeleton-product-layout { display:grid; grid-template-columns:1fr 1fr; gap:2rem; }
+.skeleton-product-photo { min-height:340px; aspect-ratio:1; }
+.skeleton-heading { padding:.8rem; }
+.skeleton-tabs { display:grid; grid-template-columns:repeat(4,1fr); gap:.65rem; padding:.7rem; }
+.skeleton-record { margin:.8rem 0; padding:1rem; border:1px solid #e2e9f1; border-radius:12px; }
+@keyframes pam-skeleton-shimmer { to { transform:translateX(100%); } }
+.account-redesign .account-main,.account-redesign.account-main { width:calc(100% - 3rem); max-width:1554px; margin:1.5rem auto; padding:0; }
+.customer-account-strip { display:flex; align-items:center; justify-content:space-between; gap:1rem; padding:1.5rem 1.75rem; background:#00235b; color:#fff; border-radius:15px 15px 0 0; }
+.customer-account-strip h1 { margin:0; color:white; font-size:clamp(1.3rem,2.7vw,2rem); }
+.customer-greeting { display:flex; align-items:center; gap:.8rem; min-width:0; }
+.customer-notification-anchor { position:relative; }
+.customer-bell { position:relative; display:grid; place-items:center; width:44px; height:44px; padding:0; border:1px solid #ffffff55; border-radius:10px; background:transparent; color:white; cursor:pointer; }
+.customer-bell b { position:absolute; right:-5px; top:-6px; min-width:20px; height:20px; border-radius:12px; padding:1px 4px; font-size:.68rem; color:#00235b; background:#ffd166; }
+.customer-signout { border:1px solid #ffffff80; padding:.6rem 1rem; border-radius:8px; color:#fff; background:transparent; white-space:nowrap; cursor:pointer; }
+.customer-account-tabs { display:flex; gap:.4rem; overflow-x:auto; scrollbar-width:thin; border:1px solid #dce5ef; padding:.6rem; background:white; }
+.customer-account-tabs button { flex:0 0 auto; border:0; border-radius:8px; padding:.85rem 1.2rem; color:#00235b; background:transparent; font-weight:700; white-space:nowrap; cursor:pointer; }
+.customer-account-tabs button[aria-selected=true] { background:#00235b; color:#ffd166; }
+.customer-account-toolbar { display:flex; justify-content:space-between; align-items:center; gap:.6rem; margin:1.2rem 0; flex-wrap:wrap; }
+.account-redesign .account-panel { width:100%; max-width:none; margin:0 0 1.25rem; }
+.account-redesign [role=tabpanel][hidden] { display:none !important; }
+.customer-notifications { position:absolute; top:54px; left:0; z-index:60; width:min(390px,calc(100vw - 3rem)); max-height:65vh; overflow-y:auto; padding:1rem; border:1px solid #ccd9e8; border-radius:12px; color:#00235b; background:white; box-shadow:0 14px 35px #00235b30; }
+.customer-notifications h2 { color:#00235b; font-size:1.1rem; margin:0; }
+.customer-notifications > button { display:grid; text-align:left; width:100%; gap:.3rem; border:0; border-bottom:1px solid #e4eaf2; padding:.8rem .2rem; color:#00235b; background:white; cursor:pointer; }
+.customer-notifications small { color:#52677e; }
+.customer-wishlist-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr)); gap:1rem; }
+.customer-wishlist-grid article { display:flex; align-items:center; gap:1rem; border:1px solid #dce5ef; padding:1rem; border-radius:12px; }
+.customer-wishlist-grid article > a { flex:0 0 90px; width:90px; height:90px; }
+.customer-wishlist-grid img { width:90px; height:90px; object-fit:contain; }
+.customer-wishlist-grid article > div { display:grid; gap:.7rem; }
+.customer-auth-shell .account-tabs { display:grid; grid-template-columns:1fr 1fr; gap:.5rem; }
+.customer-auth-shell .account-tabs button { margin:0; padding:.6rem .4rem; min-height:40px; border:1px solid #00235b; border-radius:8px; background:white; color:#00235b; cursor:pointer; }
+.customer-auth-shell .account-tabs button.active { background:#00235b; color:#ffd166; }
+.customer-auth-shell .login-card { margin:auto 0; }
+.customer-auth-shell .login-form-panel { padding-block:2rem; }
+@media(min-width:768px) { .header-main { grid-template-columns:auto minmax(0,1fr) auto; } }
+@media(min-width:768px) and (max-width:1179px) { .compact-header-row { grid-template-columns:44px minmax(0,1fr) 44px auto; } }
+@media(max-width:767px) {
+ .header-account-link { display:none; }
+ .header-account-actions { gap:0; }
+ .selected-category-bar { top:55px; font-size:.85rem; padding:.4rem 0; gap:.4rem; }
+ .selected-category-chip { max-width:calc(100% - 87px); }
+ .clear-selected-filters { padding:.4rem .6rem; }
+ .mobile-bottom-nav { left:0; right:0; bottom:0; width:100%; min-height:56px; padding:4px 6px max(4px,env(safe-area-inset-bottom)); border:0; border-radius:0; background:#00235b; color:white; box-shadow:0 -3px 18px #00235b20; }
+ .mobile-bottom-nav a { color:white; border-radius:0; }
+ .mobile-bottom-nav a.selected { background:transparent; color:#ffd166; }
+ .mobile-bottom-nav a.selected > span { color:#ffd166; }
+ .mobile-bottom-nav.is-hidden { transform:translateY(100%); }
+ .skeleton-card-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:.65rem; }
+ .skeleton-product-layout { grid-template-columns:1fr; gap:1rem; }
+ .skeleton-product-photo { min-height:230px; }
+ .account-redesign .account-main,.account-redesign.account-main { width:calc(100% - 1rem); margin:.5rem auto 1rem; }
+ .customer-account-strip { padding:1rem .8rem; gap:.4rem; }
+ .customer-greeting { gap:.5rem; }
+ .customer-bell { width:36px; height:39px; }
+ .customer-signout { padding:.5rem .65rem; font-size:.8rem; }
+ .customer-account-tabs { padding:.4rem; }
+ .customer-account-tabs button { padding:.75rem .8rem; font-size:.85rem; }
+ .customer-account-strip h1 { font-size:1.2rem; }
+ .customer-account-toolbar .button { padding:.65rem .8rem; font-size:.85rem; }
+ .account-redesign .account-panel { padding:1rem; }
+ .customer-auth-shell .login-form-panel { padding:1rem; }
+ .customer-auth-shell .login-card { width:100%; }
+}
+@media(prefers-reduced-motion:reduce) { .skeleton-shape:after { animation:none; } }
+
+.customer-greeting h1 { min-width:0; overflow-wrap:anywhere; }
+
+.compact-header-row > .header-account-actions,.desktop-thin-row > .header-account-actions { grid-area:auto; }
+@media(min-width:1180px){ .desktop-thin-row { grid-template-columns:minmax(170px,210px) minmax(0,1fr) 44px auto; } }
+@media(min-width:768px) and (max-width:1179px){ .store-header .header-account-link { color:white; border-color:#ffffff55; } }
+
+.account-orders .customer-record > summary { display:grid; grid-template-columns:minmax(0,1fr) auto auto 14px; gap:.65rem; flex-wrap:nowrap; }
+.account-orders .customer-record > summary > span:first-child { min-width:0; display:grid; gap:.25rem; overflow-wrap:anywhere; }
+@media(max-width:480px){ .account-orders .customer-record > summary { padding:.8rem; gap:.4rem; font-size:.85rem; } }
+
+.modal.announcement-editor { text-align:left; padding:clamp(1rem,2vw,2rem); }
+.announcement-editor .drawer-title h2 { font-size:1.5rem; text-align:left; }
+@media(max-width:480px){ .announcement-editor .drawer-title h2 { font-size:1.25rem; }.rich-toolbar button,.announcement-editor .rich-toolbar select { min-height:40px; } }

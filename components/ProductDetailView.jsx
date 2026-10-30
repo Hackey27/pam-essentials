@@ -1,4 +1,5 @@
 "use client";
+import SkeletonScreen from "@/components/SkeletonScreen";
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ProductOptions, { ProductImageLightbox, productVariants } from "@/components/ProductOptions";
@@ -151,7 +152,7 @@ export default function ProductDetailView({ id, initialCatalogue, embedded = fal
           }
         } catch {}
       }}>← Back {onBack || quickReturnId ? "to Quick View" : "to products"}</a>
-      {loading && <div className="empty-state">Loading product…</div>}
+      {loading && <SkeletonScreen type="product" label="Loading product details"/>}
       {(error || !loading && !product) && <div className="empty-state"><h1>Product unavailable</h1><p>{error || "This product is no longer in the storefront."}</p><a href="/">Shop products</a></div>}
       {product && <>
         <nav className="breadcrumb"><a href="/">Home</a> / {selected.category} / {selected.name}</nav>

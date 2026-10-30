@@ -6,6 +6,7 @@ import FooterReturn from "@/components/FooterReturn";
 import CustomerPageFooter from "@/components/CustomerPageFooter";
 import CustomerAppearance from "@/components/CustomerAppearance";
 import MobileBottomNav from "@/components/MobileBottomNav";
+import CustomerNavigationState from "@/components/CustomerNavigationState";
 import { ShopInformationProvider } from "@/components/ShopInformation";
 import PricingInquiry from "@/components/PricingInquiry";
 
@@ -24,7 +25,7 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body>
-        <AuthProvider><ShopInformationProvider><CustomerAppearance /><FooterReturn />{children}<CustomerPageFooter /><MobileBottomNav /><PricingInquiry /></ShopInformationProvider></AuthProvider>
+        <AuthProvider><ShopInformationProvider><CustomerAppearance /><CustomerNavigationState /><FooterReturn />{children}<CustomerPageFooter /><MobileBottomNav /><PricingInquiry /></ShopInformationProvider></AuthProvider>
       </body>
     </html>
   );

@@ -4,7 +4,7 @@ import { adminDb } from "@/lib/admin";
 import { customerIdentity } from "@/lib/customerAuth";
 
 export const dynamic = "force-dynamic";
-const profileData = (data, account) => ({ name: data?.name || "", email: account.email, phone: data?.phone || "", marketingEmail: data?.marketingEmail === true, marketingPhone: data?.marketingPhone === true });
+const profileData = (data, account) => ({ name: data?.name || "", email: account.email, phone: data?.phone || "", marketingEmail: data?.marketingEmail === true, marketingPhone: data?.marketingPhone === true, notificationsSeenAt: data?.notificationsSeenAt?.toDate?.()?.toISOString?.() || data?.notificationsSeenAt || null });
 export async function GET(request) {
   const account = await customerIdentity(request);
   if (account.error) return NextResponse.json({ error: account.error }, { status: account.status });
@@ -20,4 +20,11 @@ export async function POST(request) {
   if (profile.marketingPhone && !profile.phone || profile.marketingEmail && !account.email) return NextResponse.json({ error: "Add contact details before opting in to promotional messages." }, { status: 400 });
   await adminDb().collection("customer_accounts").doc(account.uid).set({ ...profile, preferencesUpdatedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
   return NextResponse.json({ profile });
+}
+
+export async function PATCH(request) {
+ const account=await customerIdentity(request);if(account.error)return NextResponse.json({error:account.error},{status:account.status});
+ const body=await request.json().catch(()=>null);if(body?.action!=="notifications-read")return NextResponse.json({error:"Choose a valid account action."},{status:400});
+ const ref=adminDb().collection("customer_accounts").doc(account.uid);await ref.set({notificationsSeenAt:FieldValue.serverTimestamp()},{merge:true});
+ const snap=await ref.get();return NextResponse.json({profile:profileData(snap.data(),account)},{headers:{"Cache-Control":"private, no-store"}});
 }

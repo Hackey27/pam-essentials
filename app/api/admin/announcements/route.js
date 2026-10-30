@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { adminDb, requireRole } from "@/lib/admin";
 import { auditPayload, text } from "@/lib/serverData";
 import { validAnnouncementLink } from "@/lib/announcements.mjs";
+import { announcementDocument, announcementText } from "@/lib/announcementDocument.mjs";
 
 export async function GET(request) {
   const access = await requireRole(request, ["owner", "admin"]);
@@ -15,7 +16,10 @@ export async function POST(request) {
   const access = await requireRole(request, ["owner", "admin"]);
   if (access.error) return NextResponse.json({ error: access.error }, { status: access.status });
   const body = await request.json().catch(() => ({}));
-  const title = text(body.title, 120), message = text(body.body, 1200);
+  const bodyDocument = body.bodyDocument ? announcementDocument(body.bodyDocument) : null;
+  if (body.bodyDocument && !bodyDocument) return NextResponse.json({error:"Use valid announcement formatting and keep the message within 1,200 characters."},{status:400});
+  const title = text(body.title, 120), message = bodyDocument ? announcementText(bodyDocument).trim() : text(body.body, 1200);
+  if (message.length > 1200) return NextResponse.json({error:"Keep the message within 1,200 characters."},{status:400});
   if (!title || !message) return NextResponse.json({ error: "Add a title and message." }, { status: 400 });
   if (!validAnnouncementLink(body.actionUrl)) return NextResponse.json({ error: "Use an internal path or HTTPS action link." }, { status: 400 });
   const startDate = body.startDate ? new Date(body.startDate) : null;
@@ -28,7 +32,7 @@ export async function POST(request) {
   const ref = store.collection("announcements").doc(announcementId);
   const old = await ref.get();
   if (body.announcementId && !old.exists) return NextResponse.json({ error: "Announcement not found." }, { status: 404 });
-  const value = { announcementId, title, body: message, style: body.style === "crawler" ? "crawler" : "static", actionLabel: text(body.actionLabel, 80), actionUrl: text(body.actionUrl, 500), sortOrder, startDate: startDate?.toISOString() || null, endDate: endDate?.toISOString() || null, active: body.active !== false, archived: body.archived === true, updatedAt: FieldValue.serverTimestamp(), updatedBy: access.user.uid };
+  const value = { announcementId, title, body: message, bodyDocument, style: body.style === "crawler" ? "crawler" : "static", actionLabel: text(body.actionLabel, 80), actionUrl: text(body.actionUrl, 500), sortOrder, startDate: startDate?.toISOString() || null, endDate: endDate?.toISOString() || null, active: body.active !== false, archived: body.archived === true, updatedAt: FieldValue.serverTimestamp(), updatedBy: access.user.uid };
   const batch = store.batch();
   batch.set(ref, { ...value, ...(old.exists ? {} : { createdAt: FieldValue.serverTimestamp() }) }, { merge: true });
   batch.create(store.collection("admin_audit").doc(), auditPayload(access.user, old.exists ? "UPDATE_ANNOUNCEMENT" : "CREATE_ANNOUNCEMENT", "announcement", announcementId, `${old.exists ? "Updated" : "Created"} announcement ${title}.`, old.exists ? old.data() : null, value));
