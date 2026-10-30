@@ -42,7 +42,7 @@ export default function PosReceipts({ user, onNewSale, role, shift, request, dev
         <tbody>{filtered.slice((page - 1) * 12, page * 12).map((sale) => <tr key={sale.id || sale.receiptId}>
           <td><button type="button" className="table-action" onClick={() => { setPrintOnly(false); setSelected(sale); }} aria-label={`Open receipt ${sale.receiptId}`}>{sale.receiptId || "Open receipt"}</button>{sale.saleType === "reversal" && <span>Sale correction</span>}{sale.reversalId && <span>Reversed</span>}</td>
           <td>{formatPosDateTime(sale.createdAt)}</td>
-          <td>{sale.customerName || "Walk-in"}{sale.orderReference && <span>{sale.orderReference}</span>}</td>
+          <td>{sale.customerName || "Walk-in"}{sale.orderReference && <div>{sale.orderReference}</div>}</td>
           <td>{paymentLabel(sale.paymentMethod)}</td>
           <td>{sale.staffName || sale.staffEmail || "Staff"}</td>
           <td className="num">{money.format(sale.total || 0)}</td>
