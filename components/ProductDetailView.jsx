@@ -1,4 +1,5 @@
 "use client";
+import { listingReturnTarget } from "@/lib/customerNavigation.mjs";
 import SkeletonScreen from "@/components/SkeletonScreen";
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -137,20 +138,10 @@ export default function ProductDetailView({ id, initialCatalogue, embedded = fal
     <main className="product-page-main">
       <a ref={backButton} className="detail-back" href={quickReturnId ? `/?quick=${encodeURIComponent(quickReturnId)}` : "/#catalogue"} onClick={(event) => {
         if (onBack) { event.preventDefault(); onBack(); return; }
-        try {
-          const saved = JSON.parse(sessionStorage.getItem("pam-listing-return") || "null");
-          const recent = saved && Date.now() - saved.at < 15 * 60 * 1000;
-          if (quickReturnId) {
-            event.preventDefault();
-            const path = recent && saved.path?.startsWith("/") && !saved.path.startsWith("//") ? saved.path : "/";
-            const target = new URL(path, window.location.origin);
-            target.searchParams.set("quick", quickReturnId);
-            window.location.assign(target.pathname + target.search);
-          } else if (recent && window.history.length > 1) {
-            event.preventDefault();
-            window.history.back();
-          }
-        } catch {}
+        event.preventDefault();
+        let saved;try{saved=JSON.parse(sessionStorage.getItem("pam-listing-return")||"null");}catch{}
+        window.location.assign(listingReturnTarget(saved,quickReturnId));
+
       }}>← Back {onBack || quickReturnId ? "to Quick View" : "to products"}</a>
       {loading && <SkeletonScreen type="product" label="Loading product details"/>}
       {(error || !loading && !product) && <div className="empty-state"><h1>Product unavailable</h1><p>{error || "This product is no longer in the storefront."}</p><a href="/">Shop products</a></div>}

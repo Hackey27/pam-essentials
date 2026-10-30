@@ -11,7 +11,7 @@ export default function StorefrontHero({ webUrl, mobileUrl, background }) {
     const element = reference.current;
     if (!element) return;
     // Desktop keeps the approved 15% reduction; mobile is another 20% shorter than that preview.
-    const measure = () => setHeight(element.getBoundingClientRect().height * (matchMedia("(max-width: 767px)").matches ? .68 : .85));
+    const measure = () => setHeight(Math.max(0,element.getBoundingClientRect().height * (matchMedia("(max-width: 767px)").matches ? .68 : .85) - (matchMedia("(max-width: 767px)").matches ? 16 : 24)));
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(element);

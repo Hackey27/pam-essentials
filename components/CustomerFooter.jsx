@@ -18,7 +18,7 @@ export default function CustomerFooter({ storeLocation = CURRENT_SHOP_ADDRESS, m
           <nav aria-label="About PAM links"><h2>About PAM</h2><a href="/info/about?from=footer">About Us</a><a href="/info/story?from=footer">Our Story</a></nav>
           <nav aria-label="Social links"><h2>Follow Us</h2><a href="https://www.facebook.com/share/1HM5dDyhHT/" target="_blank" rel="noreferrer">Facebook</a><a href="/info/social?platform=Instagram&from=footer">Instagram</a><a href="/info/social?platform=TikTok&from=footer">TikTok</a></nav>
         </div>
-        <p className="footer-bottom">© 2026 PAM Essentials &amp; More</p>
+        <div className="footer-powered"><span>Powered by</span><strong>Hack-Key Web systems.</strong><a className="button secondary" href="https://hackeytech.com" target="_blank" rel="noopener noreferrer">Contact Hack-Key Tech if you need a personalised website</a></div><p className="footer-bottom">© 2026 PAM Essentials &amp; More</p>
       </footer>
   </>;
 }

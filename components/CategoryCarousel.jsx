@@ -131,7 +131,7 @@ export default function CategoryCarousel({ categories, products, onSelect }) {
           const next = category.photos[(photoIndex + 1) % category.photos.length];
           return <button type="button" className="category-carousel-card" key={`${slot}:${category.id}`} tabIndex={offscreen ? -1 : 0} aria-hidden={offscreen || undefined} aria-label={`Browse ${category.name}, ${category.count} products`} onClick={() => { if (!suppressClick.current && !step) onSelect(category); suppressClick.current = false; }}>
             <div className="category-photo-viewport">{current ? <div className={`category-photo-track${photoMoving && category.photos.length > 1 ? " moving" : ""}`} style={{ transitionDuration: reducedMotion ? "0ms" : `${PHOTO_MOVE_MS}ms` }}><img src={current.url} alt={current.name} draggable="false" /><img src={next.url} alt="" aria-hidden="true" draggable="false" loading="lazy" /></div> : <div className="category-photo-placeholder" aria-hidden="true">{category.name.split(/\s+/).slice(0, 2).map((word) => word[0]).join("")}</div>}</div>
-            <div className="category-card-label"><strong>{category.name}</strong><span>{category.count} products <span aria-hidden="true">↗</span></span></div>
+            <div className="category-card-label"><strong>{category.name}</strong><span>{category.count} products</span></div>
           </button>;
         })}
       </div>

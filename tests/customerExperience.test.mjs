@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {announcementDocument,announcementText,plainAnnouncementDocument,safeAnnouncementHref} from "../lib/announcementDocument.mjs";
 import {customerTab,customerFirstName,customerNotifications,validCustomerSignup} from "../lib/customerAccount.mjs";
-import {customerRoute,readNavigation,saveNavigation,navigationTarget} from "../lib/customerNavigation.mjs";
+import {customerRoute,readNavigation,saveNavigation,navigationTarget,listingReturnTarget} from "../lib/customerNavigation.mjs";
 const storage=()=>{const values=new Map();return {getItem:key=>values.get(key)||null,setItem:(key,value)=>values.set(key,value)};};
 test("Legacy messages remain readable and formatted messages retain only safe typed marks",()=>{
  const message="Welcome to PAM\nEveryday essentials";
@@ -36,4 +36,18 @@ test("Customer navigation retains scroll/detail destinations and isolates accoun
  assert.deepEqual(readNavigation(store,"c",now+8*60*60*1000+1).positions,{});
  assert.equal(navigationTarget(store,"missing","home","/"),"/");
  for(const path of ["//evil.example","https://evil.example","/admin","/pos","/api/orders",undefined])assert.equal(customerRoute(path),null);
+});
+
+test("Product back returns to its listing after Account and Home tab round trips, never browser history",()=>{
+ const now=Date.now(),store=storage(),listing={at:now,path:"/?browse=products"};
+ saveNavigation(store,"customer","/products/PINK-500",{y:260,details:[]},"home",now);
+ saveNavigation(store,"customer","/account#orders",{y:80,details:[]},"orders",now);
+ assert.equal(navigationTarget(store,"customer","home","/"),"/products/PINK-500");
+ assert.equal(listingReturnTarget(listing,"",now),"/?browse=products");
+ assert.equal(listingReturnTarget({at:now,path:"/wholesale?category=bottles"},"",now),"/wholesale?category=bottles");
+ for(const path of ["/account","/services","//evil.example","/admin","https://evil.example"]){
+  assert.equal(listingReturnTarget({at:now,path},"",now),"/#catalogue");
+ }
+ assert.equal(listingReturnTarget({...listing,at:now-9*60*60*1000},"",now),"/#catalogue");
+ assert.equal(listingReturnTarget({at:now,path:"/?cart=1&from=footer"},"SKU/BLUE",now),"/?quick=SKU%2FBLUE");
 });

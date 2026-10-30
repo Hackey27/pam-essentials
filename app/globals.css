@@ -2794,3 +2794,77 @@ body > div > main h1 { color: var(--navy); }
 .modal.announcement-editor { text-align:left; padding:clamp(1rem,2vw,2rem); }
 .announcement-editor .drawer-title h2 { font-size:1.5rem; text-align:left; }
 @media(max-width:480px){ .announcement-editor .drawer-title h2 { font-size:1.25rem; }.rich-toolbar button,.announcement-editor .rich-toolbar select { min-height:40px; } }
+
+/* Customer account, services and storefront navigation refinements. */
+.customer-auth-shell .login-form-panel { background:#fff; padding:0; }
+.customer-auth-shell .login-card { width:100%; max-width:none; border:0; border-radius:0; box-shadow:none; padding:clamp(2rem,5vw,5rem); }
+.customer-name-fields { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
+.account-empty { display:flex; flex-direction:column; align-items:center; gap:.85rem; padding:2.5rem 1rem; text-align:center; }
+.account-empty-icon { display:grid; place-items:center; width:86px; height:86px; border:1px solid #d7e2ed; border-radius:18px; background:#f1f6fb; color:#00235b; }
+.account-empty-icon svg { width:42px; height:42px; }
+.account-empty small { color:#62758a; font-size:.8rem; }
+.account-claim-panel { margin-top:1rem; }
+.guest-link-question { display:block; width:100%; padding:.5rem 0; border:0; text-align:left; color:#00235b; background:transparent; font:700 1rem var(--font-body); cursor:pointer; }
+.guest-link-choices { display:flex; gap:.7rem; margin-top:.8rem; }
+.account-claim-panel .claim-form { margin-top:1rem; border:0; padding-top:0; }
+.account-refresh { min-width:142px; display:inline-flex; align-items:center; justify-content:center; }
+.account-spinner { width:21px; height:21px; border:2px solid #c6d7e8; border-top-color:#00235b; border-radius:50%; animation:account-spin .75s linear infinite; }
+@keyframes account-spin { to { transform:rotate(360deg); } }
+.footer-powered { display:grid; justify-items:center; gap:.45rem; padding:1.5rem 1rem 0; text-align:center; }
+.footer-powered>span { font-size:.7rem; opacity:.8; }
+.footer-powered>strong { color:#ffd166; }
+.footer-powered .button { max-width:100%; font-size:.72rem; white-space:normal; text-align:center; }
+.price-number-fields { display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); align-items:end; gap:.4rem; margin-top:.6rem; }
+.price-number-fields label { display:grid; gap:.3rem; font-size:.72rem; }
+.price-number-fields input[type=number] { width:100%; min-width:0; min-height:36px; margin:0; padding:.35rem .45rem; border:1px solid #c7d5e5; border-radius:7px; background:white; color:#00235b; font:inherit; font-size:.8rem; }
+.price-number-fields>span { align-self:center; }
+.store-shell .hero.hero-short { padding-bottom:2.75rem; }
+.store-shell .wholesale-callout { padding-block:.8rem; }
+.header-main>.header-account-actions { align-self:start; min-height:44px; margin:0; }
+.header-main>.header-account-actions>.cart-button { margin:0; }
+.services-page { max-width:1200px; width:100%; }
+.services-title-band { display:flex; align-items:center; gap:1.2rem; padding:1.7rem; margin:1.25rem 0 2rem; border-radius:18px; background:#00235b; color:white; }
+.services-page .services-title-band h1 { margin:.2rem 0 0; font-size:clamp(1.6rem,3vw,2.6rem); color:#fff; }
+.services-page .services-title-band p { color:#cdddf0; margin:0; font-size:.8rem; }
+.service-title-icon { flex-shrink:0; display:grid; place-items:center; width:66px; height:66px; color:#ffd166; background:#ffffff12; border:1px solid #ffffff30; border-radius:16px; }
+.service-title-icon svg { width:36px; height:36px; }
+.services-card-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1.2rem; }
+.services-page a.service-choice-card { display:block; border:1px solid #dce5ef; border-radius:16px; padding:1.5rem; background:white; color:#00235b; text-decoration:none; box-shadow:0 5px 18px #00235b08; transition:transform 180ms ease,border-color 180ms ease; }
+.services-page a.service-choice-card:hover { transform:translateY(-3px); border-color:#00235b; }
+.service-card-icon { display:grid; place-items:center; width:48px; height:48px; border-radius:12px; color:#00235b; background:#fff2cf; }
+.service-choice-card h2 { font-size:1.15rem; margin:1rem 0 .5rem; }
+.service-choice-card p { font-size:.9rem; font-weight:400; }
+.service-explore { font-size:.8rem; }
+.service-offerings>p { font-size:1.05rem; }
+.service-offerings ul { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1rem; padding:0; list-style:none; margin:1.5rem 0; }
+.service-offerings li { display:flex; align-items:center; gap:.9rem; border:1px solid #d8e4ee; padding:1.2rem; border-radius:12px; background:#f7fafc; color:#00235b; font-weight:700; }
+.service-offering-number { font-size:.8rem; color:#00235b; background:#ffd166; padding:.5rem; border-radius:8px; }
+.services-contact-card { margin-top:2rem; padding:1.7rem; border-radius:16px; border:1px solid #d5e4eb; background:#edf6f8; }
+.services-contact-card h2 { color:#00235b; font-size:1.3rem; }
+.services-contact-card>div { display:flex; flex-wrap:wrap; gap:.85rem; margin-top:1rem; }
+.services-page .button.primary { color:white; text-decoration:none; }
+.services-page .button.secondary { text-decoration:none; }
+@media(min-width:1180px) {
+ .store-shell .desktop-thin-row { grid-template-columns:minmax(150px,190px) auto minmax(220px,1fr) auto; gap:clamp(.55rem,1vw,1rem); }
+ .desktop-thin-header .thin-inline-search { grid-area:auto; width:100%; align-self:center; }
+ .desktop-thin-header .thin-inline-search .search-field input { height:38px; min-height:38px; padding:.4rem .7rem; font-size:.8rem; background:white; }
+ .desktop-thin-header .thin-inline-search .search-field button { min-width:38px; height:38px; font-size:1.4rem; color:#00235b; background:#ffd166; }
+ .thin-inline-search>.popular-searches { position:absolute; top:calc(100% + 8px); left:0; right:0; padding:.65rem; border:1px solid #dce5ee; border-radius:10px; background:white; box-shadow:0 8px 20px #00235b20; color:#00235b; }
+ .thin-inline-search>.popular-searches button { color:#00235b; }
+ .thin-inline-search>.search-suggestions { top:calc(100% + 8px); }
+}
+@media(max-width:767px) {
+ .customer-auth-shell .login-brand-panel .eyebrow { display:none; }
+ .customer-auth-shell .login-brand-panel h1 { font-size:1.76rem; }
+ .customer-auth-shell .login-card { padding:1.4rem 1rem; }
+ .customer-name-fields { grid-template-columns:1fr; gap:.9rem; }
+ .store-shell .hero.hero-short { padding-bottom:1.04rem; }
+ .services-page { padding:1.25rem 1rem; }
+ .services-title-band { padding:1.25rem; gap:.8rem; }
+ .service-title-icon { width:50px; height:50px; }
+ .service-title-icon svg { width:30px; height:30px; }
+ .services-card-grid,.service-offerings ul { grid-template-columns:1fr; }
+ .services-contact-card { padding:1.2rem; }
+ .services-contact-card .button { width:100%; }
+}
+@media(prefers-reduced-motion:reduce) { .account-spinner { animation:none; border-style:dotted; } .services-page a.service-choice-card { transition:none; } }

@@ -1,5 +1,6 @@
 "use client";
 
+import ServiceIcon from "./ServiceIcon";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {useAuth} from "./AuthProvider";
@@ -7,7 +8,7 @@ import {navigationTarget} from "@/lib/customerNavigation.mjs";
 import { useEffect, useRef, useState } from "react";
 
 const items = [
-  { key: "services", label: "Services", href: "/?services=1" },
+  { key: "services", label: "Services", href: "/services" },
   { key: "delivery", label: "Payment & Delivery", href: "/info/delivery" },
   { key: "home", label: "Home", href: "/" },
   { key: "orders", label: "Orders", href: "/account?mode=signin#orders" },
@@ -15,6 +16,7 @@ const items = [
 ];
 
 function NavIcon({ kind, selected }) {
+  if(kind==="services")return <ServiceIcon kind="services" filled={selected}/>;
   const fill = selected ? "currentColor" : "none";
   const detail = selected ? "#00235b" : "currentColor";
   return <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -80,10 +82,9 @@ export default function MobileBottomNav() {
       navigationReset.current = true;
       requestAnimationFrame(() => requestAnimationFrame(() => { navigationReset.current = false; }));
       if (item.key === "home" && pathname === "/") { event.preventDefault(); return; }
-      if (item.key === "services" && pathname === "/") { event.preventDefault(); window.dispatchEvent(new Event("pam-open-services")); return; }
       if (item.key === "orders") setHash("#orders");
       if (item.key === "account") setHash("");
-      let href=item.href;try{href=navigationTarget(sessionStorage,user?.uid||"guest",item.key,item.href);}catch{}
+      let href=item.href;try{href=navigationTarget(sessionStorage,user?.uid||"guest",item.key,item.href);if(item.key==="services"&&href.startsWith("/?"))href="/services";}catch{}
       event.preventDefault();router.push(href,{scroll:false});
     }}><NavIcon kind={item.key} selected={active === item.key} /><span aria-hidden={active !== item.key}>{item.label}</span></Link>)}
   </nav>;

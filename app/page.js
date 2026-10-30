@@ -17,6 +17,7 @@ import { whatsappOrderMessage } from "@/lib/whatsappOrder.mjs";
 import WhatsAppIcon from "@/components/WhatsAppIcon";
 import { getHeroImageUrl } from "@/lib/heroImages.mjs";
 import Dropdown from "@/components/HeaderDropdown";
+import useSearchPrompt from "@/components/useSearchPrompt";
 import useCompactSearch from "@/components/useCompactSearch";
 import BrandLogo from "@/components/BrandLogo";
 import CustomerFooter from "@/components/CustomerFooter";
@@ -97,6 +98,8 @@ export default function Storefront() {
   const [compactViewport, setCompactViewport] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [compactSearchOpen, setCompactSearchOpen] = useState(false);
+  const [thinSearchFocused,setThinSearchFocused]=useState(false);
+  const thinSearchRef=useRef(null);
   const closeMobileMenu = useCallback(() => setMobileMenuOpen(false), []);
   const [category, setCategory] = useState("All categories");
   const [sort, setSort] = useState("categories");
@@ -213,11 +216,11 @@ export default function Storefront() {
   activeLayerRef.current = activeLayer;
   useEffect(() => { window.dispatchEvent(new CustomEvent("pam-storefront-ui", { detail: { overlay: activeLayer } })); }, [activeLayer]);
   useEffect(() => {
-    const services = () => setServicesOpen(true);
+    const services = () => window.location.assign("/services");
     window.addEventListener("pam-open-services", services);
     const params = new URLSearchParams(window.location.search);
     if (params.get("services") === "1") {
-      setServicesOpen(true); params.delete("services");
+      window.location.replace("/services"); params.delete("services");
       window.history.replaceState(window.history.state, "", window.location.pathname + (params.size ? `?${params}` : "") + window.location.hash);
     }
     return () => { window.removeEventListener("pam-open-services", services); window.dispatchEvent(new CustomEvent("pam-storefront-ui", { detail: { overlay: "" } })); };
@@ -663,9 +666,11 @@ export default function Storefront() {
     setConfirmation(data); setCartRemoval(null); setCart([]); saveCart([]); setCheckout(false);
   }
 
+  const thinPrompt=useSearchPrompt([...curatedSearches,...categoryList.map(item=>item.name)],desktopHeaderHidden&&!thinSearchFocused&&!query.trim());
+  useEffect(()=>{setThinSearchFocused(false);},[desktopHeaderHidden]);
   const navigationItems = (compact = false, section = "all") => <>
             {!compact && <Dropdown label="Products" active={browseMode === "products"}><button type="button" onClick={() => browse("products")}>All products</button><button type="button" onClick={() => { browse("products"); document.getElementById("catalogue")?.scrollIntoView(); }}>Categories and filters</button><a href="/wholesale">Wholesale shopping</a></Dropdown>}
-            {section !== "secondary" && <Dropdown label="Services"><RequestProductLink /><button type="button" onClick={() => setServicesOpen(true)}>All services and contact</button><a href="/services/secretarial">Secretarial services</a><a href="/services/printing">Printing</a><a href="/services/communication">Communication consultancy</a><a href="/services/laptop-repairs">Laptop repairs and purchases</a></Dropdown>}
+            {section !== "secondary" && <Dropdown label="Services"><RequestProductLink /><a href="/services">All services and contact</a><a href="/services/secretarial">Secretarial services</a><a href="/services/printing">Printing</a><a href="/services/communication">Communication consultancy</a><a href="/services/laptop-repairs">Laptop repairs and purchases</a></Dropdown>}
             {!compact && <Dropdown label={<><span className="nav-full">New Arrivals</span><span className="nav-short">New</span></>} active={browseMode === "new"}><button type="button" onClick={() => browse("new")}>Shop new arrivals</button></Dropdown>}
             {!compact && <Dropdown label={<><span className="nav-full">Promotions</span><span className="nav-short">Promos</span></>} active={browseMode === "promotions"}><button type="button" onClick={() => browse("promotions")}>Shop promotions</button></Dropdown>}
             {!compact && dealsActive && <Dropdown label="Deals" active={browseMode === "deals"}><button type="button" onClick={() => browse("deals")}>Shop PAM Deals</button></Dropdown>}
@@ -718,10 +723,10 @@ export default function Storefront() {
     {!collapsible && <button type="button" className="table-action" onClick={clearFilters}>Clear filters</button>}
   </>;
 
-  const renderSearch = (compact = false, panel = false) => <div className={`header-search${searchOpen && !query.trim() ? " search-active" : ""}`} ref={panel ? filterSearchRef : compact ? compactSearchRef : searchRef}>
-            <div className="search-field"><input type="search" aria-label="Search products, categories, or brands" aria-expanded={searchOpen && query.trim().length > 0 && (panel || compact || !mobileTabsHidden)} aria-controls={panel ? "filter-search-suggestions" : compact ? "compact-search-suggestions" : "search-suggestions"} placeholder="Search products, categories, or brands" value={query} onFocus={() => setSearchOpen(true)} onKeyDown={(event) => { if (event.key === "Escape") { setSearchOpen(false); if (compact) closeCompactSearch(); } if (event.key === "Enter") { event.preventDefault(); submitSearch(panel); } }} onChange={(event) => { setBrowseMode("products"); setQuery(event.target.value); setSort(event.target.value.trim() ? "relevance" : "categories"); setSearchOpen(true); }} /><button type="button" aria-label="Show matching products" onClick={() => submitSearch(panel)}>⌕</button></div>
-            {searchOpen && query.trim() && (panel || compact || !mobileTabsHidden) && <div id={panel ? "filter-search-suggestions" : compact ? "compact-search-suggestions" : "search-suggestions"} className="search-suggestions" role="listbox" aria-label="Matching products">{suggestions.length ? <><p>{searchResult.correction ? `Similar products for “${searchResult.correction}”` : searchResult.fuzzyCount ? "Suggested products · includes close spelling matches" : searchResult.synonym ? "Suggested products · includes related search terms" : "Suggested products"}</p>{searchResult.correction && <button type="button" className="search-exact-option" onClick={() => setExactSearch(true)}>Search exact wording: {query}</button>}{suggestions.map((item) => <button type="button" role="option" aria-selected="false" key={item.id} onClick={() => { recordClick(item); setMobileMenuOpen(false); setQuickProduct(item); setSearchOpen(false); setCompactSearchOpen(false); }}><span className="suggestion-preview"><ProductImage product={item} width={100} className="search-preview-image" /></span><span className="suggestion-copy"><b>{item.name}</b><small>{item.category}</small></span><strong>{requiresPricingInquiry(item) ? "Request a quote" : money.format(item.price)}</strong></button>)}</> : <div className="search-request-empty"><p>No matching products. Try another name or keyword.</p><RequestProductLink role="option" className="button secondary">Request a Product</RequestProductLink></div>}</div>}
-            <div className="popular-searches" role="region" aria-label="Popular searches, scroll left or right" tabIndex={0}><span><span className="popular-full">Popular Searches:</span><span className="popular-short">Popular:</span></span>{[...curatedSearches, ...popularProducts.map((product) => product.name)].map((term) => <button key={term} type="button" onClick={() => searchPopular(term)}>{term}</button>)}</div>
+  const renderSearch = (compact = false, panel = false, inline = false) => <div className={`header-search${inline?" thin-inline-search":""}${searchOpen && !query.trim() ? " search-active" : ""}`} ref={inline?thinSearchRef:panel ? filterSearchRef : compact ? compactSearchRef : searchRef} onBlur={inline?(event)=>{if(!event.currentTarget.contains(event.relatedTarget)){setThinSearchFocused(false);setSearchOpen(false);}}:undefined}>
+            <div className="search-field"><input type="search" aria-label="Search products, categories, or brands" aria-expanded={searchOpen && query.trim().length > 0 && (inline?thinSearchFocused:(panel || compact || !mobileTabsHidden))} aria-controls={inline?"thin-search-suggestions":panel ? "filter-search-suggestions" : compact ? "compact-search-suggestions" : "search-suggestions"} placeholder={inline?thinPrompt:"Search products, categories, or brands"} value={query} onFocus={() => {setSearchOpen(true);if(inline)setThinSearchFocused(true);}} onKeyDown={(event) => { if (event.key === "Escape") { setSearchOpen(false); if (compact) closeCompactSearch(); } if (event.key === "Enter") { event.preventDefault(); submitSearch(panel); } }} onChange={(event) => { setBrowseMode("products"); setQuery(event.target.value); setSort(event.target.value.trim() ? "relevance" : "categories"); setSearchOpen(true); }} /><button type="button" aria-label="Show matching products" onClick={() => submitSearch(panel)}>⌕</button></div>
+            {searchOpen && query.trim() && (inline?thinSearchFocused:(panel || compact || !mobileTabsHidden)) && <div id={inline?"thin-search-suggestions":panel ? "filter-search-suggestions" : compact ? "compact-search-suggestions" : "search-suggestions"} className="search-suggestions" role="listbox" aria-label="Matching products">{suggestions.length ? <><p>{searchResult.correction ? `Similar products for “${searchResult.correction}”` : searchResult.fuzzyCount ? "Suggested products · includes close spelling matches" : searchResult.synonym ? "Suggested products · includes related search terms" : "Suggested products"}</p>{searchResult.correction && <button type="button" className="search-exact-option" onClick={() => setExactSearch(true)}>Search exact wording: {query}</button>}{suggestions.map((item) => <button type="button" role="option" aria-selected="false" key={item.id} onClick={() => { recordClick(item); setMobileMenuOpen(false); setQuickProduct(item); setSearchOpen(false); setCompactSearchOpen(false); }}><span className="suggestion-preview"><ProductImage product={item} width={100} className="search-preview-image" /></span><span className="suggestion-copy"><b>{item.name}</b><small>{item.category}</small></span><strong>{requiresPricingInquiry(item) ? "Request a quote" : money.format(item.price)}</strong></button>)}</> : <div className="search-request-empty"><p>No matching products. Try another name or keyword.</p><RequestProductLink role="option" className="button secondary">Request a Product</RequestProductLink></div>}</div>}
+            {(!inline||(thinSearchFocused&&!query.trim()))&&<div className="popular-searches" role="region" aria-label="Popular searches, scroll left or right" tabIndex={0}><span><span className="popular-full">Popular Searches:</span><span className="popular-short">Popular:</span></span>{[...curatedSearches, ...popularProducts.map((product) => product.name)].map((term) => <button key={term} type="button" onClick={() => searchPopular(term)}>{term}</button>)}</div>}
           </div>;
 
   function renderProductGrid(items) {
@@ -776,14 +781,13 @@ export default function Storefront() {
             {navigationItems(true, "services")}
             <Dropdown label="Menu"><button type="button" onClick={() => browse("new")}>New arrivals</button><button type="button" onClick={() => browse("promotions")}>Promotions</button>{dealsActive && <button type="button" onClick={() => browse("deals")}>PAM Deals</button>}<a href="/info/delivery">Payment &amp; delivery</a><a href="/info/contact#location">Pickup location</a><a href="/info/contact">Contact us</a><a href="/account#orders">Track order</a><a href="/account#wishlist">Wishlist</a><a href="/compare">Compare products</a><a href="/account?mode=signin">{user && !role ? "My account" : "Sign in"}</a>{(!user || role) && <a href="/account?mode=register">Create account</a>}</Dropdown>
           </nav>
-          <button type="button" className="compact-search-toggle desktop-search-toggle" aria-label={compactSearchOpen ? "Close product search" : "Open product search"} aria-expanded={compactSearchOpen} aria-controls="desktop-search-panel" onClick={() => { setCompactSearchOpen((open) => !open); setSearchOpen(true); requestAnimationFrame(() => compactSearchRef.current?.querySelector("input")?.focus({ preventScroll: true })); }}><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></svg></button>
+          {renderSearch(false,false,true)}
           <div className="header-account-actions"><AccountHeaderLink/><button type="button" className="desktop-thin-cart" onClick={() => setCartOpen(true)} aria-label={`View cart, ${cartCount} items`}><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M3 4h2l2.1 10.4a2 2 0 0 0 2 1.6H19a2 2 0 0 0 2-1.6L22 8H6"/><circle cx="10" cy="20" r="1"/><circle cx="19" cy="20" r="1"/></svg><b>{cartCount}</b></button></div>
         </div>
-        {desktopHeaderHidden && compactSearchOpen && <div id="desktop-search-panel" className="desktop-search-panel">{renderSearch(true)}</div>}
       </header>
       <MobileBrowseMenu navigation={<details className="narrow-browse-navigation"><summary>Navigation<span aria-hidden="true">▾</span></summary><nav aria-label="Window navigation">
         <button type="button" onClick={() => { closeMobileMenu(); browse("products"); }}>All products</button>
-        <button type="button" onClick={() => { closeMobileMenu(); setServicesOpen(true); }}>Services</button><RequestProductLink />
+        <a href="/services">Services</a><RequestProductLink />
         <button type="button" onClick={() => { closeMobileMenu(); browse("new"); }}>New arrivals</button><button type="button" onClick={() => { closeMobileMenu(); browse("promotions"); }}>Promotions</button>
         {dealsActive && <button type="button" onClick={() => { closeMobileMenu(); browse("deals"); }}>PAM Deals</button>}
         <a href="/info/delivery">Payment &amp; delivery</a><a href="/info/contact#location">Pickup location</a><a href="/info/contact">Contact us</a><a href="/account#orders">Track order</a><a href="/account#wishlist">Wishlist</a><a href="/compare">Compare products</a><a href="/account?mode=signin">{user && !role ? "My account" : "Sign in"}</a>{(!user || role) && <a href="/account?mode=register">Create account</a>}
