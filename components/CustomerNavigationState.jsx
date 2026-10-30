@@ -1,11 +1,12 @@
 "use client";
-import {useEffect,useLayoutEffect,useState} from "react";
+import {useEffect,useLayoutEffect,useRef,useState} from "react";
 import {usePathname} from "next/navigation";
 import {useAuth} from "./AuthProvider";
 import {readNavigation,saveNavigation,navigationSlot} from "@/lib/customerNavigation.mjs";
 export default function CustomerNavigationState(){
  const path=usePathname(),{user,loading}=useAuth(),scope=user?.uid||"guest";
  const [locationVersion,setLocationVersion]=useState(0);
+ const lastLocation=useRef({path,scope,route:null});
  const staff=/^\/(admin|pos|login|api)(?:\/|$)/.test(path);
  useEffect(()=>{
   if(staff||loading)return;
@@ -26,10 +27,12 @@ export default function CustomerNavigationState(){
  },[path,scope,staff,loading]);
  useLayoutEffect(()=>{
   if(staff||loading)return;
+  const route=location.pathname+location.search+location.hash;
+  const previous=lastLocation.current;const changed=previous.path!==path||previous.scope!==scope||(previous.route!==null&&previous.route!==route);lastLocation.current={path,scope,route};
   const params=new URLSearchParams(location.search);
   if(params.get("from")==="footer"||params.has("returnToFooter")||location.hash==="#store-footer")return;
-  let saved;try{saved=readNavigation(sessionStorage,scope).positions[location.pathname+location.search+location.hash];}catch{return;}
-  if(!saved)return;
+  let saved;try{const state=readNavigation(sessionStorage,scope);saved=state.positions[route];if(!saved&&path==="/account"&&!location.hash&&user){saved=state.positions[state.slots.account];}}catch{return;}
+  if(!saved){if(changed&&(!location.hash||path==="/account"))window.scrollTo({top:0,behavior:"instant"});return;}
   document.documentElement.dataset.customerRestoring="true";
   let disposed=false,frame=0,settle;
   const apply=()=>{
