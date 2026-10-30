@@ -27,8 +27,8 @@ test("legacy originals remain visible and uncached locally; oversized or non-ima
  type="text/html";await assert.rejects(images.read("products/a/gallery/b.jpg",options));type="image/jpeg";size=30*1024*1024;await assert.rejects(images.read("products/a/gallery/c.jpg",options));
 });
 test("image read admission caps independent concurrent storage work and returns capacity after completion",async()=>{
- const releases=[];const bucket={file:()=>({download:()=>new Promise(resolve=>releases.push(()=>resolve([Buffer.from("v")])) )})},images=createStoredImageService(bucket,{concurrency:4}),options={width:320,quality:85};
- const work=Array.from({length:4},(_,i)=>images.read("image"+i,options));await assert.rejects(images.read("fifth",options),e=>e.code==="IMAGE_BUSY");assert.equal(releases.length,4);releases.forEach(done=>done());await Promise.all(work);const retry=images.read("fifth",options);releases.at(-1)();await retry;
+ const releases=[];const bucket={file:()=>({download:()=>new Promise(resolve=>releases.push(()=>resolve([Buffer.from("v")])) )})},images=createStoredImageService(bucket,{concurrency:4,maxQueued:0}),options={width:320,quality:85};
+ const work=Array.from({length:4},(_,i)=>images.read("image"+i,options));await assert.rejects(images.read("fifth",options),e=>e.code==="IMAGE_BUSY");assert.equal(releases.length,4);releases.forEach(done=>done());await Promise.all(work);const retry=images.read("fifth",options);await Promise.resolve();releases.at(-1)();await retry;
 });
 test("server-side catalogue pagination filters without dropping the legacy default payload",()=>{
  const products=[{id:"1",name:"Blue pen",sku:"P1",categoryId:"writing",keywords:["biro"],price:5},{id:"2",name:"Red pen",sku:"P2",categoryId:"writing",keywords:[],price:8},{id:"3",name:"Bottle",categoryId:"bottles",keywords:[],price:20}];
@@ -41,4 +41,13 @@ test("image memory cache evicts old entries within both byte and entry budgets",
  let reads=0;const bucket={file:()=>({download:async()=>{reads++;return [Buffer.from("abc")];}})},options={width:160,quality:70};
  const images=createStoredImageService(bucket,{maxCacheBytes:4,maxCacheEntries:1});
  await images.read("one",options);await images.read("two",options);await images.read("one",options);assert.equal(reads,3);
+});
+
+test("normal image bursts wait in a bounded queue instead of losing catalogue images",async()=>{
+ const releases=[];let active=0,peak=0;
+ const bucket={file:()=>({download:()=>new Promise(resolve=>{active++;peak=Math.max(peak,active);releases.push(()=>{active--;resolve([Buffer.from("v")]);});})})};
+ const images=createStoredImageService(bucket,{concurrency:2,maxQueued:2,queueTimeout:1000}),options={width:160,quality:85};
+ const jobs=[0,1,2,3].map(i=>images.read("q"+i,options));await Promise.resolve();await Promise.resolve();
+ assert.equal(releases.length,2);await assert.rejects(images.read("overflow",options),e=>e.code==="IMAGE_BUSY");
+ releases[0]();releases[1]();await jobs[0];await jobs[1];await Promise.resolve();assert.equal(releases.length,4);releases[2]();releases[3]();await Promise.all(jobs);assert.equal(peak,2);
 });
