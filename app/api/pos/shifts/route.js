@@ -6,12 +6,13 @@ import { text } from "@/lib/serverData";
 import { auditPayload } from "@/lib/serverData";
 import { cashCents, cashPosition } from "@/lib/posOperations.mjs";
 import { randomUUID } from "node:crypto";
+import { shiftTimestamp } from "@/lib/posTime.mjs";
 
 export async function GET(request) {
   const access = await requireRole(request, ["owner", "admin", "supervisor", "cashier"]);
   if (access.error) return NextResponse.json({ error: access.error }, { status: access.status });
   const snapshot = await adminDb().collection("shifts").where("staffId", "==", access.user.uid).get();
-  const shift = snapshot.docs.map((doc) => ({ ...serializeDoc(doc), startedAt: doc.data().startedAt?.toDate?.()?.toISOString?.() || null })).find((item) => item.status === "open") || null;
+  const shift = snapshot.docs.map((doc) => ({ ...serializeDoc(doc), startedAt: shiftTimestamp(doc.data().startedAt) })).find((item) => item.status === "open") || null;
   return NextResponse.json({ shift: shift ? { ...shift, staffName: access.user.displayName } : null });
 }
 
@@ -25,7 +26,7 @@ export async function POST(request) {
     try { openingCash = cashCents(body.openingCash ?? 0) / 100; } catch (e) { return NextResponse.json({ error: e.message }, { status: 400 }); }
     const existing = await store.collection("shifts").where("staffId", "==", access.user.uid).get();
     const open = existing.docs.find((doc) => doc.data().status === "open");
-    if (open) return NextResponse.json({ shift: { ...serializeDoc(open), staffName: access.user.displayName, startedAt: open.data().startedAt?.toDate?.()?.toISOString?.() || null }, existing: true });
+    if (open) return NextResponse.json({ shift: { ...serializeDoc(open), staffName: access.user.displayName, startedAt: shiftTimestamp(open.data().startedAt) }, existing: true });
     const shiftId = `SHIFT-${randomUUID()}`;
     const value = {
       shiftId,
@@ -49,13 +50,14 @@ export async function POST(request) {
     const result = await store.runTransaction(async tx => {
       const pointer = await tx.get(lock);
       const current = pointer.exists && pointer.data().shiftId ? await tx.get(store.collection("shifts").doc(pointer.data().shiftId)) : null;
-      if (current?.exists && current.data().status === "open") return { ...serializeDoc(current), startedAt: current.data().startedAt?.toDate?.()?.toISOString?.() || null };
+      if (current?.exists && current.data().status === "open") return { ...serializeDoc(current), startedAt: shiftTimestamp(current.data().startedAt) };
       tx.create(store.collection("shifts").doc(shiftId), value);
       tx.set(lock, { staffId: access.user.uid, shiftId });
       tx.create(store.collection("admin_audit").doc(), auditPayload(access.user, "OPEN_POS_SHIFT", "shift", shiftId, "Recorded opening cash float.", null, { openingCash, deviceId: value.deviceId }));
-      return { ...value, startedAt: new Date().toISOString(), createdAt: new Date().toISOString() };
+      return { shiftId };
     });
-    return NextResponse.json({ shift: result });
+    const saved = await store.collection("shifts").doc(result.shiftId || result.id).get();
+    return NextResponse.json({ shift: { ...serializeDoc(saved), staffName: access.user.displayName, startedAt: shiftTimestamp(saved.data().startedAt) } });
   }
 
   if (body.action === "close") {

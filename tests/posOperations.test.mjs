@@ -33,3 +33,20 @@ test("captured offline pricing must balance and match exact quantities",()=>{
 test("correction receipts retain original reference, signed totals and no profit fields",()=>{
  const receipt=receiptSnapshot({saleType:"reversal",reversalOf:"A",originalReceiptId:"PAM-1",correctionReason:"Mistaken sale",restoreStock:true,total:-18,subtotal:-20,discount:-2,cost:-10,profit:-8,items:[{productId:"A",name:"Pink bottle",variantOptions:{colour:"Pink",size:"500ml"},quantity:-2,unitPrice:10,lineTotal:-18,lineCost:-10}]});const text=formatReceiptText(receipt);assert.match(text,/SALE CORRECTION \/ REVERSAL/);assert.match(text,/Original receipt: PAM-1/);assert.match(text,/Pink \/ 500ml/);assert.equal("profit" in receipt,false);assert.equal("lineCost" in receipt.items[0],false);
 });
+
+import {shiftTimestamp,formatPosDateTime} from "../lib/posTime.mjs";
+test("POS dates always show Ghana time and the original shift date across device timezones",()=>{
+ const original=process.env.TZ;
+ try {
+  for(const zone of ["America/New_York","Asia/Tokyo","Africa/Accra"]){
+   process.env.TZ=zone;
+   assert.match(formatPosDateTime("2026-10-29T06:06:00Z"),/29 Oct 2026.*6:06 am/);
+   assert.match(formatPosDateTime("2026-10-30T00:30:00+02:00"),/29 Oct 2026.*10:30 pm/);
+  }
+ } finally {if(original===undefined)delete process.env.TZ;else process.env.TZ=original;}
+});
+test("Shift timestamps preserve Firestore, ISO and Date values without inventing missing starts",()=>{
+ const iso="2026-10-29T06:06:00.000Z",date=new Date(iso);
+ for(const value of [iso,date,{toDate:()=>date},{seconds:date.getTime()/1000,nanoseconds:0},{_seconds:date.getTime()/1000,_nanoseconds:0}])assert.equal(shiftTimestamp(value),iso);
+ for(const value of [null,undefined,"invalid",{}, {toDate:()=>new Date("invalid")}]){assert.equal(shiftTimestamp(value),null);assert.equal(formatPosDateTime(value),"Not recorded");}
+});

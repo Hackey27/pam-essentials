@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {memoryFirestore} from "./fixtures/memoryFirestore.mjs";
 import {GET as cashGet,POST as cashPost} from "../app/api/pos/cash/route.js";
-import {POST as shiftPost} from "../app/api/pos/shifts/route.js";
+import {GET as shiftGet,POST as shiftPost} from "../app/api/pos/shifts/route.js";
 import {POST as expensePost} from "../app/api/pos/expenses/route.js";
 import {POST as reverse} from "../app/api/pos/reversals/route.js";
 import {POST as salePost,GET as saleGet} from "../app/api/pos/sales/route.js";
@@ -24,3 +24,22 @@ test("legacy shifts require an opening count and include existing cash expenses"
 test("manager reversal is atomic, preserves original and restores exact stock once",async()=>{const s=setup();assert.equal((await salePost(req("sales",payload))).status,200);assert.equal(s.inspect("products","A").stock,8);const body={saleId:payload.transactionId,shiftId:"M1",reason:"Accidentally recorded twice",restoreStock:true,paymentResolved:true,paymentResolution:"not-collected"};assert.equal((await reverse(req("reversals",body))).status,403);assert.equal((await reverse(req("reversals",body,"supervisor"))).status,403);assert.equal((await reverse(req("reversals",{...body,paymentResolved:false},"owner"))).status,400);const [a,b]=await Promise.all([reverse(req("reversals",body,"owner")),reverse(req("reversals",body,"owner"))]);assert.equal(a.status,200);assert.equal(b.status,200);assert.equal(s.inspect("products","A").stock,10);assert.equal(s.inspect("sales",payload.transactionId).total,20);assert.equal(s.inspect("sales",payload.transactionId).items[0].sku,"PINK-500");assert.equal(s.inspect("sales",`REV-${payload.transactionId}`).total,-20);assert.equal(s.inspect("sales",`REV-${payload.transactionId}`).items[0].quantity,-2);assert.equal(s.inspect("shifts","M1").paymentMix.cash,-20);assert.equal((await s.collection("stock_movements").get()).docs.length,2);assert.equal((await reverse(req("reversals",{...body,saleId:`REV-${payload.transactionId}`},"owner"))).status,409);const receipt=await a.json();assert.equal("cost" in receipt,false);assert.equal("profit" in receipt,false);});
 test("reversal without stock restoration leaves quantity intact and rejected reversal writes nothing",async()=>{const s=setup();await salePost(req("sales",payload));const body={saleId:payload.transactionId,shiftId:"M1",reason:"Payment not collected",restoreStock:false,paymentResolved:true,paymentResolution:"not-collected"};assert.equal((await reverse(req("reversals",body,"owner"))).status,200);assert.equal(s.inspect("products","A").stock,8);const s2=setup();await salePost(req("sales",payload));await s2.collection("products").doc("A").delete();assert.equal((await reverse(req("reversals",{...body,restoreStock:true},"owner"))).status,409);assert.equal(s2.inspect("sales",`REV-${payload.transactionId}`),undefined);assert.equal(s2.inspect("sales",payload.transactionId).reversalId,undefined);});
 test("offline reconciliation is manager-only, balanced and keeps stock safeguards",async()=>{const s=setup(),receipt={receiptId:offlineReceiptId(payload.transactionId),subtotal:18,discount:2,total:16,items:[{productId:"A",quantity:2,unitPrice:9,lineTotal:16}]},b={...payload,offlineFinal:true,offlineTotal:16,amountPaid:16,reconciliation:{reason:"Honour verified offline receipt",confirmCaptured:true,receipt}};assert.equal((await salePost(req("sales",b))).status,403);assert.equal((await salePost(req("sales",{...b,reconciliation:{...b.reconciliation,receipt:{...receipt,total:17}}},"owner"))).status,409);assert.equal(s.inspect("products","A").stock,10);assert.equal((await salePost(req("sales",b,"owner"))).status,200);assert.equal(s.inspect("sales",payload.transactionId).staffId,"cashier");assert.equal(s.inspect("sales",payload.transactionId).staffName,"Gloria");assert.equal(s.inspect("sales",payload.transactionId).total,16);assert.equal(s.inspect("shifts","S1").paymentMix.cash,16);assert.equal((await salePost(req("sales",b,"owner"))).status,200);assert.equal(s.inspect("products","A").stock,8);const response=await saleGet(req(`sales?transactionId=${payload.transactionId}`));assert.equal(response.status,200);assert.equal((await response.json()).found,true);assert.equal((await saleGet(req(`sales?transactionId=${payload.transactionId}`,null,"supervisor"))).status,403);const shortage={...b,transactionId:"123e4567-e89b-42d3-a456-426614174001",items:[{id:"A",quantity:9}]};shortage.reconciliation={...shortage.reconciliation,receipt:{...receipt,receiptId:offlineReceiptId(shortage.transactionId)}};assert.equal((await salePost(req("sales",shortage,"owner"))).status,409);assert.equal(s.inspect("products","A").stock,8);});
+
+test("Shift refresh and resume preserve an earlier ISO start date instead of resetting it",async()=>{
+ const s=setup(),start="2026-10-28T06:06:00.000Z";
+ await s.collection("shifts").doc("S1").update({startedAt:start});
+ const loaded=await(await shiftGet(req("shifts"))).json();
+ assert.equal(loaded.shift.startedAt,start);
+ const resumed=await(await shiftPost(req("shifts",{action:"open",deviceId:"TILL",openingCash:0}))).json();
+ assert.equal(resumed.existing,true);assert.equal(resumed.shift.startedAt,start);
+ assert.equal(s.inspect("shifts","S1").startedAt,start);
+});
+test("New shift response uses the committed server start time and duplicate requests reuse it",async()=>{
+ const s=setup();await s.collection("shifts").doc("S1").update({status:"closed"});
+ const response=await shiftPost(req("shifts",{action:"open",deviceId:"TILL",openingCash:0}));assert.equal(response.status,200);
+ const {shift}=await response.json(),stored=s.inspect("shifts",shift.shiftId);
+ assert.equal(shift.startedAt,stored.startedAt.toDate().toISOString());
+ assert.equal(typeof shift.createdAt,"string");
+ const again=await(await shiftPost(req("shifts",{action:"open",deviceId:"TILL",openingCash:0}))).json();
+ assert.equal(again.shift.shiftId,shift.shiftId);assert.equal(again.shift.startedAt,shift.startedAt);
+});
