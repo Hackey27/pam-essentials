@@ -3,6 +3,7 @@ import { createContext, useContext, useEffect, useState } from "react";
 import { onAuthStateChanged, signOut as fbSignOut } from "firebase/auth";
 import { doc, onSnapshot } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
+import { clearStaffSession } from "@/lib/staffSession.mjs";
 
 const AuthContext = createContext({ user: null, role: null, loading: true });
 
@@ -46,5 +47,9 @@ export function AuthProvider({ children }) {
 }
 
 export const useAuth = () => useContext(AuthContext);
-export const signOut = () => fbSignOut(auth);
+export const signOut = async () => {
+  const uid = auth.currentUser?.uid;
+  await fbSignOut(auth);
+  if (uid) { let store; try { store = window.sessionStorage; } catch {} clearStaffSession(store, uid); }
+};
 

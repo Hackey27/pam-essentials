@@ -5,6 +5,7 @@ import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useAuth } from "@/components/AuthProvider";
 import BrandLogo from "@/components/BrandLogo";
+import { verifyStaffSession } from "@/lib/staffSession.mjs";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -15,15 +16,19 @@ export default function Login() {
   const router = useRouter();
 
   useEffect(() => {
-    if (!loading && user) router.replace(role === "cashier" ? "/pos" : "/admin");
-  }, [loading, user, role, router]);
+    if (!loading && user && !busy) router.replace(role === "cashier" ? "/pos" : "/admin");
+  }, [loading, user, role, router, busy]);
 
   async function handleSignIn(event) {
     event?.preventDefault();
     setBusy(true);
     setError("");
     try {
-      await signInWithEmailAndPassword(auth, email.trim(), password);
+      const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
+      let store; try { store = window.sessionStorage; } catch {}
+      verifyStaffSession(store, credential.user.uid);
+      setPassword("");
+      setBusy(false);
     } catch (err) {
       const code = err?.code || "";
       setError(

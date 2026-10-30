@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { signOut, useAuth } from "./AuthProvider";
+import StaffSessionGate from "./StaffSessionGate";
 
 // Guards a page in the browser. The real enforcement is in Firestore rules:
 // a cashier who reaches /admin still cannot read or write owner-only data.
@@ -45,5 +46,5 @@ export default function RequireRole({ allow, children }) {
       </main>
     );
   }
-  return children;
+  return <StaffSessionGate key={user.uid} user={user}>{children}</StaffSessionGate>;
 }

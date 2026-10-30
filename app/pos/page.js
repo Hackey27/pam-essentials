@@ -5,6 +5,7 @@ import {manualOrderDiscount} from "@/lib/orderDiscounts.mjs";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { EmailAuthProvider, reauthenticateWithCredential } from "firebase/auth";
 import RequireRole from "@/components/RequireRole";
+import { useStaffSession } from "@/components/StaffSessionGate";
 import { signOut, useAuth } from "@/components/AuthProvider";
 import PosDashboard from "@/components/PosDashboard";
 import {wholesaleAvailableUnits,wholesaleSize,wholesaleUnitName,wholesaleMinimumUnits,wholesaleStepUnits,packDescription} from "@/lib/wholesaleUnits.mjs";
@@ -44,7 +45,7 @@ function Till() {
   const knownOrderIds = useRef(null);
   const [view, setView] = useState("dashboard");
   const [shiftLoaded, setShiftLoaded] = useState(false);
-  const [locked, setLocked] = useState(false);
+  const { locked } = useStaffSession();
   const [entryOpen, setEntryOpen] = useState(false);
   const [staffEmail, setStaffEmail] = useState(user?.email || "");
   const [staffPassword, setStaffPassword] = useState("");
@@ -177,15 +178,7 @@ function Till() {
     finally { setShiftLoaded(true); }
   }
 
-  useEffect(() => {
-    if (!shift || locked) return;
-    let timer;
-    const arm = () => { clearTimeout(timer); timer = setTimeout(() => { setLocked(true); setEntryOpen(false); setView("dashboard"); }, 600000); };
-    const events = ["pointerdown", "keydown", "touchstart"];
-    events.forEach((event) => window.addEventListener(event, arm));
-    arm();
-    return () => { clearTimeout(timer); events.forEach((event) => window.removeEventListener(event, arm)); };
-  }, [shift, locked]);
+  // Admin and POS share the persistent ten-minute lock in StaffSessionGate.
 
   useEffect(() => { const timer = setInterval(() => setClock(new Date()), 30000); return () => clearInterval(timer); }, []);
 
@@ -202,7 +195,7 @@ function Till() {
         if (!response.ok) throw new Error(data.error || "Shift could not be started.");
         setShift(data.shift);
       }
-      setLocked(false); setEntryOpen(false); setStaffPassword(""); setView("dashboard");
+      setEntryOpen(false); setStaffPassword(""); setView("dashboard");
     } catch (err) { setError(err.message || "Staff verification failed."); }
     finally { shiftAction.current = false; setBusy(false); }
   }
@@ -596,7 +589,7 @@ function Till() {
 
   return <div className={`pos-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
     <aside className={"pos-sidebar " + (sidebarOpen ? "open" : "")}><div className="pos-sidebar-brand"><a href="/" className="admin-brand" aria-label="PAM Essentials home"><BrandLogo background="navy" /></a><small>Sales &amp; inventory</small></div><nav aria-label="POS navigation">{[["dashboard", "Dashboard"], ["sale", "New Sale"], ["orders", "Orders"], ["receipts", "Receipts"], ...(["owner", "admin", "supervisor"].includes(role) ? [["inventory", "Inventory"]] : []), ["expenses", "Expenses"], ["cash", "Shift cash"], ["sync", "Sync centre"], ...(["owner", "admin"].includes(role) ? [["admin", "Admin"]] : [])].map(([id, label]) => <button key={id} title={label} aria-label={label} className={view === id ? "active" : ""} onClick={() => { if (id === "admin") window.location.href = "/admin"; else setView(id); setSidebarOpen(false); setSidebarCollapsed(true); }}><span className="pos-nav-icon" aria-hidden="true">{navIcons[id]}</span><span className="pos-nav-label">{label}</span>{id === "orders" && openOrderCount > 0 && <b className={`pos-order-badge ${orderNotice ? "arrived" : ""}`}>{openOrderCount}</b>}</button>)}</nav></aside>
-    <header className="pos-header"><div className="pos-header-title"><button className="pos-menu-button" aria-label="Toggle POS navigation" onClick={() => { if (window.matchMedia("(min-width: 901px)").matches) setSidebarCollapsed(v => !v); else setSidebarOpen(v => !v); }}>☰</button><div><h2>{({ dashboard: "Dashboard", sale: "New Sale", orders: "Orders", receipts: "Receipts", inventory: "Inventory", expenses: "Expenses", cash: "Shift cash", sync: "Sync centre" })[view]}</h2><p>{view === "dashboard" ? "Current sales and stock health" : view === "receipts" ? "Search and reprint saved sales" : view === "sale" ? "Find products and complete a sale" : "Sales & inventory"}</p></div></div><div className="pos-actions"><span className={online ? "connection online" : "connection offline"}>{syncing ? "Syncing sales…" : online ? "Online" : "Offline"}</span><span className="pos-staff">{shift.staffName || user?.displayName || user?.email} · {role?.toUpperCase()}<small>Shift started {formatPosDateTime(shift.startedAt)} · Ghana</small></span><time>{formatPosDateTime(clock)} · Ghana</time><button className="button secondary" onClick={() => { setError(""); loadProducts(); loadOrders(); loadShift(); }}>Refresh</button><button className="shift-button open" onClick={prepareEndShift} disabled={busy}>End Shift</button></div></header>
+    <header className="pos-header"><div className="pos-header-title"><button className="pos-menu-button" aria-label="Toggle POS navigation" onClick={() => { if (window.matchMedia("(min-width: 901px)").matches) setSidebarCollapsed(v => !v); else setSidebarOpen(v => !v); }}>☰</button><div><h2>{({ dashboard: "Dashboard", sale: "New Sale", orders: "Orders", receipts: "Receipts", inventory: "Inventory", expenses: "Expenses", cash: "Shift cash", sync: "Sync centre" })[view]}</h2><p>{view === "dashboard" ? "Current sales and stock health" : view === "receipts" ? "Search and reprint saved sales" : view === "sale" ? "Find products and complete a sale" : "Sales & inventory"}</p></div></div><div className="pos-actions"><span className={online ? "connection online" : "connection offline"}>{syncing ? "Syncing sales…" : online ? "Online" : "Offline"}</span><span className="pos-staff">{shift.staffName || user?.displayName || user?.email} · {role?.toUpperCase()}<small>Shift started {formatPosDateTime(shift.startedAt)} · Ghana</small></span><time>{formatPosDateTime(clock)} · Ghana</time><button className="button secondary" onClick={() => { setError(""); loadProducts(); loadOrders(); loadShift(); }}>Refresh</button><button className="shift-button open" onClick={prepareEndShift} disabled={busy}>End Shift</button><button type="button" className="button secondary" onClick={signOut} disabled={busy} title="Sign out without ending the open shift">Sign out</button></div></header>
     {(!online || queuedCount > 0 || queuedOrderCount > 0) && <div className="offline-banner">{!online ? "Offline till: sales and order updates finalize locally and sync when connected." : `${queuedCount} finalized ${queuedCount === 1 ? "sale" : "sales"} and ${queuedOrderCount} order ${queuedOrderCount === 1 ? "update" : "updates"} awaiting sync.`} {(queuedCount > 0 || queuedOrderCount > 0) && <button type="button" onClick={() => { flushQueue(); flushOrderQueue(); }} disabled={!online || syncing}>{syncing ? "Syncing…" : "Retry sync"}</button>} Do not clear this browser&apos;s data until everything syncs.</div>}
     {error && <div className="pos-global-error notice error-notice" role="alert">{error}</div>}
     {offlineNotice && <div className="pos-global-error notice success-notice" role="status"><span>{offlineNotice}</span><button type="button" onClick={() => setOfflineNotice("")} aria-label="Dismiss offline notice">×</button></div>}

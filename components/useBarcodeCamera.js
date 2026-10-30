@@ -15,6 +15,7 @@ export default function useBarcodeCamera(onCode, onError, options = {}) {
     setCameraOpen(false);
   }, []);
   const openCamera = useCallback(() => setCameraOpen(true), []);
+  useEffect(() => { window.addEventListener("pam-staff-session-paused", closeCamera); return () => window.removeEventListener("pam-staff-session-paused", closeCamera); }, [closeCamera]);
   useEffect(() => {
     if (!cameraOpen || !videoRef.current) return;
     let active = true;
