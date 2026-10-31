@@ -1,0 +1,8 @@
+FROM node:22-alpine
+WORKDIR /app
+COPY package.json ./source-package.json
+RUN node -e "const {dependencies}=require('./source-package.json');require('fs').writeFileSync('package.json',JSON.stringify({private:true,type:'module',dependencies:Object.fromEntries(['firebase-admin','@google-cloud/storage','sharp'].map(name=>[name,dependencies[name]]))}));" \
+    && npm install --omit=dev --no-audit --no-fund
+COPY lib/imageVariantStorage.js lib/imageVariants.mjs lib/productImages.mjs lib/heroImages.mjs ./lib/
+COPY scripts/backfill_image_variants.mjs ./scripts/backfill_image_variants.mjs
+ENTRYPOINT ["node", "scripts/backfill_image_variants.mjs"]
