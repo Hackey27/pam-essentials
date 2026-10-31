@@ -11,6 +11,8 @@ export async function POST(request) {
 
   const store = adminDb();
   const existing = await store.collection("products").get();
+  // Bundled Data.xlsx is an initial setup source, never a replacement for live Admin/CSV records.
+  if (!existing.empty) return NextResponse.json({ error: "The catalogue is already set up. Use Import / update file to review changes from your current CSV. The old bundled catalogue cannot overwrite products or recreate removed items." }, { status: 409 });
   const existingProducts = new Map(existing.docs.map((doc) => [doc.id, doc.data()]));
   const metadataById = new Map(metadata.map((item) => [item.id, item]));
 

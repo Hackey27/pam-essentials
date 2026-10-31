@@ -1,3 +1,14 @@
+# Catalogue name and stock reconciliation — 31 October 2026
+
+- Compared the owner's latest corrected CSV with the authenticated Admin catalogue by unchanged SKU. All source SKUs are present. Restored exact supplied product names through a names-only, previewed and audited metadata import; no prices, costs, stock, image paths or variants changed.
+- Stock was compared in its correct units: CSV loose pieces converted once into complete retail packs, with retained loose components separate. Every difference for source products reconciled exactly to recorded sales, so no sales deductions were reset.
+- Audit identified a later bundled Data.xlsx import that reverted metadata and recreated previously removed products. Bundled setup is now blocked on a populated catalogue; routine changes must use the reviewed CSV import.
+- Owner explicitly asked to remove the recreated unlisted products again. Added a narrow removal-only review under source import: requires a prior recorded zero-stock catalogue removal before recreation, no current sale/order/stock-use/packing/barcode/accounting references, no active reservations, and inactive Accounting. A stale preview is rejected; removal is atomic, audited and snapshotted. Applying this cleanup does not re-import the source balances or prices. Live cleanup and deployment verification pending.
+- Five modules compile and 22 focused regression tests pass. Private CSVs, live exports, stock quantities, source costs and screenshots stay outside GitHub.
+- Main before this correction: 9738c104916ced19ec1bd2e57fad6a8aedb91416. Its image performance release and completed backfill remain intact. Older private deferral notes are superseded by the verified image release recorded on main.
+
+---
+
 # PAM Essentials project state
 
 ## Image upload and preview performance (2026-10-31)
