@@ -4,10 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import { auth } from "@/lib/firebase";
 import { useAuth } from "@/components/AuthProvider";
 import { getProductImageUrl, isProductImagePath, productImageFolder, safeImageSegment, variantCombinationKey } from "@/lib/productImages.mjs";
+import { prepareProductImage, uploadProductImage } from "@/lib/productImageUpload.mjs";
 
 const allowed = new Map([["image/jpeg", "jpg"], ["image/png", "png"], ["image/webp", "webp"], ["image/avif", "avif"]]);
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
-const IMAGE_GUIDANCE = "Recommended for preview, main and gallery photos: a square 2000 × 2000 px image, closely framed around the product. JPG, PNG, WebP or AVIF; maximum 20 MB. Smaller or portrait photos are accepted and keep their proportions.";
+const IMAGE_GUIDANCE = "Recommended for preview, main and gallery photos: a square 2000 × 2000 px image, closely framed around the product. JPG, PNG, WebP or AVIF; maximum 20 MB. Photos are prepared automatically for quicker uploading and display. Smaller or portrait photos are accepted and keep their proportions.";
 
 function Preview({ path, label, localUrl }) {
   const [failed, setFailed] = useState(false);
@@ -48,25 +49,19 @@ export default function AdminProductImages({ value, update, products, onBusyChan
     if (!allowed.has(file.type) || !/\.(jpe?g|png|webp|avif)$/i.test(file.name)) { setMessage("Choose a JPG, PNG, WebP or AVIF image."); return; }
     if (file.size <= 0 || file.size > MAX_FILE_SIZE) { setMessage("Images must be smaller than 20 MB."); return; }
     if (progress) { setMessage("Wait for the current upload to finish."); return; }
-    const extension = allowed.get(file.type);
-    const name = `${Date.now()}-${crypto.randomUUID()}-${safeImageSegment(file.name.replace(/\.[^.]+$/, ""))}.${extension}`;
     const prefix = key ? `products/${folder}/variants/${productImageFolder(key)}/${kind === "variant-main" ? "main" : "gallery"}` : `products/${folder}/${kind}`;
-    const path = `${prefix}/${name}`;
     setMessage("");
-    setProgress({ path });
+    setProgress({ stage: "Preparing photo…" });
     onBusyChange(true);
     try {
-      const token = await auth.currentUser.getIdToken();
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 120000);
-      let response;
-      try {
-        response = await fetch("/api/admin/images", { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": file.type, "x-product-id": value.id, "x-image-path": path }, body: file, signal: controller.signal });
-      } finally { clearTimeout(timeout); }
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(result.error || `Upload failed (${response.status}).`);
-      const localUrl = URL.createObjectURL(file);
+      const image = await prepareProductImage(file, kind);
+      const name = `${Date.now()}-${crypto.randomUUID()}-${safeImageSegment(file.name.replace(/\.[^.]+$/, ""))}.${allowed.get(image.type)}`;
+      const path = `${prefix}/${name}`;
+      const localUrl = URL.createObjectURL(image);
       previewUrls.current.push(localUrl);
+      setProgress({ stage: "Uploading photo…", preview: localUrl });
+      const token = await auth.currentUser.getIdToken();
+      await uploadProductImage({ image, token, productId: value.id, path, onProgress: (percent) => setProgress({ stage: percent === 100 ? "Preparing previews…" : "Uploading photo…", percent, preview: localUrl }) });
       setUploadPreviews((current) => ({ ...current, [path]: localUrl }));
       if (kind === "card-preview") update("cardPreviewImagePath", path);
       else if (kind === "variant-main") setVariant(key, { imagePath: path });
@@ -93,7 +88,7 @@ export default function AdminProductImages({ value, update, products, onBusyChan
     <section><h3>Card preview image</h3><div className="admin-image-row"><Preview key={value.cardPreviewImagePath || "card-empty"} path={value.cardPreviewImagePath} localUrl={uploadPreviews[value.cardPreviewImagePath]} label="Card preview" /><div><label className="admin-upload-label">{value.cardPreviewImagePath ? "Replace image" : "Upload image"}<input type="file" accept="image/jpeg,image/png,image/webp,image/avif" disabled={Boolean(progress)} onChange={(event) => { upload(event.target.files?.[0], "card-preview"); event.target.value = ""; }} /></label>{value.cardPreviewImagePath && <button type="button" onClick={() => update("cardPreviewImagePath", "")}>Remove assignment</button>}</div></div></section>
     <section><h3>Product gallery</h3>{galleryEditor(value.galleryImagePaths || [], "gallery")}<label className="admin-upload-label">Add gallery images<input type="file" multiple accept="image/jpeg,image/png,image/webp,image/avif" disabled={Boolean(progress)} onChange={async (event) => { for (const file of event.target.files || []) await upload(file, "gallery"); event.target.value = ""; }} /></label></section>
     <section><h3>Variant combination images</h3>{combinations.length ? combinations.map(([key, product]) => { const entry = value.variantImages?.[key] || {}; return <div className="admin-variant-images" key={key}><h4>{[product.size, product.colour, ...Object.values(product.variantOptions || {})].filter(Boolean).join(" · ") || product.name} <small>{product.id}</small></h4><div className="admin-image-row"><Preview key={entry.imagePath || key} path={entry.imagePath} localUrl={uploadPreviews[entry.imagePath]} label={`${product.name} variant`} /><div><label className="admin-upload-label">{entry.imagePath ? "Replace main image" : "Assign main image"}<input type="file" accept="image/jpeg,image/png,image/webp,image/avif" disabled={Boolean(progress)} onChange={(event) => { upload(event.target.files?.[0], "variant-main", key); event.target.value = ""; }} /></label>{entry.imagePath && <button type="button" onClick={() => setVariant(key, { imagePath: "" })}>Remove assignment</button>}</div></div>{galleryEditor(entry.galleryImagePaths || [], "variant-gallery", key)}<label className="admin-upload-label">Add variant gallery images<input type="file" multiple accept="image/jpeg,image/png,image/webp,image/avif" disabled={Boolean(progress)} onChange={async (event) => { for (const file of event.target.files || []) await upload(file, "variant-gallery", key); event.target.value = ""; }} /></label></div>; }) : <p>No variants configured for this product.</p>}</section>
-    {progress && <p role="status">Uploading image… <progress /></p>}
+    {progress && <div role="status">{progress.preview && <div className="admin-image-row"><img src={progress.preview} alt="Photo being uploaded" /></div>}<p>{progress.stage} {progress.percent != null && progress.percent < 100 ? `${progress.percent}%` : ""} <progress value={progress.percent === 100 ? undefined : progress.percent ?? undefined} max="100" /></p></div>}
     {message && <p role="status" className="admin-image-message">{message}</p>}
   </fieldset>;
 }

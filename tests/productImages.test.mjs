@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { cardImageSource, detailImageSource, galleryImagePaths, getProductImageUrl, isProductImagePath, productImageFolder, productGallery, variantCombinationKey } from "../lib/productImages.mjs";
+import { cardImageSource, detailImageSource, galleryImagePaths, getProductImageUrl, isProductImagePath, productImageFolder, productGallery, variantCombinationKey, productImageSrcSet } from "../lib/productImages.mjs";
 
 test("image paths stay inside the product image namespace", () => {
   const folder = productImageFolder("SKU 123");
@@ -8,6 +8,17 @@ test("image paths stay inside the product image namespace", () => {
   assert.equal(isProductImagePath(`products/${folder}/gallery/photo.jpg`), true);
   for (const path of ["products/sku/../../secret.jpg", "users/uid/avatar.jpg", "products/sku/gallery/photo.svg", "products/sku/gallery/photo.jpg/other"]) assert.equal(isProductImagePath(path), false);
   assert.equal(getProductImageUrl(`products/${folder}/gallery/photo.jpg`, 500), `/images/products/${folder}/gallery/photo.jpg?w=640&fmt=webp&q=85`);
+});
+
+test("responsive product images offer valid stored sizes and leave legacy URLs alone", () => {
+  const path = "products/test/card-preview/photo.png";
+  for (const [width, expected] of [[80, [160]], [100, [160, 320]], [350, [160, 320, 640, 960]], [1000, [160, 320, 640, 960, 1600]]]) {
+    const candidates = productImageSrcSet(path, width).split(", ");
+    assert.deepEqual(candidates.map((candidate) => Number(candidate.match(/ (\d+)w$/)[1])), expected);
+    assert.ok(candidates.every((candidate) => candidate.startsWith(`/images/${path}?`) && candidate.includes("&fmt=webp&q=85")));
+  }
+  assert.equal(productImageSrcSet("https://example.test/legacy.jpg"), undefined);
+  assert.equal(productImageSrcSet("products/test/../../private.png"), undefined);
 });
 
 test("variant combinations and image precedence are deterministic", () => {

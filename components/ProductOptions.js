@@ -17,7 +17,7 @@ import { priceCart } from "@/lib/cartPricing.mjs";
 import { requiresPricingInquiry } from "@/lib/productPricing.mjs";
 import RestockRequest from "@/components/RestockRequest";
 import PricingInquiryButton from "@/components/PricingInquiryButton";
-import { cardImageSource, detailImageSource, getProductImageUrl, productGallery } from "@/lib/productImages.mjs";
+import { cardImageSource, detailImageSource, getProductImageUrl, productGallery, productImageSrcSet } from "@/lib/productImages.mjs";
 import { randomSelectionNote } from "@/lib/randomSelection.mjs";
 import { productOptions, selectVariant, variantDetail, variantTitles } from "@/lib/variantDisplay.mjs";
 
@@ -34,19 +34,19 @@ export function variantPrice(variants) {
   return low === high ? money.format(low) : `${money.format(low)} – ${money.format(high)}`;
 }
 
-export function ProductImage({ product, className = "", source, width = 350, eager = false }) {
+export function ProductImage({ product, className = "", source, width = 350, eager = false, sizes }) {
   const resolved = source || cardImageSource(product);
   const url = resolved.path ? getProductImageUrl(resolved.path, width) : resolved.url;
   const [failed, setFailed] = useState(false);
   useEffect(() => setFailed(false), [url]);
-  if (url && !failed) return <img className={className || "product-photo"} src={url} alt={product.name} loading={eager ? "eager" : "lazy"} onError={() => setFailed(true)} />;
+  if (url && !failed) return <img className={className || "product-photo"} src={url} srcSet={productImageSrcSet(resolved.path, width)} sizes={resolved.path ? sizes || `${width}px` : undefined} alt={product.name} loading={eager ? "eager" : "lazy"} decoding="async" onError={() => setFailed(true)} />;
   const initials = product.name.split(" ").slice(0, 2).map((word) => word[0]).join("");
   return <div className={`product-art ${className}`} role="img" aria-label={`${product.name} image placeholder`}><span>{initials}</span><small>{[product.colour, product.size].filter(Boolean).join(" · ") || product.category}</small></div>;
 }
 
 function ProductPreview({ product, source, onOpenGallery }) {
   return <button type="button" className="product-preview product-detail-image" onClick={source.url ? onOpenGallery : undefined} aria-label={source.url ? `View ${product.name} image full screen` : `${product.name} image placeholder`}>
-    <ProductImage product={product} source={source} className="product-preview-image" width={1000} eager />
+    <ProductImage product={product} source={source} className="product-preview-image" width={1000} sizes="(max-width: 767px) calc(100vw - 40px), (max-width: 1180px) 45vw, 600px" eager />
   </button>;
 }
 

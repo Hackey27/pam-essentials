@@ -17,5 +17,7 @@ ENV HOSTNAME=0.0.0.0
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
+COPY --from=builder /app/scripts/backfill_image_variants.mjs ./scripts/backfill_image_variants.mjs
+COPY --from=builder /app/lib/imageVariantStorage.js /app/lib/imageVariants.mjs /app/lib/productImages.mjs /app/lib/heroImages.mjs ./lib/
 EXPOSE 8080
 CMD ["node", "server.js"]
